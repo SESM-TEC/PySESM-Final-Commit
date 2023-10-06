@@ -42,7 +42,7 @@ class DictLayer(torch.nn.Module):
 
         self.theta_size = int(n_features*(n_features+3)/2)
         self.Theta = torch.nn.Parameter(
-            torch.normal(mean=0, std=1, size=(self.theta_size, n_functions), requires_grad=True))
+            torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
 
         self.n_samples = n_samples
 
@@ -52,7 +52,7 @@ class DictLayer(torch.nn.Module):
 
         self.psi = psi
 
-        self.dictionary = torch.normal(mean=0, std=1, size=(self.n_samples, self.n_functions))
+        self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
         
         self.losses = []
         

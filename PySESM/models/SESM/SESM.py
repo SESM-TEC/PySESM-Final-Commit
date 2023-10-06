@@ -1,7 +1,6 @@
 import torch
 from tqdm import tqdm
 from PySESM.models.DictLayer import DictLayer
-from PySESM.models.Wrapper import Wrapper
 import time
 from PySESM.models.ISTALayer import ISTALayer
 
