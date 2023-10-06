@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-
+from tqdm import tqdm
 
 class DictLayer(torch.nn.Module):
     """
@@ -9,6 +9,7 @@ class DictLayer(torch.nn.Module):
     This layer is designed for use in surrogate modeling and function approximation tasks.
 
     Args:
+        n_samples (int): The number of samples taken from the original function.
         n_features (int): The number of input features or dimensions.
         n_functions (int): The number of functions or basis functions.
         psi (callable): The function used for generating the layer's output.
@@ -36,7 +37,7 @@ class DictLayer(torch.nn.Module):
         # Perform a forward pass
         output = model(input_data)
     """
-    def __init__(self, n_features, n_samples, n_functions, psi):
+    def __init__(self, n_samples, n_features, n_functions, psi):
         super().__init__()
 
         self.theta_size = int(n_features*(n_features+3)/2)
@@ -51,7 +52,37 @@ class DictLayer(torch.nn.Module):
 
         self.psi = psi
 
-        self.dictionary = torch.zeros((self.n_samples, self.n_functions))
+        self.dictionary = torch.normal(mean=0, std=1, size=(self.n_samples, self.n_functions))
+        
+        self.losses = []
+        
+        
+    def fit(self, X, y, epochs, h, alpha, log_losses=True):
+        """
+        Let's train the model.
+
+        Args:
+            X (Tensor): Input data of shape (n_samples, n_features).
+            y (Tensor): Target data of shape (n_samples,).
+            epochs (int): Number of training epochs.
+            h (Tensor): Sparse vector for selecting basis functions.
+            alpha (float): Learning rate for optimization.
+            log_losses (bool): Whether to log losses during training (default True).
+        """
+        optimizer = torch.optim.SGD(self.parameters(), lr=alpha)
+        criterion = torch.nn.MSELoss()
+
+        for i in tqdm(range(epochs), desc='Training dictionary'):
+            self.forward(X)
+            y_pred = self.dictionary @ h
+            loss = criterion(y_pred, y)
+            optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            optimizer.step()
+
+            if log_losses:
+                self.losses.append(loss.item())
+
 
     def forward(self, x):
       result = self.psi(x.mT,self.Theta)
