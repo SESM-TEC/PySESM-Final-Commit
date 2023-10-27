@@ -72,7 +72,8 @@ class DictLayer(torch.nn.Module):
         optimizer = torch.optim.SGD(self.parameters(), lr=alpha)
         criterion = torch.nn.MSELoss()
 
-        for i in tqdm(range(epochs), desc='Training dictionary'):
+        #for i in tqdm(range(epochs), desc='Training dictionary'):
+        for _ in range(epochs):
             self.forward(X)
             y_pred = self.dictionary @ h
             loss = criterion(y_pred, y)
