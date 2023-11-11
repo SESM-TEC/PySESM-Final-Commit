@@ -3,7 +3,7 @@ from tqdm import tqdm
 from PySESM.models.DictLayer import DictLayer
 import time
 from PySESM.models.ISTALayer import ISTALayer
-
+import numpy as np
 class SESM_Model(torch.nn.Module):
     """
     A custom PyTorch module for implementing a surrogate model that uses the SESM architecture.
@@ -47,11 +47,17 @@ class SESM_Model(torch.nn.Module):
         self.dictionary_layer = DictLayer(n_samples, n_features, n_functions, psi) 
         
         self.losses = []
+        self.loss_stats = {
+            "loss_mean" : [],
+            "loss_std"  : [],
+            "loss_max"  : [],
+            "loss_min"  : [],
+        }
         self.time = 0
         
         
     def fit(self, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha):
-        for epoch in tqdm(range(model_epochs), desc='Training model'):
+        for epoch in range(model_epochs):
             epoch_start_time = time.time()
             
             self.ista_layer.fit(
@@ -73,8 +79,8 @@ class SESM_Model(torch.nn.Module):
             epoch_end_time = time.time()
         
             self.time = self.time + (epoch_end_time - epoch_start_time)
-        
             self.losses.append(self.dictionary_layer.losses[-1])
+            self.loss_analysis(dictionary_epochs)
             print(f'Epoch {epoch+1} Loss: {self.losses[-1]}\n')
          
                     
@@ -86,3 +92,11 @@ class SESM_Model(torch.nn.Module):
         h = self.ista_layer.h.double()
             
         return dictionary @ h
+
+
+    def loss_analysis(self, dict_epochs):
+        current_loss  = self.dictionary_layer.losses[-dict_epochs:]
+        self.loss_stats["loss_mean"].append(np.mean(current_loss))
+        self.loss_stats["loss_std"].append(np.std(current_loss))
+        self.loss_stats["loss_max"].append(np.max(current_loss))
+        self.loss_stats["loss_min"].append(np.min(current_loss))
