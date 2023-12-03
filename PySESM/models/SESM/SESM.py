@@ -112,20 +112,29 @@ class SESM_Model(torch.nn.Module):
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
         
-        grids = torch.meshgrid(*samples)
+        # grids = torch.meshgrid(*samples)
         
-        xy_grid = torch.stack([grids[n].ravel() for n in range(self.n_features)], dim=1)
+        # xy_grid = torch.stack([grids[n].ravel() for n in range(self.n_features)], dim=1)
         
-        pdf_values = self.predict(xy_grid).reshape((n_samples,) * self.n_features).detach()
+        # pdf_values = self.predict(xy_grid).reshape((n_samples,) * self.n_features).detach()
+        
+        pdf_values = self.predict(samples).detach()
                     
         if(self.n_features == 2):
-            X = grids[0]
-            Y = grids[1]
+            # X = grids[0]
+            # Y = grids[1]
+            
+            X = samples[:, 0]
+            Y = samples[:, 1]
         else:
-            reduced_xy_grid = self.pca(xy_grid, 2)
+            # reduced_xy_grid = self.pca(xy_grid, 2)
+            
+            reduced_xy_grid = self.pca(samples, 2)
 
-            X = reduced_xy_grid[:, 0].reshape((n_samples,) * self.n_features)
-            Y = reduced_xy_grid[:, 1].reshape((n_samples,) * self.n_features)
+            # X = reduced_xy_grid[:, 0].reshape((n_samples,) * self.n_features)
+            # Y = reduced_xy_grid[:, 1].reshape((n_samples,) * self.n_features)
+            X = reduced_xy_grid[:, 0]
+            Y = reduced_xy_grid[:, 1]
         
         fig = plt.figure(figsize=(8, 8))
         
@@ -138,11 +147,13 @@ class SESM_Model(torch.nn.Module):
         plt.show()
         
     
-    def plot_loss(self):
+    def plot_loss(self, ylim=0.1):
         plt.plot(self.losses)
         
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
+        
+        plt.ylim(0, ylim)
         
         plt.show()
         
@@ -164,7 +175,5 @@ class SESM_Model(torch.nn.Module):
 
         # Step 5: Project data onto lower-dimensional space
         X_reduced = torch.mm(U, torch.diag(S[:n_components]))
-        
-        print(X_reduced)
         
         return X_reduced
