@@ -107,63 +107,35 @@ class SESM_Model(torch.nn.Module):
         self.loss_stats["loss_min"].append(np.min(current_loss))
         
         
-    def plot_function(self):
+    def plot(self, n_samples, samples):
         n_plots = 4
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
+        
+        grids = torch.meshgrid(*samples)
+        
+        xy_grid = torch.stack([grids[n].ravel() for n in range(self.n_features)], dim=1)
+        
+        pdf_values = self.predict(xy_grid).reshape((n_samples,) * self.n_features).detach()
+                    
+        if(self.n_features == 2):
+            X = grids[0]
+            Y = grids[1]
+        else:
+            reduced_xy_grid = self.pca(xy_grid, 2)
 
-        samples = torch.tensor([])
-
-        for i in range(self.n_features):
-            feature = torch.linspace(-2, 2, self.n_samples)
-            samples = torch.cat([samples, feature.unsqueeze(1)], dim=1)
-            
+            X = reduced_xy_grid[:, 0].reshape((n_samples,) * self.n_features)
+            Y = reduced_xy_grid[:, 1].reshape((n_samples,) * self.n_features)
+        
         fig = plt.figure(figsize=(8, 8))
         
-        if(self.n_features == 2):
-            X, Y = torch.meshgrid(samples[:, 0], samples[:, 1])
+        for i in range(n_plots):
+            ax = fig.add_subplot(2, 2, i+1, projection='3d')
+            ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
+            ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
             
-            xy_grid = torch.stack([X.ravel(), Y.ravel()], dim=1)
-            
-            pdf_values = self.predict(xy_grid).reshape(self.n_samples, self.n_samples).detach()
-                        
-            for i in range(n_plots):
-                ax = fig.add_subplot(2, 2, i+1, projection='3d')
-                ax.plot_surface(X.numpy(), Y.numpy(), pdf_values.numpy(), cmap='plasma')
-                ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
-        else:
-            pdf_values = self.predict(samples).detach()
-            
-            samples = self.pca(samples)
-            
-            X = samples[:, 0]
-            Y = samples[:, 1]
-            
-            for i in range(n_plots):
-                ax = fig.add_subplot(2, 2, i+1, projection='3d')
-                ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
-                ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])   
-                
-        # Show the plot
         plt.tight_layout()
         plt.show()
-                
-        # X = torch.meshgrid(samples[:, 0], samples[:, 1])
-
-        # xy_grid = torch.stack([X[0].ravel(), X[1].ravel()], dim=1)
-
-        # y = self.predict(xy_grid).reshape(self.n_samples, self.n_samples)
-
-        # fig = plt.figure(figsize=(8, 8))
-
-        # for i in range(n_plots):
-        #     ax = fig.add_subplot(2, 2, i+1, projection='3d')
-        #     ax.plot_surface(X[0].numpy(), X[1].numpy(), y.detach().numpy(), cmap='plasma')
-        #     # ax.scatter(X[:, 0], X[:, 1], y_pred, color='red', label='Predicted')
-        #     ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
-                
-        # plt.tight_layout()
-        # plt.show()
         
     
     def plot_loss(self):
@@ -176,6 +148,8 @@ class SESM_Model(torch.nn.Module):
         
         
     def pca(self, X, n_components=2):
+        torch.manual_seed(1024)
+        
         mean = torch.mean(X, dim=0)
         std = torch.std(X, dim=0)
 
@@ -190,5 +164,7 @@ class SESM_Model(torch.nn.Module):
 
         # Step 5: Project data onto lower-dimensional space
         X_reduced = torch.mm(U, torch.diag(S[:n_components]))
+        
+        print(X_reduced)
         
         return X_reduced

@@ -72,49 +72,40 @@ class MultivariateNormal:
         return X, y
         
     
-    def plot(self, n_samples):
+    def plot(self, n_samples, samples):
         n_plots = 4
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
         
-        samples = torch.tensor([])
+        grids = torch.meshgrid(*samples)
         
-        for i in range(self.n_features):
-            feature = torch.linspace(-2, 2, n_samples)
-            samples = torch.cat([samples, feature.unsqueeze(1)], dim=1)
-            
+        xy_grid = torch.stack([grids[n].ravel() for n in range(self.n_features)], dim=1)
+        
+        pdf_values = self.sample_p(xy_grid).reshape((n_samples,) * self.n_features)
+                    
+        if(self.n_features == 2):
+            X = grids[0]
+            Y = grids[1]
+        else:
+            reduced_xy_grid = self.pca(xy_grid, 2)
+
+            X = reduced_xy_grid[:, 0].reshape((n_samples,) * self.n_features)
+            Y = reduced_xy_grid[:, 1].reshape((n_samples,) * self.n_features)
+        
         fig = plt.figure(figsize=(8, 8))
         
-        if(self.n_features == 2):
-            X, Y = torch.meshgrid(samples[:, 0], samples[:, 1])
+        for i in range(n_plots):
+            ax = fig.add_subplot(2, 2, i+1, projection='3d')
+            ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
+            ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
             
-            xy_grid = torch.stack([X.ravel(), Y.ravel()], dim=1)
-            
-            pdf_values = self.sample_p(xy_grid).reshape(n_samples, n_samples)
-                        
-            for i in range(n_plots):
-                ax = fig.add_subplot(2, 2, i+1, projection='3d')
-                ax.plot_surface(X.numpy(), Y.numpy(), pdf_values.numpy(), cmap='plasma')
-                ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
-        else:
-            pdf_values = self.sample_p(samples)
-            
-            samples = self.pca(samples)
-            
-            X = samples[:, 0]
-            Y = samples[:, 1]
-            
-            for i in range(n_plots):
-                ax = fig.add_subplot(2, 2, i+1, projection='3d')
-                ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
-                ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
-            
-        # Show the plot
         plt.tight_layout()
         plt.show()
                 
         
     def pca(self, X, n_components=2):
+        torch.manual_seed(1024)
+        
         mean = torch.mean(X, dim=0)
         std = torch.std(X, dim=0)
 
