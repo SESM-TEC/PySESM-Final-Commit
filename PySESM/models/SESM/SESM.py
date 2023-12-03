@@ -1,9 +1,11 @@
 import torch
-from tqdm import tqdm
-from PySESM.models.DictLayer import DictLayer
-import time
-from PySESM.models.ISTALayer import ISTALayer
 import numpy as np
+import time
+import matplotlib.pyplot as plt
+
+from PySESM.models.DictLayer import DictLayer
+from PySESM.models.ISTALayer import ISTALayer
+
 class SESM_Model(torch.nn.Module):
     """
     A custom PyTorch module for implementing a surrogate model that uses the SESM architecture.
@@ -42,6 +44,9 @@ class SESM_Model(torch.nn.Module):
     """
     def __init__(self, n_samples, n_features, n_functions, psi):
         super().__init__()
+        
+        self.n_samples = n_samples
+        self.n_features = n_features
 
         self.ista_layer = ISTALayer(n_functions)
         self.dictionary_layer = DictLayer(n_samples, n_features, n_functions, psi) 
@@ -100,3 +105,41 @@ class SESM_Model(torch.nn.Module):
         self.loss_stats["loss_std"].append(np.std(current_loss))
         self.loss_stats["loss_max"].append(np.max(current_loss))
         self.loss_stats["loss_min"].append(np.min(current_loss))
+        
+        
+    def plot_function(self):
+        n_plots = 4
+        plot_elevs = [30, 60, 90, 30]
+        plot_azims = [30, 60, 90, 120]
+
+        samples = torch.tensor([])
+
+        for i in range(self.n_features):
+            feature = torch.linspace(-2, 2, self.n_samples)
+            samples = torch.cat([samples, feature.unsqueeze(1)], dim=1)
+            
+        X = torch.meshgrid(samples[:, 0], samples[:, 1])
+
+        xy_grid = torch.stack([X[0].ravel(), X[1].ravel()], dim=1)
+
+        y = self.predict(xy_grid).reshape(self.n_samples, self.n_samples)
+
+        fig = plt.figure(figsize=(8, 8))
+
+        for i in range(n_plots):
+            ax = fig.add_subplot(2, 2, i+1, projection='3d')
+            ax.plot_surface(X[0].numpy(), X[1].numpy(), y.detach().numpy(), cmap='plasma')
+            # ax.scatter(X[:, 0], X[:, 1], y_pred, color='red', label='Predicted')
+            ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
+                
+        plt.tight_layout()
+        plt.show()
+        
+    
+    def plot_loss(self):
+        plt.plot(self.losses)
+        
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        
+        plt.show()
