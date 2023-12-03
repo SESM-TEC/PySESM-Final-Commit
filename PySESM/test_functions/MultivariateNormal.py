@@ -72,9 +72,8 @@ class MultivariateNormal:
         return X, y
         
     
-    def plot(self):
+    def plot(self, n_samples):
         n_plots = 4
-        n_samples = 150
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
         
@@ -97,18 +96,18 @@ class MultivariateNormal:
                 ax = fig.add_subplot(2, 2, i+1, projection='3d')
                 ax.plot_surface(X.numpy(), Y.numpy(), pdf_values.numpy(), cmap='plasma')
                 ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
-        # else:
-        #     pdf_values = self.sample(samples)
+        else:
+            pdf_values = self.sample_p(samples)
             
-        #     samples = self.pca(samples)
+            samples = self.pca(samples)
             
-        #     X = samples[:, 0]
-        #     Y = samples[:, 1]
+            X = samples[:, 0]
+            Y = samples[:, 1]
             
-        #     for i in range(n_plots):
-        #         ax = fig.add_subplot(2, 2, i+1, projection='3d')
-        #         ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
-        #         ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
+            for i in range(n_plots):
+                ax = fig.add_subplot(2, 2, i+1, projection='3d')
+                ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
+                ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
             
         # Show the plot
         plt.tight_layout()
