@@ -107,7 +107,7 @@ class SESM_Model(torch.nn.Module):
         self.loss_stats["loss_min"].append(np.min(current_loss))
         
         
-    def plot(self, n_samples, samples):
+    def plot(self, n_samples, samples, savefig=False, filepath=None):
         n_plots = 4
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
@@ -144,16 +144,23 @@ class SESM_Model(torch.nn.Module):
             ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
             
         plt.tight_layout()
+        
+        if savefig:
+            plt.savefig(filepath)
+        
         plt.show()
         
     
-    def plot_loss(self, ylim=0.1):
+    def plot_loss(self, ylim=0.1, savefig=False, filepath=None):
         plt.plot(self.losses)
         
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         
         plt.ylim(0, ylim)
+        
+        if savefig:
+            plt.savefig(filepath)
         
         plt.show()
         

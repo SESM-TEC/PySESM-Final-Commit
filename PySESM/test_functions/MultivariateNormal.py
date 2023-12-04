@@ -75,7 +75,7 @@ class MultivariateNormal:
         return X, y
         
     
-    def plot(self, n_samples, samples):
+    def plot(self, n_samples, samples, savefig=False, filepath=None):
         n_plots = 4
         plot_elevs = [30, 60, 90, 30]
         plot_azims = [30, 60, 90, 120]
@@ -112,6 +112,10 @@ class MultivariateNormal:
             ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
             
         plt.tight_layout()
+        
+        if savefig:
+            plt.savefig(filepath)
+        
         plt.show()
                 
         
