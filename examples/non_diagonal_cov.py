@@ -12,6 +12,12 @@ Original file is located at
 # !mkdir results_1
 # !mkdir results_2
 # !mkdir results_3
+# !mkdir results_1/plots
+# !mkdir results_2/plots
+# !mkdir results_3/plots
+# !mkdir results_1/stats
+# !mkdir results_2/stats
+# !mkdir results_3/stats
 
 import torch
 import numpy as np
@@ -25,6 +31,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from PySESM.models.SESM.SESM import SESM_Model
 from PySESM.base_functions.Function import GaussianFunctions
 from google.colab import files
+import plotly.express as px
 
 """## Definicion de covarianzas no diagnonales"""
 
@@ -125,49 +132,52 @@ def train_model(model, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, 
         dictionary_alpha=dictionary_alpha
     )
 
+def plot_scatter(x_values, y_values, z_values, Z, hypset, fngroup, iteration):
+
+    fig = plt.figure(figsize=(13, 13))
+
+    ax1 = fig.add_subplot(221, projection='3d')
+    ax1.scatter(x_values, y_values, z_values, c=z_values)
+    ax1.set_xlabel('X')
+    ax1.set_ylabel('Y')
+    ax1.set_zlabel('Z')
+    ax1.set_title('Original Function')
+
+    ax2 = fig.add_subplot(222, projection='3d')
+    ax2.scatter(x_values, y_values, Z.clone().detach(), c=Z.clone().detach())
+    ax2.set_xlabel('X')
+    ax2.set_ylabel('Y')
+    ax2.set_zlabel('Z')
+    ax2.set_title('Surrogate Model')
+    ax2.set_zlim(0)
+
+    filename = f"results_{hypset}/plots/{fngroup}.{iteration}.png"
+    plt.savefig(filename)
+
+    plt.clf()
+
 def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, debug=True):
+    #----------------PREDICTION------------
     x_tensor = torch.tensor(x_values)
     y_tensor = torch.tensor(y_values)
     XY = torch.cat((x_tensor.unsqueeze(1), y_tensor.unsqueeze(1)), dim=1)
     Z = model.predict(XY)
-    time = model.time / 60
 
+    #----------------- ANALYSIS------------
+    time = model.time / 60
     mse = MeanSquaredError()
     mse(Z.clone().detach(), z_values)
     mse_value = mse.compute()
 
     if debug:
-        fig = plt.figure(figsize=(13, 13))
-
-        ax1 = fig.add_subplot(221, projection='3d')
-        ax1.scatter(x_values, y_values, z_values,c=z_values)
-        ax1.set_xlabel('X')
-        ax1.set_ylabel('Y')
-        ax1.set_zlabel('Z')
-        ax1.set_title('Original Function')
-
-
-        ax2 = fig.add_subplot(222, projection='3d')
-        ax2.scatter(x_values, y_values, Z.clone().detach(), c=Z.clone().detach())
-        ax2.set_xlabel('X')
-        ax2.set_ylabel('Y')
-        ax2.set_zlabel('Z')
-        ax2.set_title('Surrogate Model')
-        ax2.set_zlim(0)
-
-
-        #Show the plot
-        fname = f"results_{hypset}/{fngroup}.{iter}.png"
-        plt.savefig(fname)
-        #plt.show()
-        plt.clf()
+        plot_scatter(x_values, y_values, z_values, Z, hypset, fngroup, iter)
 
         mean = np.array(model.loss_stats["loss_mean"])
         std = np.array(model.loss_stats["loss_std"])
         max_values = np.array(model.loss_stats["loss_max"])
         min_values = np.array(model.loss_stats["loss_min"])
         index = mean.size - 1
-        # Crear un DataFrame de Pandas
+
         df = pd.DataFrame({
             'Mean': mean[-index:],
             'Std': std[-index:],
@@ -175,19 +185,7 @@ def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, d
             'Min': min_values[-index:]
         })
 
-        # Guardar el DataFrame en un archivo CSV
-        #df.to_csv(f'results_{hypset}/estadisticas_losses.csv', index=False)
-        plt.scatter(df.index, model.losses[-index:], label='Loss', color='g',marker='o', linestyle='dashed')
-        plt.scatter(df.index, df['Mean'], label='Mean', color='r', marker='o')
-        plt.errorbar(df.index, df['Std'], yerr=df['Std'], fmt='none', color='r', capsize=4)
-        plt.scatter(df.index, df['Max'], label='Max',linewidths=0.05, color='b', marker='^')
-        plt.scatter(df.index, df['Min'], label='Min',linewidths=0.05, color='purple', marker='v')
-        plt.xlabel("epochs")
-        plt.ylabel("loss")
-        plt.legend()
-
-        fname = f"results_{hypset}/{fngroup}.{iter}-loss.png"
-        plt.savefig(fname)
+        df.to_csv(f'results_{hypset}/stats/{iter}.csv', index=False)
 
     return time, mse_value
 
@@ -215,6 +213,45 @@ def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
     train_model(model, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha)
 
     return evaluate_model(model, x_values, y_values, z_values, hyperparams["hyp_set"],  fngroup, iter, debug)
+
+def plot_stats(directory, num_files):
+
+    fig = px.scatter(title='Experiment')
+
+    for i in range(num_files):
+        file_path = f"{directory}/stats/{i}.csv"
+
+        df = pd.read_csv(file_path)
+
+        fig.add_scatter(
+        x=df.index,
+        y=df['Mean'],
+        mode='lines+markers',
+        error_y=dict(type='data', array=df['Std']),
+        name=f'Mean_{i}'
+    )
+
+        fig.add_scatter(
+            x=df.index,
+            y=df['Max'],
+            mode='lines+markers',
+            name=f'Max_{i}'
+        )
+
+        fig.add_scatter(
+            x=df.index,
+            y=df['Min'],
+            mode='lines+markers',
+            name=f'Min_{i}'
+        )
+
+    fig.update_layout(
+        xaxis_title='Iteration',
+        yaxis_title='Stats',
+        legend_title='Legend',
+        showlegend=True
+    )
+    fig.show()
 
 import csv
 
@@ -280,7 +317,7 @@ fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
 | Gaussianas 4    | Exp 1.4.x     | Exp 2.4.x     | Exp 3.4.x     |
 """
 
-N_iter = 20
+N_iter = 10
 experiment_3 = {
       "hyp_set": 3,
       "n_samples"	: 500,
@@ -289,10 +326,11 @@ experiment_3 = {
       "ista_alpha"	: 0.0125,
       "ista_lambd"	 : 0.001,
       "dictionary_alpha": 0.0125,
-      "m_epochs" : 300,
+      "m_epochs" : 10,
       "dict_epochs": 60,
       "h_epochs": 100
 }
+#1, 2, 3 --> m_epochs
 
 data = []
 for i in range(N_iter):
@@ -301,6 +339,9 @@ for i in range(N_iter):
   data.append((i, time, mse.item()))
 
 save_results(data=data, fngroup=1)
+
+stats_dir = f'results_{experiment_3["hyp_set"]}'
+plot_stats(stats_dir, N_iter)
 
 data_1 = []
 
