@@ -57,7 +57,7 @@ class DictLayer(torch.nn.Module):
         self.losses = []
         
         
-    def fit(self, X, y, epochs, h, alpha, cov_regularization_lambda=0.001, log_losses=True):
+    def fit(self, X, y, epochs, h, alpha, log_losses=True):
         """
         Let's train the model.
 
@@ -77,12 +77,6 @@ class DictLayer(torch.nn.Module):
             self.forward(X)
             y_pred = self.dictionary @ h
             loss = criterion(y_pred, y)
-            
-            l2_lambda = cov_regularization_lambda
-            l2_norm = sum(param.pow(2.0).sum()
-                        for param in self.parameters())
-        
-            loss = loss + l2_lambda * l2_norm
             optimizer.zero_grad()
             loss.backward(retain_graph=True)
             optimizer.step()
