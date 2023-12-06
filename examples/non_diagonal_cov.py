@@ -37,6 +37,12 @@ import plotly.express as px
 
 # Non-diagonal covariance
 def generate_sigma_tensors():
+    """
+    Generates non-diagonal covariance tensors for 2D Gaussian distributions.
+
+    Returns:
+    tuple: Tuple containing three non-diagonal covariance tensors (sigma1, sigma2, sigma3).
+    """
     e0 = torch.tensor([1.0, 1.0], dtype=torch.float32)
     e0 = e0 / e0.norm()
 
@@ -65,6 +71,19 @@ sigma3_d = 0.3 *torch.eye(2)
 """## Crear Gaussianas"""
 
 def generate_mesh_and_z(sigma1, sigma2, sigma3):
+    """
+    Generates a mesh grid and corresponding probability density values for a mixture
+    of three 2D Gaussian distributions.
+
+    Args:
+    sigma1 (torch.Tensor): The covariance tensor for the first Gaussian distribution.
+    sigma2 (torch.Tensor): The covariance tensor for the second Gaussian distribution.
+    sigma3 (torch.Tensor): The covariance tensor for the third Gaussian distribution.
+
+    Returns:
+    tuple: Tuple containing mesh grid arrays (xx, yy) and the corresponding probability
+    density values (zz).
+    """
     N_points = 50
     xl = -2
     xr = 2
@@ -86,16 +105,50 @@ def generate_mesh_and_z(sigma1, sigma2, sigma3):
 
     return xx, yy, zz
 
-"""## Covarianza de gaussianas del experimento:
+"""## Covarianza de gaussianas del experimento
   - 3 Diagonales
   - 2 Diagonales, 1 no diagonal
   - 1 diagonal, 2 no diagonales
   - 3 no diagonales
 """
 
+# 3 diag
+xx, yy, zz = generate_mesh_and_z(sigma1_d, sigma2_d, sigma3_d)
+
+# 2 diag, 1 no diag
+xx_1, yy_1, zz_1 = generate_mesh_and_z(sigma1_d, sigma2_d, sigma3)
+
+# 1 diag, 2 no diag
+xx_2, yy_2, zz_2 = generate_mesh_and_z(sigma1_d, sigma2, sigma3)
+# 3 no diag
+xx_3, yy_3, zz_3 = generate_mesh_and_z(sigma1, sigma2, sigma3)
+
+fig = go.Figure(data=[go.Surface(z=zz_3.numpy(), x=xx_3, y=yy_3)])
+fig.update_layout(scene=dict(aspectmode='data'))
+fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
+
+#fig.show()
+
+"""# Configuracion y y ejecucion del modelo"""
+
 import pandas as pd
 
 def generate_uniform_sampling(total_points, n_samples=500, min_separation=1):
+    """
+    Generate uniform sampling indices with a minimum separation criterion.
+
+    Args:
+        total_points (int): Total number of data points.
+        n_samples (int): Number of samples to generate (default is 500).
+        min_separation (int): Minimum separation between selected indices (default is 1).
+
+    Returns:
+        list: List of selected indices.
+
+    Example:
+        sampled_indices = generate_uniform_sampling(1000, n_samples=200, min_separation=2)
+    """
+
     selected_indexes = []
     while len(selected_indexes) < n_samples:
         random_index = np.random.randint(total_points)
@@ -104,6 +157,22 @@ def generate_uniform_sampling(total_points, n_samples=500, min_separation=1):
     return selected_indexes
 
 def sample_data(x_values, y_values, z_values, sampled_indices):
+    """
+    Sample data based on selected indices.
+
+    Args:
+        x_values (array-like): X-axis values.
+        y_values (array-like): Y-axis values.
+        z_values (array-like): Z-axis values.
+        sampled_indices (list): List of indices to sample.
+
+    Returns:
+        tuple: Tuple containing sampled X (features) and y (labels).
+
+    Example:
+        X, y = sample_data(x_values, y_values, z_values, sampled_indices)
+    """
+
     sampled_x = torch.tensor(x_values[sampled_indices], dtype=torch.float32)
     sampled_y = torch.tensor(y_values[sampled_indices], dtype=torch.float32)
     X = torch.stack((sampled_x, sampled_y), dim=1)
@@ -111,6 +180,17 @@ def sample_data(x_values, y_values, z_values, sampled_indices):
     return X, y
 
 def build_model(n_samples, n_features, l_functions):
+    """
+    Build and configure the SESM (Sparse Evolutionary Structural Modeling) model.
+
+    Args:
+    - n_samples (int): Number of training samples.
+    - n_features (int): Number of features.
+    - l_functions (int): Number of Gaussian functions.
+
+    Returns:
+    SESM_Model: An instance of the SESM model.
+    """
     gaussian_function = GaussianFunctions(n_features=n_features, n_functions=l_functions)
     model = SESM_Model(
         n_samples=n_samples,
@@ -121,6 +201,24 @@ def build_model(n_samples, n_features, l_functions):
     return model
 
 def train_model(model, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha):
+    """
+    Train the SESM model using the specified training parameters.
+
+    Args:
+    - model (SESM_Model): The SESM model to be trained.
+    - X (torch.Tensor): Input features.
+    - y (torch.Tensor): Target values.
+    - model_epochs (int): Number of epochs for training the overall model.
+    - ista_epochs (int): Number of ISTA (Iterative Shrinkage-Thresholding Algorithm) epochs.
+    - ista_alpha (float): ISTA alpha parameter.
+    - ista_lambd (float): ISTA lambda parameter.
+    - dictionary_epochs (int): Number of epochs for updating the dictionary.
+    - dictionary_alpha (float): Dictionary update alpha parameter.
+
+    Returns:
+    None
+    """
+
     model.fit(
         X=X,
         y=y,
@@ -133,7 +231,24 @@ def train_model(model, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, 
     )
 
 def plot_scatter(x_values, y_values, z_values, Z, hypset, fngroup, iteration):
+    """
+    Plot a scatter plot for the original function and the surrogate model.
 
+    Args:
+        x_values (array-like): X-axis values.
+        y_values (array-like): Y-axis values.
+        z_values (array-like): Z-axis values for the original function.
+        Z (array-like): Z-axis values for the surrogate model.
+        hypset (int): Hypothesis set or configuration identifier.
+        fngroup (int): Function group identifier.
+        iteration (int): Iteration number.
+
+    Returns:
+        None: Saves the plot as an image file.
+
+    Example:
+        plot_scatter(x_values, y_values, z_values, Z, 3, 1 , 1)
+    """
     fig = plt.figure(figsize=(13, 13))
 
     ax1 = fig.add_subplot(221, projection='3d')
@@ -157,6 +272,23 @@ def plot_scatter(x_values, y_values, z_values, Z, hypset, fngroup, iteration):
     plt.clf()
 
 def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, debug=True):
+    """
+    Evaluate the SESM model's performance on a dataset.
+
+    Args:
+    - model (SESM_Model): The trained SESM model.
+    - x_values (Union[np.ndarray, list]): Input feature values along the x-axis.
+    - y_values (Union[np.ndarray, list]): Input feature values along the y-axis.
+    - z_values (Union[np.ndarray, list]): Target values.
+    - hypset (str): Hypothesis set identifier.
+    - fngroup (str): Function group identifier (Dataset).
+    - iter (int): Iteration number.
+    - debug (bool): Whether to generate and save debugging plots (default is True).
+
+    Returns:
+    Tuple[float, float]: Tuple containing time taken for evaluation (in minutes) and
+    the Mean Squared Error (MSE) value.
+    """
     #----------------PREDICTION------------
     x_tensor = torch.tensor(x_values)
     y_tensor = torch.tensor(y_values)
@@ -172,17 +304,8 @@ def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, d
     if debug:
         plot_scatter(x_values, y_values, z_values, Z, hypset, fngroup, iter)
 
-        mean = np.array(model.loss_stats["loss_mean"])
-        std = np.array(model.loss_stats["loss_std"])
-        max_values = np.array(model.loss_stats["loss_max"])
-        min_values = np.array(model.loss_stats["loss_min"])
-        index = mean.size - 1
-
         df = pd.DataFrame({
-            'Mean': mean[-index:],
-            'Std': std[-index:],
-            'Max': max_values[-index:],
-            'Min': min_values[-index:]
+            'Loss': model.losses
         })
 
         df.to_csv(f'results_{hypset}/stats/{iter}.csv', index=False)
@@ -190,7 +313,22 @@ def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, d
     return time, mse_value
 
 def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
+    """
+    Run a complete SESM experiment, including data sampling, model training, and evaluation.
 
+    Args:
+    - _x (np.ndarray): Input feature values along the x-axis.
+    - _y (np.ndarray): Input feature values along the y-axis.
+    - _z (np.ndarray): Target values.
+    - hyperparams (dict): Hyperparameters for the experiment.
+    - fngroup (str): Function group identifier.
+    - iter (int): Iteration number.
+    - debug (bool): Whether to generate and save debugging plots (default is True).
+
+    Returns:
+    Tuple[float, float]: Tuple containing time taken for the experiment (in minutes)
+    and the Mean Squared Error (MSE) value.
+    """
     x_values = _x.ravel()
     y_values = _y.ravel()
     z_values = _z.ravel()
@@ -211,52 +349,80 @@ def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
     dictionary_alpha = hyperparams["dictionary_alpha"]
 
     train_model(model, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha)
-
-    return evaluate_model(model, x_values, y_values, z_values, hyperparams["hyp_set"],  fngroup, iter, debug)
+    time, mse_value = evaluate_model(model, x_values, y_values, z_values, hyperparams["hyp_set"],  fngroup, iter, debug)
+    return time, mse_value
 
 def plot_stats(directory, num_files):
+    """
+    Plot statistics for loss values from multiple CSV files.
 
-    fig = px.scatter(title='Experiment')
+    Args:
+        directory (str): The directory containing CSV files.
+        num_files (int): The number of CSV files to process.
+
+    Returns:
+        None: Displays an interactive plot and saves an HTML file.
+
+    Note:
+        Assumes that each CSV file contains loss values for the same number of epochs.
+
+    """
+    fig = px.scatter(title='Loss analysis')
+    m_epochs_losses = []
 
     for i in range(num_files):
         file_path = f"{directory}/stats/{i}.csv"
 
         df = pd.read_csv(file_path)
+        m_epochs_losses.append(df)
 
-        fig.add_scatter(
-        x=df.index,
-        y=df['Mean'],
+    merged_losses = pd.concat(m_epochs_losses, axis=1)
+
+    # Compute mean, std, min, and max for each row
+    summary_df = pd.DataFrame({
+        'Mean': merged_losses.mean(axis=1),
+        'Std': merged_losses.std(axis=1),
+        'Min': merged_losses.min(axis=1),
+        'Max': merged_losses.max(axis=1)
+    })
+
+    summary_df.to_csv(f'{directory}/stats/processed.csv', index=False)
+
+    fig.add_scatter(
+        x=summary_df.index,
+        y=summary_df['Mean'],
         mode='lines+markers',
-        error_y=dict(type='data', array=df['Std']),
-        name=f'Mean_{i}'
+        error_y=dict(type='data', array=summary_df['Std']),
+        name='Mean'
     )
 
-        fig.add_scatter(
-            x=df.index,
-            y=df['Max'],
-            mode='lines+markers',
-            name=f'Max_{i}'
-        )
+    fig.add_scatter(
+        x=summary_df.index,
+        y=summary_df['Max'],
+        mode='markers',
+        name='Max'
+    )
 
-        fig.add_scatter(
-            x=df.index,
-            y=df['Min'],
-            mode='lines+markers',
-            name=f'Min_{i}'
-        )
+    fig.add_scatter(
+        x=summary_df.index,
+        y=summary_df['Min'],
+        mode='markers',
+        name='Min'
+    )
 
     fig.update_layout(
-        xaxis_title='Iteration',
-        yaxis_title='Stats',
+        xaxis_title='m_epochs',
+        yaxis_title='Loss',
         legend_title='Legend',
         showlegend=True
     )
     fig.show()
+    fig.write_html(f"interactive_plot-{directory}.html")
 
 import csv
 
 def save_results(data, fngroup):
-  # Calcular el promedio y la desviación estándar para time y mse
+  # Compute Mean and Std for executio
   times = [item[1] for item in data]
   mse_values = [item[2] for item in data]
 
@@ -265,30 +431,12 @@ def save_results(data, fngroup):
   average_mse = np.mean(mse_values)
   std_mse = np.std(mse_values)
 
-  # Guardar los datos en un archivo CSV
   with open(f"results_{fngroup}.csv", mode="w", newline="") as file:
       writer = csv.writer(file)
       writer.writerow(["Repetion", "Time (min)", "MSE"])
       writer.writerows(data)
       writer.writerow(["Mean", average_time, average_mse])
       writer.writerow(["Std", std_time, std_mse])
-
-# 3 diag
-xx, yy, zz = generate_mesh_and_z(sigma1_d, sigma2_d, sigma3_d)
-
-# 2 diag, 1 no diag
-xx_1, yy_1, zz_1 = generate_mesh_and_z(sigma1_d, sigma2_d, sigma3)
-
-# 1 diag, 2 no diag
-xx_2, yy_2, zz_2 = generate_mesh_and_z(sigma1_d, sigma2, sigma3)
-# 3 no diag
-xx_3, yy_3, zz_3 = generate_mesh_and_z(sigma1, sigma2, sigma3)
-
-fig = go.Figure(data=[go.Surface(z=zz_3.numpy(), x=xx_3, y=yy_3)])
-fig.update_layout(scene=dict(aspectmode='data'))
-fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
-
-#fig.show()
 
 """# Nomenclatura de experimentos
 
@@ -317,7 +465,7 @@ fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
 | Gaussianas 4    | Exp 1.4.x     | Exp 2.4.x     | Exp 3.4.x     |
 """
 
-N_iter = 10
+N_iter = 5 #
 experiment_3 = {
       "hyp_set": 3,
       "n_samples"	: 500,
@@ -326,7 +474,7 @@ experiment_3 = {
       "ista_alpha"	: 0.0125,
       "ista_lambd"	 : 0.001,
       "dictionary_alpha": 0.0125,
-      "m_epochs" : 10,
+      "m_epochs" : 20,
       "dict_epochs": 60,
       "h_epochs": 100
 }
@@ -342,6 +490,8 @@ save_results(data=data, fngroup=1)
 
 stats_dir = f'results_{experiment_3["hyp_set"]}'
 plot_stats(stats_dir, N_iter)
+
+"""# Correr experimentos"""
 
 data_1 = []
 
@@ -379,5 +529,3 @@ files.download('results_2.zip')
 files.download('results_3.csv')
 !zip -r results_3.zip results_3/
 files.download('results_3.zip')
-
-files.download('results_4.csv')
