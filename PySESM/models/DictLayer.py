@@ -43,12 +43,12 @@ class DictLayer(torch.nn.Module):
 
         self.theta_size = int(n_features*(n_features+3)/2)
 
-        if initialization = "Lecun":
+        if initialization == "Lecun":
 
             self.Theta = torch.nn.Parameter(
                 torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
 
-        elif initialization = "Xavier":
+        elif initialization == "Xavier":
 
             self.Theta = torch.nn.Parameter(
                 torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
@@ -56,7 +56,7 @@ class DictLayer(torch.nn.Module):
         else:
 
             self.Theta = torch.nn.Parameter(
-                torch.normal(mean=0, 0, size=(self.theta_size, n_functions), requires_grad=True))
+                torch.normal(mean=0, std=0, size=(self.theta_size, n_functions), requires_grad=True))
 
         self.n_samples = n_samples
 
