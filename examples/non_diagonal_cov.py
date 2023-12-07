@@ -7,31 +7,39 @@ Original file is located at
     https://colab.research.google.com/drive/1-_re-k4AJtpgWTIpVKng_pOkdy7rNDSz
 """
 
-# !unzip PySESM.zip
-# !pip install torchmetrics
-# !mkdir results_1
-# !mkdir results_2
-# !mkdir results_3
-# !mkdir results_1/plots
-# !mkdir results_2/plots
-# !mkdir results_3/plots
-# !mkdir results_1/stats
-# !mkdir results_2/stats
-# !mkdir results_3/stats
+!unzip PySESM.zip
+!pip install torchmetrics
+!mkdir results_1
+!mkdir results_2
+!mkdir results_3
+!mkdir results_1/plots
+!mkdir results_2/plots
+!mkdir results_3/plots
+!mkdir results_1/stats
+!mkdir results_2/stats
+!mkdir results_3/stats
+
+!pip install wandb -qU
 
 import torch
+import wandb
+from torchmetrics import MeanSquaredError
+
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from mpl_toolkits.mplot3d import Axes3D
 from scipy.stats import multivariate_normal
-from torchmetrics import MeanSquaredError, Accuracy, Precision, Recall, F1Score
-from sklearn.model_selection import RandomizedSearchCV
 
 from PySESM.models.SESM.SESM import SESM_Model
 from PySESM.base_functions.Function import GaussianFunctions
+import pandas as pd
+
 from google.colab import files
 import plotly.express as px
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
+"""## Login de Wandb"""
+
+wandb.login()
 
 """## Definicion de covarianzas no diagnonales"""
 
@@ -129,9 +137,7 @@ fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
 
 #fig.show()
 
-"""# Configuracion y y ejecucion del modelo"""
-
-import pandas as pd
+"""# Configuracion y ejecución del modelo"""
 
 def generate_uniform_sampling(total_points, n_samples=500, min_separation=1):
     """
@@ -310,6 +316,11 @@ def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, d
 
         df.to_csv(f'results_{hypset}/stats/{iter}.csv', index=False)
 
+        for loss in model.losses:
+          wandb.log({"loss": loss})
+
+
+
     return time, mse_value
 
 def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
@@ -482,10 +493,19 @@ experiment_3 = {
 
 data = []
 for i in range(N_iter):
+  wandb.init(
+    # Set the project where this run will be logged
+    project="SESM-2D-GaussianFunction",
+    # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+    name=f"12-06-2023-experiments-{i}",
+    # Track hyperparameters and run metadata
+    config = experiment_3
+    )
+
   time, mse = run_experiment(xx,yy,zz,
                             experiment_3, fngroup=1, iter=i)
   data.append((i, time, mse.item()))
-
+wandb.finish()
 save_results(data=data, fngroup=1)
 
 stats_dir = f'results_{experiment_3["hyp_set"]}'
@@ -509,14 +529,6 @@ for i in range(N_iter):
   data_2.append((i, time, mse.item()))
 
 save_results(data=data_2, fngroup=3)
-
-data_3 = []
-for i in range(N_iter):
-  time, mse = run_experiment(xx_3,yy_3,zz_3,
-                            experiment_3, fngroup=4, iter=i)
-  data_3.append((i, time, mse.item()))
-
-save_results(data=data_3, fngroup=4)
 
 files.download('results_1.csv')
 !zip -r results_1.zip results_1/
