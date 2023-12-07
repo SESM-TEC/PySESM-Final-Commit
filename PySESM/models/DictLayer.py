@@ -13,6 +13,7 @@ class DictLayer(torch.nn.Module):
         n_features (int): The number of input features or dimensions.
         n_functions (int): The number of functions or basis functions.
         psi (callable): The function used for generating the layer's output.
+        initialization (String): The initialization method to generate the paremeter tensor.
 
     Attributes:
         theta_size (int): The size of the parameter tensor Theta, computed based on n_features.
@@ -37,12 +38,25 @@ class DictLayer(torch.nn.Module):
         # Perform a forward pass
         output = model(input_data)
     """
-    def __init__(self, n_samples, n_features, n_functions, psi):
+    def __init__(self, n_samples, n_features, n_functions, psi, initialization):
         super().__init__()
 
         self.theta_size = int(n_features*(n_features+3)/2)
-        self.Theta = torch.nn.Parameter(
-            torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+
+        if initialization = "Lecun":
+
+            self.Theta = torch.nn.Parameter(
+                torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+
+        elif initialization = "Xavier":
+
+            self.Theta = torch.nn.Parameter(
+                torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+
+        else:
+
+            self.Theta = torch.nn.Parameter(
+                torch.normal(mean=0, 0, size=(self.theta_size, n_functions), requires_grad=True))
 
         self.n_samples = n_samples
 
@@ -53,10 +67,10 @@ class DictLayer(torch.nn.Module):
         self.psi = psi
 
         self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
-        
+
         self.losses = []
-        
-        
+
+
     def fit(self, X, y, epochs, h, alpha, log_losses=True):
         """
         Let's train the model.
