@@ -53,6 +53,13 @@ class DictLayer(torch.nn.Module):
             self.Theta = torch.nn.Parameter(
                 torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
 
+        elif initialization == "Prieto":
+
+            low_val = -1.0  # Replace with your lower limit
+            high_val = 1.0  # Replace with your upper limit
+            # Generate Theta tensor as a uniform distribution
+            self.Theta = torch.nn.Parameter((high_val - low_val) * torch.rand((self.theta_size, n_functions)) + low_val, requires_grad=True)
+
         else:
 
             self.Theta = torch.nn.Parameter(

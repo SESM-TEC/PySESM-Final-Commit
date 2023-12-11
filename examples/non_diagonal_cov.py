@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1a_Hla3TwDKwxHDPn7hfkODi5_i9qzJjR
 """
 
-!unzip PySESM.zip
+"""!unzip PySESM.zip
 !pip install torchmetrics
 !mkdir results_1
 !mkdir results_2
@@ -19,7 +19,7 @@ Original file is located at
 !mkdir results_2/stats
 !mkdir results_3/stats
 
-!pip install wandb -qU
+!pip install wandb -qU"""
 
 import torch
 import wandb
@@ -350,7 +350,7 @@ def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
     sampled_indices = generate_uniform_sampling(total_points)
     X, y = sample_data(x_values, y_values, z_values, sampled_indices)
 
-    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], initialization="Lecun")
+    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], initialization="Prieto")
 
     model_epochs = hyperparams["m_epochs"]
     ista_epochs = hyperparams["h_epochs"]
@@ -498,7 +498,7 @@ for i in range(N_iter):
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-    name=f"12-06-2023-experiments-{i}",
+    name=f"12-11-2023-experiments-{i}",
     # Track hyperparameters and run metadata
     config = experiment_3
     )
@@ -521,7 +521,7 @@ for i in range(N_iter):
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-    name=f"12-06-2023-experiments-{i}",
+    name=f"12-11-2023-experiments-{i}",
     # Track hyperparameters and run metadata
     config = experiment_3
     )
@@ -538,7 +538,7 @@ for i in range(N_iter):
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-    name=f"12-06-2023-experiments-{i}",
+    name=f"12-11-2023-experiments-{i}",
     # Track hyperparameters and run metadata
     config = experiment_3
     )
