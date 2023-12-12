@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from tqdm import tqdm
+from scipy.special import erfinv
 
 class DictLayer(torch.nn.Module):
     """
@@ -45,25 +46,19 @@ class DictLayer(torch.nn.Module):
 
         if initialization == "Lecun":
 
-            self.Theta = torch.nn.Parameter(
-                torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
 
         elif initialization == "Xavier":
 
-            self.Theta = torch.nn.Parameter(
-                torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
 
         elif initialization == "Prieto":
 
-            low_val = -1.0  # Replace with your lower limit
-            high_val = 1.0  # Replace with your upper limit
-            # Generate Theta tensor as a uniform distribution
-            self.Theta = torch.nn.Parameter((high_val - low_val) * torch.rand((self.theta_size, n_functions)) + low_val, requires_grad=True)
+            self.Theta = self.initialize_theta(self.theta_size, n_functions, n_features, 0, 1, 0.5, np.sqrt(1/self.theta_size))
 
         else:
 
-            self.Theta = torch.nn.Parameter(
-                torch.normal(mean=0, std=0, size=(self.theta_size, n_functions), requires_grad=True))
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=0, size=(self.theta_size, n_functions), requires_grad=True))
 
         self.n_samples = n_samples
 
@@ -110,3 +105,9 @@ class DictLayer(torch.nn.Module):
       result = self.psi(x.mT,self.Theta)
       self.dictionary = result
       return torch.sum(result)
+
+    def initialize_theta(self, theta_size, n_functions, n_features, desired_min, desired_max, desired_mean, desired_std):
+        uniform_distribution = torch.FloatTensor(theta_size, n_functions).uniform_(desired_min, desired_max)
+        gaussian_distribution = desired_mean + desired_std * np.sqrt(2) * torch.erfinv(2 * uniform_distribution - 1)
+        Theta = torch.nn.Parameter(gaussian_distribution, requires_grad=True)
+        return Theta
