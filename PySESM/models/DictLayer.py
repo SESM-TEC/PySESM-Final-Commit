@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from tqdm import tqdm
-from scipy.special import erfinv
 
 class DictLayer(torch.nn.Module):
     """
@@ -54,7 +53,7 @@ class DictLayer(torch.nn.Module):
 
         elif initialization == "Prieto":
 
-            self.Theta = self.initialize_theta(self.theta_size, n_functions, n_features, 0, 1, 0.5, np.sqrt(1/self.theta_size))
+            self.Theta = self.initialize_Theta(self.theta_size, n_functions, 1, 1, 0)
 
         else:
 
@@ -106,8 +105,25 @@ class DictLayer(torch.nn.Module):
       self.dictionary = result
       return torch.sum(result)
 
-    def initialize_theta(self, theta_size, n_functions, n_features, desired_min, desired_max, desired_mean, desired_std):
-        uniform_distribution = torch.FloatTensor(theta_size, n_functions).uniform_(desired_min, desired_max)
-        gaussian_distribution = desired_mean + desired_std * np.sqrt(2) * torch.erfinv(2 * uniform_distribution - 1)
-        Theta = torch.nn.Parameter(gaussian_distribution, requires_grad=True)
+    def initialize_Theta(self, theta_size, n_functions, min_val, max_val, mean, initialization="Xavier"):
+        # Xavier initialization for Theta
+        if initialization == "Xavier":
+            variance = 2.0 / (theta_size + n_functions)
+        elif initialization == "He":
+            variance = 2.0 / theta_size
+        else:
+            variance = 1.0 / theta_size
+
+        std_dev = np.sqrt(variance)
+        Theta = torch.nn.Parameter(torch.normal(mean=mean, std=std_dev, size=(self.theta_size, n_functions), requires_grad=True))
+
+        # Convert Theta to a uniform distribution
+        lower_bound = -np.sqrt(min_val) * std_dev
+        upper_bound = np.sqrt(max_val) * std_dev
+        with torch.no_grad():  # Temporarily detach from the computation graph
+            Theta.uniform_(lower_bound, upper_bound)
+
+        # Reattach as a parameter requiring grad
+        Theta = torch.nn.Parameter(Theta, requires_grad=True)
+
         return Theta
