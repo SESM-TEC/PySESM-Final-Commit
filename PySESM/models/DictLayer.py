@@ -1,6 +1,8 @@
 import numpy as np
 import torch
+import torch.nn.init as init
 from tqdm import tqdm
+from sklearn.decomposition import PCA
 
 class DictLayer(torch.nn.Module):
     """
@@ -53,7 +55,12 @@ class DictLayer(torch.nn.Module):
 
         elif initialization == "Prieto":
 
-            self.Theta = self.initialize_Theta(self.theta_size, n_functions, 1, 1, 0)
+            self.Theta = self.initialize_Theta_uniform(self.theta_size, n_functions, 1, 1, 0, initialization="He");
+            # self.Theta = self.initialize_Theta_normal(self.theta_size, n_functions);
+            # Theta = torch.empty(self.theta_size, n_functions)
+            # init.xavier_uniform_(Theta)
+            # Theta = (Theta - Theta.min()) / (Theta.max() - Theta.min())
+            # self.Theta = torch.nn.Parameter(Theta, requires_grad=True)
 
         else:
 
@@ -67,7 +74,13 @@ class DictLayer(torch.nn.Module):
 
         self.psi = psi
 
-        self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+        if initialization == "Prieto":
+
+            self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+
+        else:
+
+            self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
 
         self.losses = []
 
@@ -105,8 +118,7 @@ class DictLayer(torch.nn.Module):
       self.dictionary = result
       return torch.sum(result)
 
-    def initialize_Theta(self, theta_size, n_functions, min_val, max_val, mean, initialization="Xavier"):
-        # Xavier initialization for Theta
+    def initialize_Theta_uniform(self, theta_size, n_functions, min_val, max_val, mean, initialization="Xavier"):
         if initialization == "Xavier":
             variance = 2.0 / (theta_size + n_functions)
         elif initialization == "He":
@@ -117,13 +129,19 @@ class DictLayer(torch.nn.Module):
         std_dev = np.sqrt(variance)
         Theta = torch.nn.Parameter(torch.normal(mean=mean, std=std_dev, size=(self.theta_size, n_functions), requires_grad=True))
 
-        # Convert Theta to a uniform distribution
         lower_bound = -np.sqrt(min_val) * std_dev
         upper_bound = np.sqrt(max_val) * std_dev
-        with torch.no_grad():  # Temporarily detach from the computation graph
+        with torch.no_grad():
             Theta.uniform_(lower_bound, upper_bound)
 
-        # Reattach as a parameter requiring grad
         Theta = torch.nn.Parameter(Theta, requires_grad=True)
 
+        return Theta
+
+
+    def initialize_Theta_normal(theta_size, n_functions):
+        std = np.sqrt(2 / theta_size)
+        theta = torch.rand(theta_size, n_functions)
+        theta = std * (2 * theta - 1)
+        Theta = torch.nn.Parameter(theta, requires_grad=True)
         return Theta
