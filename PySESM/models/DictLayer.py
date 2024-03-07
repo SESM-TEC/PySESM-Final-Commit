@@ -3,6 +3,7 @@ import torch
 import torch.nn.init as init
 from tqdm import tqdm
 from sklearn.decomposition import PCA
+from PySESM.utils.linalg import generate_random_vectors, gram_schmidt, get_upper_triangle, reshape_upper_triangle
 
 class DictLayer(torch.nn.Module):
     """
@@ -45,27 +46,6 @@ class DictLayer(torch.nn.Module):
 
         self.theta_size = int(n_features*(n_features+3)/2)
 
-        if initialization == "Lecun":
-
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
-
-        elif initialization == "Xavier":
-
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(2/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
-
-        elif initialization == "Prieto":
-
-            self.Theta = self.initialize_Theta_uniform(self.theta_size, n_functions, n_features, 1, 1, 0, "Lecun");
-            # self.Theta = self.initialize_Theta_normal(self.theta_size, n_functions);
-            # Theta = torch.empty(self.theta_size, n_functions)
-            # init.xavier_uniform_(Theta)
-            # Theta = (Theta - Theta.min()) / (Theta.max() - Theta.min())
-            # self.Theta = torch.nn.Parameter(Theta, requires_grad=True)
-
-        else:
-
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=0, size=(self.theta_size, n_functions), requires_grad=True))
-
         self.n_samples = n_samples
 
         self.n_features = n_features
@@ -74,13 +54,29 @@ class DictLayer(torch.nn.Module):
 
         self.psi = psi
 
-        if initialization == "Prieto":
+        if initialization == "Lecun":
 
-            self.dictionary = torch.normal(mean=0, std=np.sqrt(2/self.n_samples), size=(self.n_samples, self.n_functions))
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+
+        elif initialization == "Xavier":
+
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(2/(self.theta_size + n_functions)), size=(self.theta_size, n_functions), requires_grad=True))
+
+        elif initialization == "Prieto":
+
+            self.Theta = self.initialization(self.theta_size, self.n_functions, self.n_features, 1e2, 1e3);
 
         else:
 
+            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=0, size=(self.theta_size, self.n_functions), requires_grad=True))
+
+        if initialization == "Lecun":
+
             self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+
+        else:
+
+            self.dictionary = torch.normal(mean=0, std=np.sqrt(2/self.n_samples), size=(self.n_samples, self.n_functions))
 
         self.losses = []
 
@@ -114,36 +110,58 @@ class DictLayer(torch.nn.Module):
 
 
     def forward(self, x):
-      result = self.psi(x.mT,self.Theta)
+      result = self.psi(x.mT, self.Theta)
       self.dictionary = result
       return torch.sum(result)
 
-    def initialize_Theta_uniform(self, theta_size, n_functions, n_features, min_val, max_val, mean, initialization):
-        if initialization == "Xavier":
-            variance = 2.0 / (theta_size + n_functions)
-        elif initialization == "He":
-            variance = 2.0 / theta_size
-        else:
-            variance = 1.0 / theta_size
+    def initialization(self, theta_size, n_functions, n_features, min_val, max_val):
 
-        std_dev = np.sqrt(variance)
-        Theta = torch.nn.Parameter(torch.normal(mean=mean, std=std_dev, size=(self.theta_size, n_functions), requires_grad=True))
+        Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+        # Theta = torch.empty(n_functions - n_features, n_functions)
+        print(Theta)
+        scaled_tensor = torch.rand(n_features, n_functions)
 
-        lower_bound = -np.sqrt(min_val) * std_dev
-        upper_bound = np.sqrt(max_val) * std_dev
+        # lower_bound = -np.sqrt(min_val) * 2/(self.theta_size + n_functions)
+        # upper_bound = np.sqrt(max_val) * 2/(self.theta_size + n_functions)
 
-        sub_tensor = Theta[-n_features:, :].mT.unsqueeze(2)
-
-        sub_tensor_detached = sub_tensor.detach()
-        sub_tensor_detached.uniform_(lower_bound, upper_bound)
+        # sub_tensor_detached = Theta[-n_features:, :].mT.unsqueeze(2).detach()
+        # sub_tensor_detached.uniform_(lower_bound, upper_bound)
 
         with torch.no_grad():
-            Theta[-n_features:, :] = sub_tensor_detached.squeeze(2).mT
+            # Theta[-n_features:, :] = sub_tensor_detached.squeeze(2).mT
+            Theta[-n_features:, :] = scaled_tensor
+            # print("First myu: ", scaled_tensor)
 
-        lambda_theta = 0.01
+        Q = generate_random_vectors(n_functions, max_val, min_val)
 
-        Theta = torch.nn.Parameter(Theta, requires_grad=True)
+        Q = gram_schmidt(Q)
 
-        Theta.data -= lambda_theta * Theta.data
+        #Un rango gigantesco
+        D = torch.diag(torch.rand(n_functions) * (max_val - min_val) + min_val)
+        print(D)
+
+        Sigma = Q @ D @ Q.mT
+        eigenvalues, _ = torch.linalg.eig(Sigma)
+        # print("Eigenvalues S: ", eigenvalues)
+        # print("Sigma: ", Sigma)
+        # scaling_factor = 0.5
+        # Sigma[0, 1] *= scaling_factor
+        # Sigma[1, 0] *= scaling_factor
+
+        L = torch.linalg.cholesky(Sigma).mT
+        eigenvalues, _ = torch.linalg.eig(L)
+        print("Eigenvalues L: ", eigenvalues)
+        print("Cholesky: ", L)
+        # Rho = L[:3, :]
+        # threshold = 1e-1
+        # Rho = torch.where(Rho < threshold, threshold, Rho)
+        # scale_factor = 3
+        # Rho = scale_factor * Rho
+        Rho = reshape_upper_triangle(get_upper_triangle(L), n_functions)
+        Rho = Rho[:3, :]
+
+        with torch.no_grad():
+            Theta[:-n_features, :] = Rho
+            # print("Rho: ", Rho)
 
         return Theta
