@@ -142,16 +142,16 @@ class DictLayer(torch.nn.Module):
 
         Sigma = Q @ D @ Q.mT
         eigenvalues, _ = torch.linalg.eig(Sigma)
-        # print("Eigenvalues S: ", eigenvalues)
-        # print("Sigma: ", Sigma)
+        print("Eigenvalues S: ", eigenvalues)
+        print("Sigma: ", Sigma)
         # scaling_factor = 0.5
         # Sigma[0, 1] *= scaling_factor
         # Sigma[1, 0] *= scaling_factor
 
         L = torch.linalg.cholesky(Sigma).mT
         eigenvalues, _ = torch.linalg.eig(L)
-        print("Eigenvalues L: ", eigenvalues)
-        print("Cholesky: ", L)
+        # print("Eigenvalues L: ", eigenvalues)
+        # print("Cholesky: ", L)
         # Rho = L[:3, :]
         # threshold = 1e-1
         # Rho = torch.where(Rho < threshold, threshold, Rho)

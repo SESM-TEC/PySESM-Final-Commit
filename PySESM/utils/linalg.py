@@ -38,7 +38,8 @@ def gram_schmidt(Q):
     return Q
 
 def generate_random_vectors(features, max_val, min_val):
-    return torch.rand(features, features)
+    # Generates a random vector of uniform values between 0 and 1 and then scales it with a factor
+    return torch.rand(features, features) * (max_val - min_val) + min_val
 
 def get_upper_triangle(A):
     n = A.shape[0]
@@ -58,29 +59,3 @@ def reshape_upper_triangle(upper_triangle, n):
     reshaped_tensor = upper_triangle_padded.view(num_rows, n)
 
     return reshaped_tensor
-
-def whiten_matrix(A):
-    # Step 1: Center the columns of A
-    mean_A = torch.mean(A, dim=0, keepdim=True)
-    centered_A = A - mean_A
-
-    # Step 2: Whitening using SVD
-    U, S, Vt = torch.svd(centered_A)
-    whitened_A = torch.mm(U, Vt)
-
-    # Step 3: Scale the resulting matrix
-    scale_factor = torch.sqrt(torch.tensor(A.shape[1]).float())
-    whitened_A_scaled = whitened_A / scale_factor
-
-    return whitened_A_scaled
-
-def reshape_and_whiten(Rho, n):
-    upper_triangle = get_upper_triangle(Rho)
-
-    # Reshape the whitened upper triangle
-    reshaped_upper_triangle = reshape_upper_triangle(upper_triangle, n)
-
-    # Apply whitening to the upper triangle
-    whitened_reshaped = whiten_matrix(reshaped_upper_triangle)
-
-    return whitened_reshaped
