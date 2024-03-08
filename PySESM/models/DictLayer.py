@@ -41,42 +41,24 @@ class DictLayer(torch.nn.Module):
         # Perform a forward pass
         output = model(input_data)
     """
-    def __init__(self, n_samples, n_features, n_functions, psi, initialization):
+    def __init__(self, n_samples, psi):
         super().__init__()
 
-        self.theta_size = int(n_features*(n_features+3)/2)
+        # No deberíamos pasar el funcional sino pasar el objeto entero
 
         self.n_samples = n_samples
 
-        self.n_features = n_features
-
-        self.n_functions = n_functions
-
         self.psi = psi
 
-        if initialization == "Lecun":
+        #Matriz de n_features x n_features
+        self.n_features = self.psi.n_features
 
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+        #N Gaussianas con una matriz de n_features x n_features
+        self.n_functions = self.psi.n_functions
 
-        elif initialization == "Xavier":
+        self.Theta = self.psi.initialize()
 
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(2/(self.theta_size + n_functions)), size=(self.theta_size, n_functions), requires_grad=True))
-
-        elif initialization == "Prieto":
-
-            self.Theta = self.initialization(self.theta_size, self.n_functions, self.n_features, 1e2, 1e3);
-
-        else:
-
-            self.Theta = torch.nn.Parameter(torch.normal(mean=0, std=0, size=(self.theta_size, self.n_functions), requires_grad=True))
-
-        if initialization == "Lecun":
-
-            self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
-
-        else:
-
-            self.dictionary = torch.normal(mean=0, std=np.sqrt(2/self.n_samples), size=(self.n_samples, self.n_functions))
+        self.dictionary = None
 
         self.losses = []
 
@@ -113,46 +95,3 @@ class DictLayer(torch.nn.Module):
       result = self.psi(x.mT, self.Theta)
       self.dictionary = result
       return torch.sum(result)
-
-    def initialization(self, theta_size, n_functions, n_features, min_val, max_val):
-
-        Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
-        # Theta = torch.empty(n_functions - n_features, n_functions)
-        print("Features: ", n_features)
-        print("Theta: ", Theta.shape)
-        scaled_tensor = torch.rand(n_features, n_functions)
-
-        # lower_bound = -np.sqrt(min_val) * 2/(self.theta_size + n_functions)
-        # upper_bound = np.sqrt(max_val) * 2/(self.theta_size + n_functions)
-
-        # sub_tensor_detached = Theta[-n_features:, :].mT.unsqueeze(2).detach()
-        # sub_tensor_detached.uniform_(lower_bound, upper_bound)
-
-        with torch.no_grad():
-            Theta[-n_features:, :] = scaled_tensor
-            print("First myu: ", scaled_tensor.shape)
-
-        Q = generate_random_vectors(theta_size + n_features, max_val, min_val)
-
-        Q = gram_schmidt(Q)
-
-        #Un rango gigantesco
-        D = torch.diag(torch.rand(theta_size + n_features) * (max_val - min_val) + min_val)
-
-        Sigma = Q @ D @ Q.mT
-        eigenvalues, _ = torch.linalg.eig(Sigma)
-        # print("Eigenvalues S: ", eigenvalues)
-        # print("Sigma: ", Sigma)
-
-        L = torch.linalg.cholesky(Sigma).mT
-        eigenvalues, _ = torch.linalg.eig(L)
-        # print("Eigenvalues L: ", eigenvalues)
-        # print("Cholesky: ", L)
-        Rho = reshape_upper_triangle(get_upper_triangle(L), n_functions)
-        print("Rho: ", Rho.shape)
-
-        with torch.no_grad():
-            Theta[:-n_features, :] = Rho
-            # print("Rho: ", Rho)
-
-        return Theta

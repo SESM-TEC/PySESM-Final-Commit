@@ -43,14 +43,14 @@ class SESM_Model(torch.nn.Module):
             Returns:
                 Tensor: The predicted values for each sample of the objective function.
     """
-    def __init__(self, n_samples, n_features, n_functions, psi, initialization):
+    def __init__(self, n_samples, psi):
         super().__init__()
 
         self.n_samples = n_samples
-        self.n_features = n_features
+        self.n_features = psi.n_features
 
-        self.ista_layer = ISTALayer(n_functions)
-        self.dictionary_layer = DictLayer(n_samples, n_features, n_functions, psi, initialization)
+        self.ista_layer = ISTALayer(psi.n_functions)
+        self.dictionary_layer = DictLayer(n_samples, psi)
 
         self.losses = []
         self.loss_stats = {
