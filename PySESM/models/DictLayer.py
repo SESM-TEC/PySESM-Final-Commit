@@ -118,7 +118,8 @@ class DictLayer(torch.nn.Module):
 
         Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
         # Theta = torch.empty(n_functions - n_features, n_functions)
-        print(Theta)
+        print("Features: ", n_features)
+        print("Theta: ", Theta.shape)
         scaled_tensor = torch.rand(n_features, n_functions)
 
         # lower_bound = -np.sqrt(min_val) * 2/(self.theta_size + n_functions)
@@ -128,37 +129,27 @@ class DictLayer(torch.nn.Module):
         # sub_tensor_detached.uniform_(lower_bound, upper_bound)
 
         with torch.no_grad():
-            # Theta[-n_features:, :] = sub_tensor_detached.squeeze(2).mT
             Theta[-n_features:, :] = scaled_tensor
-            # print("First myu: ", scaled_tensor)
+            print("First myu: ", scaled_tensor.shape)
 
-        Q = generate_random_vectors(n_functions, max_val, min_val)
+        Q = generate_random_vectors(theta_size + n_features, max_val, min_val)
 
         Q = gram_schmidt(Q)
 
         #Un rango gigantesco
-        D = torch.diag(torch.rand(n_functions) * (max_val - min_val) + min_val)
-        print(D)
+        D = torch.diag(torch.rand(theta_size + n_features) * (max_val - min_val) + min_val)
 
         Sigma = Q @ D @ Q.mT
         eigenvalues, _ = torch.linalg.eig(Sigma)
-        print("Eigenvalues S: ", eigenvalues)
-        print("Sigma: ", Sigma)
-        # scaling_factor = 0.5
-        # Sigma[0, 1] *= scaling_factor
-        # Sigma[1, 0] *= scaling_factor
+        # print("Eigenvalues S: ", eigenvalues)
+        # print("Sigma: ", Sigma)
 
         L = torch.linalg.cholesky(Sigma).mT
         eigenvalues, _ = torch.linalg.eig(L)
         # print("Eigenvalues L: ", eigenvalues)
         # print("Cholesky: ", L)
-        # Rho = L[:3, :]
-        # threshold = 1e-1
-        # Rho = torch.where(Rho < threshold, threshold, Rho)
-        # scale_factor = 3
-        # Rho = scale_factor * Rho
         Rho = reshape_upper_triangle(get_upper_triangle(L), n_functions)
-        Rho = Rho[:3, :]
+        print("Rho: ", Rho.shape)
 
         with torch.no_grad():
             Theta[:-n_features, :] = Rho
