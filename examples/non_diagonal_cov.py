@@ -7,8 +7,9 @@ Original file is located at
     https://colab.research.google.com/drive/1a_Hla3TwDKwxHDPn7hfkODi5_i9qzJjR
 """
 
-"""!unzip PySESM.zip
 !pip install torchmetrics
+
+!unzip PySESM.zip
 !mkdir results_1
 !mkdir results_2
 !mkdir results_3
@@ -19,10 +20,10 @@ Original file is located at
 !mkdir results_2/stats
 !mkdir results_3/stats
 
-!pip install wandb -qU"""
+#!pip install wandb -qU
 
 import torch
-import wandb
+#import wandb
 from torchmetrics import MeanSquaredError
 
 import numpy as np
@@ -39,7 +40,7 @@ import plotly.graph_objects as go
 
 """## Login de Wandb"""
 
-wandb.login()
+#wandb.login()
 
 """## Definicion de covarianzas no diagnonales"""
 
@@ -131,6 +132,10 @@ xx_2, yy_2, zz_2 = generate_mesh_and_z(sigma1_d, sigma2, sigma3)
 # 3 no diag
 xx_3, yy_3, zz_3 = generate_mesh_and_z(sigma1, sigma2, sigma3)
 
+print("X: ", xx)
+print("Y: ", yy)
+print("Z: ", zz)
+
 fig = go.Figure(data=[go.Surface(z=zz_3.numpy(), x=xx_3, y=yy_3)])
 fig.update_layout(scene=dict(aspectmode='data'))
 fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
@@ -185,7 +190,7 @@ def sample_data(x_values, y_values, z_values, sampled_indices):
     y = z_values[sampled_indices].clone().detach().to(dtype=torch.float32)
     return X, y
 
-def build_model(n_samples, n_features, l_functions, initialization):
+def build_model(n_samples, n_features, l_functions, eig_range, mu_range):
     """
     Build and configure the SESM (Sparse Evolutionary Structural Modeling) model.
 
@@ -197,13 +202,10 @@ def build_model(n_samples, n_features, l_functions, initialization):
     Returns:
     SESM_Model: An instance of the SESM model.
     """
-    gaussian_function = GaussianFunctions(n_features=n_features, n_functions=l_functions)
+    gaussian_function = GaussianFunctions(n_features=n_features, n_functions=l_functions, eig_range=eig_range, mu_range=mu_range)
     model = SESM_Model(
         n_samples=n_samples,
-        n_features=n_features,
-        n_functions=l_functions,
-        psi=gaussian_function.gaussian,
-        initialization=initialization
+        psi=gaussian_function
     )
     return model
 
@@ -317,8 +319,8 @@ def evaluate_model(model, x_values, y_values, z_values, hypset, fngroup, iter, d
 
         df.to_csv(f'results_{hypset}/stats/{iter}.csv', index=False)
 
-        for loss in model.losses:
-          wandb.log({"loss": loss})
+        """for loss in model.losses:
+          wandb.log({"loss": loss})"""
 
 
 
@@ -350,7 +352,7 @@ def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
     sampled_indices = generate_uniform_sampling(total_points)
     X, y = sample_data(x_values, y_values, z_values, sampled_indices)
 
-    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], initialization="Prieto")
+    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], eig_range=hyperparams["eig_range"], mu_range=hyperparams["mu_range"])
 
     model_epochs = hyperparams["m_epochs"]
     ista_epochs = hyperparams["h_epochs"]
@@ -483,6 +485,8 @@ experiment_3 = {
       "n_samples"	: 500,
       "n_features" : 2,
       "l_functions":  10,
+      "eig_range": [1e0, 1e1],
+      "mu_range": [0, 1],
       "ista_alpha"	: 0.0125,
       "ista_lambd"	 : 0.001,
       "dictionary_alpha": 0.0125,
@@ -494,7 +498,7 @@ experiment_3 = {
 
 data = []
 for i in range(N_iter):
-  wandb.init(
+  """wandb.init(
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
@@ -502,13 +506,14 @@ for i in range(N_iter):
     # Track hyperparameters and run metadata
     config = experiment_3
     )
-
+"""
   time, mse = run_experiment(xx,yy,zz,
                             experiment_3, fngroup=1, iter=i)
   data.append((i, time, mse.item()))
-wandb.finish()
+#wandb.finish()
 save_results(data=data, fngroup=1)
 
+#Unit test de la inicialización únicamente
 stats_dir = f'results_{experiment_3["hyp_set"]}'
 plot_stats(stats_dir, N_iter)
 
@@ -517,7 +522,7 @@ plot_stats(stats_dir, N_iter)
 data_1 = []
 
 for i in range(N_iter):
-  wandb.init(
+  """wandb.init(
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
@@ -525,7 +530,7 @@ for i in range(N_iter):
     # Track hyperparameters and run metadata
     config = experiment_3
     )
-
+"""
   time, mse = run_experiment(xx_1,yy_1,zz_1,
                             experiment_3, fngroup=2, iter=i)
   data_1.append((i, time, mse.item()))
@@ -534,7 +539,7 @@ save_results(data=data_1, fngroup=2)
 
 data_2 = []
 for i in range(N_iter):
-  wandb.init(
+  """  wandb.init(
     # Set the project where this run will be logged
     project="SESM-2D-GaussianFunction",
     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
@@ -542,7 +547,7 @@ for i in range(N_iter):
     # Track hyperparameters and run metadata
     config = experiment_3
     )
-
+"""
   time, mse = run_experiment(xx_2,yy_2,zz_2,
                             experiment_3,fngroup=3, iter=i)
   data_2.append((i, time, mse.item()))

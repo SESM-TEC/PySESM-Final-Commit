@@ -42,7 +42,6 @@ def get_upper_triangle(A):
     n = A.shape[0]
     indices = torch.triu_indices(n, n, offset=0)
     upper_triangle = A[indices[0], indices[1]]
-    print("Upper: ", upper_triangle.shape)
     return upper_triangle
 
 def reshape_upper_triangle(upper_triangle, n):

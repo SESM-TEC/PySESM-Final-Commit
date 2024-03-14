@@ -1,7 +1,6 @@
-import numpy as np
-import torch
-import torch.nn.init as init
 from tqdm import tqdm
+import torch
+import numpy as np
 from sklearn.decomposition import PCA
 from PySESM.utils.linalg import generate_random_vectors, gram_schmidt, get_upper_triangle, reshape_upper_triangle
 
@@ -58,7 +57,7 @@ class DictLayer(torch.nn.Module):
 
         self.Theta = self.psi.initialize()
 
-        self.dictionary = None
+        self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
 
         self.losses = []
 
