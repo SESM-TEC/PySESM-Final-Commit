@@ -9,10 +9,11 @@ class Function:
         self.n_functions = n_functions
 
 class GaussianFunctions(Function):
-    def __init__(self, n_features, n_functions, eig_range, mu_range):
+    def __init__(self, n_features, n_functions, eig_range, mu_range, vector_range):
         super().__init__(n_features, n_functions)
         self.eig_range = eig_range
         self.mu_range = mu_range
+        self.vector_range = vector_range
         self.theta_size = int(n_features*(n_features+3)/2)
 
     def initialize(self):
@@ -35,11 +36,11 @@ class GaussianFunctions(Function):
         Rho = torch.zeros(self.theta_size - self.n_features, self.n_functions)
 
         for i in range(self.n_functions):
-            Q = generate_random_vectors(self.n_features, self.eig_range[1], self.eig_range[0])
+            Q = generate_random_vectors(self.n_features, self.vector_range[1], self.vector_range[0])
             Q = gram_schmidt(Q)
             D = torch.diag(torch.rand(self.n_features) * (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0])
             Sigma = Q @ D @ Q.mT
-            L = torch.linalg.cholesky(Sigma).mT
+            L = torch.linalg.cholesky(Sigma)
             rho = get_upper_triangle(L)
             for j in range(self.theta_size - self.n_features):
                 Rho[j, i] = rho[j]

@@ -190,7 +190,7 @@ def sample_data(x_values, y_values, z_values, sampled_indices):
     y = z_values[sampled_indices].clone().detach().to(dtype=torch.float32)
     return X, y
 
-def build_model(n_samples, n_features, l_functions, eig_range, mu_range):
+def build_model(n_samples, n_features, l_functions, eig_range, mu_range, vector_range):
     """
     Build and configure the SESM (Sparse Evolutionary Structural Modeling) model.
 
@@ -202,7 +202,7 @@ def build_model(n_samples, n_features, l_functions, eig_range, mu_range):
     Returns:
     SESM_Model: An instance of the SESM model.
     """
-    gaussian_function = GaussianFunctions(n_features=n_features, n_functions=l_functions, eig_range=eig_range, mu_range=mu_range)
+    gaussian_function = GaussianFunctions(n_features=n_features, n_functions=l_functions, eig_range=eig_range, mu_range=mu_range, vector_range=vector_range)
     model = SESM_Model(
         n_samples=n_samples,
         psi=gaussian_function
@@ -352,7 +352,7 @@ def run_experiment(_x, _y, _z, hyperparams, fngroup, iter, debug=True):
     sampled_indices = generate_uniform_sampling(total_points)
     X, y = sample_data(x_values, y_values, z_values, sampled_indices)
 
-    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], eig_range=hyperparams["eig_range"], mu_range=hyperparams["mu_range"])
+    model = build_model(n_samples=hyperparams["n_samples"], n_features=hyperparams["n_features"], l_functions=hyperparams["l_functions"], eig_range=hyperparams["eig_range"], mu_range=hyperparams["mu_range"], vector_range=hyperparams["vector_range"])
 
     model_epochs = hyperparams["m_epochs"]
     ista_epochs = hyperparams["h_epochs"]
@@ -487,6 +487,7 @@ experiment_3 = {
       "l_functions":  10,
       "eig_range": [1e0, 1e1],
       "mu_range": [0, 1],
+      "vector_range": [1e0, 1e1],
       "ista_alpha"	: 0.0125,
       "ista_lambd"	 : 0.001,
       "dictionary_alpha": 0.0125,
