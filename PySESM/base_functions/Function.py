@@ -40,7 +40,7 @@ class GaussianFunctions(Function):
             Q = gram_schmidt(Q)
             D = torch.diag(torch.rand(self.n_features) * (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0])
             Sigma = Q @ D @ Q.mT
-            L = torch.linalg.cholesky(Sigma)
+            L = torch.linalg.cholesky(Sigma).mT
             rho = get_upper_triangle(L)
             for j in range(self.theta_size - self.n_features):
                 Rho[j, i] = rho[j]
@@ -48,6 +48,9 @@ class GaussianFunctions(Function):
         with torch.no_grad():
             Theta[:-self.n_features, :] = Rho
             Theta[-self.n_features:, :] = mu
+            print("Rho: ", Rho)
+            print("Myu: ", mu)
+            print("Theta: ", Theta)
 
         return Theta
 
@@ -58,9 +61,13 @@ class GaussianFunctions(Function):
         mu = Theta[-self.n_features:, :].mT.unsqueeze(2)
         # Toma los Rho y los representa como una matriz diagonal superior
         A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim = 0)
+        print("A: ", A)
         Sigma_inv = torch.matmul(A, A.mT)
+        print("Sigma: ", Sigma_inv)
         x_mu = x - mu
         exponent = -0.5 * torch.einsum('bij,bik,bji->jb', x_mu, Sigma_inv, x_mu.mT)
+        print("Exponente: ", exponent)
         result = torch.exp(exponent)
+        print("Gaussianas: ", result)
 
         return result

@@ -57,7 +57,11 @@ class DictLayer(torch.nn.Module):
 
         self.Theta = self.psi.initialize()
 
-        self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+        # Model._init_dict_layer(), ¡Anota eso!
+        # self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+        # self.dictionary: llamarlo con el Theta e inicializarlo con el initialize
+        # Inicializarlo en None y si le llega un diccionario vacío al ISTA, que simplemente pase
+        self.dictionary = None
 
         self.losses = []
 

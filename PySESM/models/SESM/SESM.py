@@ -63,6 +63,9 @@ class SESM_Model(torch.nn.Module):
 
 
     def fit(self, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha):
+        if self.dictionary_layer.dictionary == None:
+            self.dictionary_layer.forward(X)
+
         for epoch in range(model_epochs):
             epoch_start_time = time.time()
 
