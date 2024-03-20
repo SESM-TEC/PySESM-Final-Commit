@@ -36,7 +36,7 @@ class ISTALayer(torch.nn.Module):
         super().__init__()
 
         self.n_functions = n_functions
-        self.h = torch.nn.Parameter(torch.zeros((n_functions), requires_grad=True))
+        self.h = torch.nn.Parameter(torch.ones((n_functions), requires_grad=True))
         
         self.losses = []
         
@@ -49,7 +49,8 @@ class ISTALayer(torch.nn.Module):
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=lambd)
 
-        for i in tqdm(range(epochs), desc='Training sparse vector'):
+        #for i in tqdm(range(epochs), desc='Training sparse vector'):
+        for _ in range(epochs):
             y_pred = dictionary @ self.h
             loss = criterion(y_pred, y)
             optimizer.zero_grad()

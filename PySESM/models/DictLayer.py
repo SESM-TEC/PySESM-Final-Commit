@@ -1,6 +1,8 @@
-import numpy as np
-import torch
 from tqdm import tqdm
+import torch
+import numpy as np
+from sklearn.decomposition import PCA
+from PySESM.utils.linalg import generate_random_vectors, gram_schmidt, get_upper_triangle, reshape_upper_triangle
 
 class DictLayer(torch.nn.Module):
     """
@@ -13,6 +15,7 @@ class DictLayer(torch.nn.Module):
         n_features (int): The number of input features or dimensions.
         n_functions (int): The number of functions or basis functions.
         psi (callable): The function used for generating the layer's output.
+        initialization (String): The initialization method to generate the paremeter tensor.
 
     Attributes:
         theta_size (int): The size of the parameter tensor Theta, computed based on n_features.
@@ -37,26 +40,32 @@ class DictLayer(torch.nn.Module):
         # Perform a forward pass
         output = model(input_data)
     """
-    def __init__(self, n_samples, n_features, n_functions, psi):
+    def __init__(self, n_samples, psi):
         super().__init__()
 
-        self.theta_size = int(n_features*(n_features+3)/2)
-        self.Theta = torch.nn.Parameter(
-            torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, n_functions), requires_grad=True))
+        # No deberíamos pasar el funcional sino pasar el objeto entero
 
         self.n_samples = n_samples
 
-        self.n_features = n_features
-
-        self.n_functions = n_functions
-
         self.psi = psi
 
-        self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
-        
+        #Matriz de n_features x n_features
+        self.n_features = self.psi.n_features
+
+        #N Gaussianas con una matriz de n_features x n_features
+        self.n_functions = self.psi.n_functions
+
+        self.Theta = self.psi.initialize()
+
+        # Model._init_dict_layer(), ¡Anota eso!
+        # self.dictionary = torch.normal(mean=0, std=np.sqrt(1/self.n_samples), size=(self.n_samples, self.n_functions))
+        # self.dictionary: llamarlo con el Theta e inicializarlo con el initialize
+        # Inicializarlo en None y si le llega un diccionario vacío al ISTA, que simplemente pase
+        self.dictionary = None
+
         self.losses = []
-        
-        
+
+
     def fit(self, X, y, epochs, h, alpha, log_losses=True):
         """
         Let's train the model.
@@ -72,7 +81,8 @@ class DictLayer(torch.nn.Module):
         optimizer = torch.optim.SGD(self.parameters(), lr=alpha)
         criterion = torch.nn.MSELoss()
 
-        for i in tqdm(range(epochs), desc='Training dictionary'):
+        #for i in tqdm(range(epochs), desc='Training dictionary'):
+        for _ in range(epochs):
             self.forward(X)
             y_pred = self.dictionary @ h
             loss = criterion(y_pred, y)
@@ -85,6 +95,6 @@ class DictLayer(torch.nn.Module):
 
 
     def forward(self, x):
-      result = self.psi(x.mT,self.Theta)
+      result = self.psi(x.mT, self.Theta)
       self.dictionary = result
       return torch.sum(result)
