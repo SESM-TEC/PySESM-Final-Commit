@@ -36,8 +36,8 @@ class ISTALayer(torch.nn.Module):
         super().__init__()
 
         self.n_functions = n_functions
-        self.h = torch.nn.Parameter(torch.ones((n_functions), requires_grad=True))
-        
+        self.h = torch.nn.Parameter(torch.rand(n_functions), requires_grad=True)
+        self.h.data /= self.h.data.sum()
         self.losses = []
         
         
