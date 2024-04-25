@@ -48,7 +48,7 @@ class SESM_Model(torch.nn.Module):
 
         self.n_samples = n_samples
         self.n_features = psi.n_features
-        
+
         self.ista_layer = ISTALayer(psi.n_functions)
         self.dictionary_layer = DictLayer(n_samples, psi)
 
@@ -62,13 +62,13 @@ class SESM_Model(torch.nn.Module):
         self.time = 0
 
 
-    def fit(self, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha):
+    def fit(self, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha, weight_decay):
         if self.dictionary_layer.dictionary == None:
             self.dictionary_layer.forward(X)
 
         for epoch in range(model_epochs):
             epoch_start_time = time.time()
-
+            
             self.dictionary_layer.fit(
                 X=X,
                 y=y,
@@ -76,13 +76,14 @@ class SESM_Model(torch.nn.Module):
                 h=self.ista_layer.h,
                 alpha=dictionary_alpha
             )
-
+            
             self.ista_layer.fit(
                 y=y,
                 epochs=ista_epochs,
                 dictionary=self.dictionary_layer.dictionary,
                 alpha=ista_alpha,
-                lambd=ista_lambd
+                lambd=ista_lambd,
+                weight_decay=weight_decay
             )
 
             epoch_end_time = time.time()
@@ -91,8 +92,7 @@ class SESM_Model(torch.nn.Module):
             self.losses.append(self.dictionary_layer.losses[-1])
             self.loss_analysis(dictionary_epochs)
             print(f'Epoch {epoch+1} Loss: {self.losses[-1]}\n')
-
-
+            
     def predict(self, X, ista_layer=None):
         # when external block ista layer is needed
         if ista_layer != None:

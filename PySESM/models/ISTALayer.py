@@ -24,7 +24,7 @@ class ISTALayer(torch.nn.Module):
                 lambd (float): The regularization parameter.
             Returns:
                 Tensor: The updated sparse vector.
-                
+
         predict(x):
             Predicts the value of a function using a given dictionary.
             Args:
@@ -36,18 +36,20 @@ class ISTALayer(torch.nn.Module):
         super().__init__()
 
         self.n_functions = n_functions
+        #self.h = torch.nn.Parameter(torch.ones((n_functions), requires_grad=True))
         self.h = torch.nn.Parameter(torch.rand(n_functions), requires_grad=True)
         self.h.data /= self.h.data.sum()
+
         self.losses = []
-        
-        
+
+
     def shrinkage(self, alpha, lambd):
         return torch.sign(self.h) * torch.max(torch.abs(self.h) - alpha*lambd, torch.zeros_like(self.h))
 
 
-    def fit(self, y, epochs, dictionary, alpha, lambd, log_losses=True):
+    def fit(self, y, epochs, dictionary, alpha, lambd, weight_decay, log_losses=True):
         criterion = torch.nn.MSELoss()
-        optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=lambd)
+        optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
 
         #for i in tqdm(range(epochs), desc='Training sparse vector'):
         for _ in range(epochs):
@@ -56,12 +58,9 @@ class ISTALayer(torch.nn.Module):
             optimizer.zero_grad()
             loss.backward(retain_graph=True)
             optimizer.step()
-        
+
             with torch.no_grad():
                 self.h.data = self.shrinkage(alpha, lambd)
-            
+
             if log_losses:
                 self.losses.append(loss.item())
-
-
-

@@ -2,15 +2,18 @@ import numpy as np
 import torch
 import torch.nn.init as init
 from PySESM.utils.linalg import to_triu_matrix, generate_random_vectors, get_upper_triangle, gram_schmidt
+import logging
 
 class Function:
-    def __init__(self, n_features, n_functions):
+    def __init__(self, n_features, n_functions, logger):
         self.n_features = n_features
         self.n_functions = n_functions
+        # Configure root logger
+        self.logger = logger
 
 class GaussianFunctions(Function):
-    def __init__(self, n_features, n_functions, eig_range, mu_range, vector_range):
-        super().__init__(n_features, n_functions)
+    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range):
+        super().__init__(n_features, n_functions, logger)
         self.eig_range = eig_range
         self.mu_range = mu_range
         self.vector_range = vector_range
@@ -35,6 +38,21 @@ class GaussianFunctions(Function):
 
         Rho = torch.zeros(self.theta_size - self.n_features, self.n_functions)
 
+        if (self.eig_range[1] > 1e1 or self.vector_range[1] > 1e1):
+            # Log the warning
+            self.logger.setLevel(logging.WARNING)
+            self.logger.warning("Recommended range is between 0 and 10")
+
+        if (self.mu_range[1] > 2 or self.mu_range[0] != -2):
+            # Log the warning
+            self.logger.setLevel(logging.WARNING)
+            self.logger.warning("Recommended range is between [-1, -2] and [1, 2]")
+
+        # Log the shape of the tensor
+        self.logger.setLevel(logging.INFO)
+        self.logger.info(f"Shape of Mu: {mu.shape}")
+        self.logger.setLevel(logging.WARNING)
+
         for i in range(self.n_functions):
             Q = generate_random_vectors(self.n_features, self.vector_range[1], self.vector_range[0])
             Q = gram_schmidt(Q)
@@ -48,9 +66,12 @@ class GaussianFunctions(Function):
         with torch.no_grad():
             Theta[:-self.n_features, :] = Rho
             Theta[-self.n_features:, :] = mu
-            print("Rho: ", Rho)
-            print("Myu: ", mu)
-            print("Theta: ", Theta)
+
+        # Log the shape of the tensor
+        self.logger.setLevel(logging.INFO)
+        self.logger.info(f"Shape of Rho: {Rho.shape}")
+        self.logger.info(f"Shape of Theta: {Theta.shape}")
+        self.logger.setLevel(logging.WARNING)
 
         return Theta
 
@@ -61,13 +82,9 @@ class GaussianFunctions(Function):
         mu = Theta[-self.n_features:, :].mT.unsqueeze(2)
         # Toma los Rho y los representa como una matriz diagonal superior
         A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim = 0)
-        print("A: ", A)
         Sigma_inv = torch.matmul(A, A.mT)
-        print("Sigma: ", Sigma_inv)
         x_mu = x - mu
         exponent = -0.5 * torch.einsum('bij,bik,bji->jb', x_mu, Sigma_inv, x_mu.mT)
-        print("Exponente: ", exponent)
         result = torch.exp(exponent)
-        print("Gaussianas: ", result)
 
         return result
