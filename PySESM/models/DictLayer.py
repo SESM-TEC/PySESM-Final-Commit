@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from sklearn.decomposition import PCA
 from PySESM.utils.linalg import generate_random_vectors, gram_schmidt, get_upper_triangle, reshape_upper_triangle
-
+ 
 class DictLayer(torch.nn.Module):
     """
     A custom PyTorch module for implementing a dictionary layer with learnable parameters.
@@ -85,8 +85,10 @@ class DictLayer(torch.nn.Module):
         for _ in range(epochs):
             self.forward(X)
             y_pred = self.dictionary @ h
+            ##Aqui se puede indefinir con el calculo del gradiente
             loss = criterion(y_pred, y)
             optimizer.zero_grad()
+            ##Aqui se acarrea el problema
             loss.backward(retain_graph=True)
             optimizer.step()
 

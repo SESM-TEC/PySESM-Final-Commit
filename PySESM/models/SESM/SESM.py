@@ -43,13 +43,13 @@ class SESM_Model(torch.nn.Module):
             Returns:
                 Tensor: The predicted values for each sample of the objective function.
     """
-    def __init__(self, n_samples, psi):
+    def __init__(self, n_samples, psi, seed):
         super().__init__()
 
         self.n_samples = n_samples
         self.n_features = psi.n_features
-
-        self.ista_layer = ISTALayer(psi.n_functions)
+        self.seed = seed
+        self.ista_layer = ISTALayer(psi.n_functions, seed)
         self.dictionary_layer = DictLayer(n_samples, psi)
 
         self.losses = []
@@ -68,7 +68,10 @@ class SESM_Model(torch.nn.Module):
 
         for epoch in range(model_epochs):
             epoch_start_time = time.time()
-            
+            #Hay que llamar dos veces 
+            #Una para self.dictionary_layer.optimization(mu=True, rho=False)
+            #Otra para self.dictionary_layer.optimization(mu=False, rho=True)
+            #Para el original self.dictionary_layer.optimization(mu=True, rho=True) solo una vez se pone
             self.dictionary_layer.fit(
                 X=X,
                 y=y,
@@ -102,7 +105,6 @@ class SESM_Model(torch.nn.Module):
             
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()
-            
         return dictionary @ h
 
 

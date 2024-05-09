@@ -10,12 +10,13 @@ class Function:
         self.n_functions = n_functions
         # Configure root logger
         self.logger = logger
-
+#Meter un metodo para optimizar los rho y los mu
 class GaussianFunctions(Function):
-    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range):
+    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range,seed):
         super().__init__(n_features, n_functions, logger)
         self.eig_range = eig_range
         self.mu_range = mu_range
+        self.seed = seed
         self.vector_range = vector_range
         self.theta_size = int(n_features*(n_features+3)/2)
 
@@ -32,6 +33,7 @@ class GaussianFunctions(Function):
             For each gaussian, Myu: 2
             Min will be a vector and max will be a vector
         """
+        torch.manual_seed(self.seed)
         Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, self.n_functions), requires_grad=True))
 
         mu = torch.rand(self.n_features, self.n_functions) * (self.mu_range[1] - self.mu_range[0]) + self.mu_range[0]
