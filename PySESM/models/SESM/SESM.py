@@ -43,16 +43,20 @@ class SESM_Model(torch.nn.Module):
             Returns:
                 Tensor: The predicted values for each sample of the objective function.
     """
-    def __init__(self, n_samples, psi, seed):
+    def __init__(self, n_samples, psi, seed, model_epochs, ista_epochs, ista_alpha, ista_lambd, mu_epochs, rho_epochs, dictionary_alpha, weight_decay):
         super().__init__()
 
         self.n_samples = n_samples
         self.n_features = psi.n_features
         self.seed = seed
+
         self.ista_layer = ISTALayer(psi.n_functions, seed)
         self.dictionary_layer = DictLayer(n_samples, psi)
 
-        self.losses = []
+        self.losses_ISTA = []
+        self.losses_Dictionary = []
+        self.val_losses = []
+        
         self.loss_stats = {
             "loss_mean" : [],
             "loss_std"  : [],
@@ -60,48 +64,75 @@ class SESM_Model(torch.nn.Module):
             "loss_min"  : [],
         }
         self.time = 0
+        self.ista_alpha = ista_alpha
+        self.ista_epochs = ista_epochs
+        self.model_epochs = model_epochs
+        self.ista_lambd = ista_lambd
+        self.mu_epochs = mu_epochs
+        self.rho_epochs = rho_epochs
+        self.dictionary_alpha = dictionary_alpha
+        self.weight_decay = weight_decay
 
-
-    def fit(self, X, y, model_epochs, ista_epochs, ista_alpha, ista_lambd, dictionary_epochs, dictionary_alpha, weight_decay):
+    def fit(self, X_train, y_train, X_test, y_test):
         if self.dictionary_layer.dictionary == None:
-            self.dictionary_layer.forward(X)
+            self.dictionary_layer.forward(X_train, rho_flag=False, mu_flag=False)
 
-        for epoch in range(model_epochs):
+        for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
-            #Hay que llamar dos veces 
-            #Una para self.dictionary_layer.optimization(mu=True, rho=False)
-            #Otra para self.dictionary_layer.optimization(mu=False, rho=True)
-            #Para el original self.dictionary_layer.optimization(mu=True, rho=True) solo una vez se pone
+            
             self.dictionary_layer.fit(
-                X=X,
-                y=y,
-                epochs=dictionary_epochs,
+                X=X_train,
+                y=y_train,
+                epochs=self.mu_epochs,
                 h=self.ista_layer.h,
-                alpha=dictionary_alpha
+                alpha=self.dictionary_alpha,
+                rho_flag=False,
+                mu_flag=True
+            )
+
+            self.dictionary_layer.fit(
+                X=X_train,
+                y=y_train,
+                epochs=self.rho_epochs,
+                h=self.ista_layer.h,
+                alpha=self.dictionary_alpha,
+                rho_flag=True,
+                mu_flag=False
             )
             
             self.ista_layer.fit(
-                y=y,
-                epochs=ista_epochs,
+                y=y_train,
+                epochs=self.ista_epochs,
                 dictionary=self.dictionary_layer.dictionary,
-                alpha=ista_alpha,
-                lambd=ista_lambd,
-                weight_decay=weight_decay
+                alpha=self.ista_alpha,
+                lambd=self.ista_lambd,
+                weight_decay=self.weight_decay
             )
 
             epoch_end_time = time.time()
 
             self.time = self.time + (epoch_end_time - epoch_start_time)
-            self.losses.append(self.dictionary_layer.losses[-1])
-            self.loss_analysis(dictionary_epochs)
-            print(f'Epoch {epoch+1} Loss: {self.losses[-1]}\n')
+
+            self.losses_ISTA.append(self.ista_layer.losses[-1])
+            self.losses_Dictionary.append(self.dictionary_layer.losses[-1])
+
+            self.loss_analysis(self.mu_epochs)
+            self.loss_analysis(self.rho_epochs)
             
+            print(f'Epoch {epoch+1} Loss_ISTA: {self.losses_ISTA[-1]} Loss_Dictionary: {self.losses_Dictionary[-1]} \n')
+            with torch.no_grad():
+              criterion = torch.nn.MSELoss()
+              y_pred = self.predict(X_test)
+              val_loss = criterion(y_pred, y_test)
+              self.val_losses.append(val_loss.item())
+              self.dictionary_layer.forward(X_train, rho_flag=False, mu_flag=False)
+
     def predict(self, X, ista_layer=None):
         # when external block ista layer is needed
         if ista_layer != None:
            self.ista_layer = ista_layer
         with torch.no_grad():
-           self.dictionary_layer.forward(X)
+          self.dictionary_layer.forward(X, rho_flag=False, mu_flag=False)
             
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()

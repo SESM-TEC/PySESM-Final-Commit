@@ -77,11 +77,15 @@ class GaussianFunctions(Function):
 
         return Theta
 
-    def __call__(self, x, Theta):
+    def __call__(self, x, Theta, rho_flag, mu_flag):
         # Toma los Rho del Theta que recibe
         rho = Theta[:-self.n_features, :]
         # Toma los Myu del Theta que recibe
         mu = Theta[-self.n_features:, :].mT.unsqueeze(2)
+        if rho_flag == False:
+            rho = rho.detach()
+        elif mu_flag == False:
+            mu = mu.detach()
         # Toma los Rho y los representa como una matriz diagonal superior
         A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim = 0)
         Sigma_inv = torch.matmul(A, A.mT)

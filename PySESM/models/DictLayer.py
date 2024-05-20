@@ -66,7 +66,7 @@ class DictLayer(torch.nn.Module):
         self.losses = []
 
 
-    def fit(self, X, y, epochs, h, alpha, log_losses=True):
+    def fit(self, X, y, epochs, h, alpha, rho_flag, mu_flag, log_losses=True):
         """
         Let's train the model.
 
@@ -83,7 +83,7 @@ class DictLayer(torch.nn.Module):
 
         #for i in tqdm(range(epochs), desc='Training dictionary'):
         for _ in range(epochs):
-            self.forward(X)
+            self.forward(X, rho_flag, mu_flag)
             y_pred = self.dictionary @ h
             ##Aqui se puede indefinir con el calculo del gradiente
             loss = criterion(y_pred, y)
@@ -94,9 +94,8 @@ class DictLayer(torch.nn.Module):
 
             if log_losses:
                 self.losses.append(loss.item())
-
-
-    def forward(self, x):
-      result = self.psi(x.mT, self.Theta)
+            
+    def forward(self, x, rho_flag, mu_flag):
+      result = self.psi(x.mT, self.Theta, rho_flag, mu_flag)
       self.dictionary = result
       return torch.sum(result)
