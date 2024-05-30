@@ -120,12 +120,12 @@ class SESM_Model(torch.nn.Module):
             self.loss_analysis(self.rho_epochs)
             
             print(f'Epoch {epoch+1} Loss_ISTA: {self.losses_ISTA[-1]} Loss_Dictionary: {self.losses_Dictionary[-1]} \n')
-            with torch.no_grad():
-              criterion = torch.nn.MSELoss()
-              y_pred = self.predict(X_test)
-              val_loss = criterion(y_pred, y_test)
-              self.val_losses.append(val_loss.item())
-              self.dictionary_layer.forward(X_train, rho_flag=False, mu_flag=False)
+            # with torch.no_grad():
+            #   criterion = torch.nn.MSELoss()
+            #   y_pred = self.predict(X_test)
+            #   val_loss = criterion(y_pred, y_test)
+            #   self.val_losses.append(val_loss.item())
+            #   self.dictionary_layer.forward(X_train, rho_flag=False, mu_flag=False)
 
     def predict(self, X, ista_layer=None):
         # when external block ista layer is needed

@@ -85,10 +85,10 @@ class DictLayer(torch.nn.Module):
         for _ in range(epochs):
             self.forward(X, rho_flag, mu_flag)
             y_pred = self.dictionary @ h
-            ##Aqui se puede indefinir con el calculo del gradiente
+
             loss = criterion(y_pred, y)
             optimizer.zero_grad()
-            ##Aqui se acarrea el problema
+           
             loss.backward(retain_graph=True)
             optimizer.step()
 
