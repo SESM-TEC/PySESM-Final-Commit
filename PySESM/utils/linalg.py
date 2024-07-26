@@ -28,6 +28,10 @@ def to_triu_matrix(non_zeros):
     return matrix
 
 def gram_schmidt(Q):
+    """Gram-Schmidt procedure to find a set of orthogonal vectors
+    that span the space of the column vectors in Q.  The set of
+    orthonormal column vectors is left in Q.
+    """
     for i in range(Q.shape[1]):
         for j in range(i):
             Q[:, i] -= torch.dot(Q[:, i], Q[:, j]) * Q[:, j]
@@ -35,10 +39,18 @@ def gram_schmidt(Q):
     return Q
 
 def generate_random_vectors(features, max_val, min_val):
-    # Generates a random vector of uniform values between 0 and 1 and then scales it with a factor
+    """
+    Generates a random vector with the given number of features, with
+    values uniformly distributed between max_val and min_val
+    """
     return torch.rand(features, features) * (max_val - min_val) + min_val
 
 def get_upper_triangle(A):
+    """
+    Given the matrix A, extract the elements of the upper triangular
+    matrix and return them in a vector.  The upper triangular matrix
+    is extracted row-wise.
+    """
     n = A.shape[0]
     indices = torch.triu_indices(n, n, offset=0)
     upper_triangle = A[indices[0], indices[1]]
