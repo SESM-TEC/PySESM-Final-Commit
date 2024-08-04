@@ -1,4 +1,12 @@
 import setuptools
 
 if __name__ == "__main__":
-    setuptools.setup()
+    setuptools.setup(
+        install_requires=[
+            'numpy>=2.0.0',
+            'matplotlib>=3.9.1',
+            'torch>=2.4.0',
+            'scipy>=1.14.0',
+            'logger>=3.12.4'
+        ]
+    )

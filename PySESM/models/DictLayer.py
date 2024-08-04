@@ -1,9 +1,6 @@
-from tqdm import tqdm
 import torch
-import numpy as np
-from sklearn.decomposition import PCA
-from PySESM.utils.linalg import generate_random_vectors, gram_schmidt, get_upper_triangle, reshape_upper_triangle
- 
+
+
 class DictLayer(torch.nn.Module):
     """
     A custom PyTorch module for implementing a dictionary layer with learnable parameters.
@@ -41,7 +38,7 @@ class DictLayer(torch.nn.Module):
         output = model(input_data)
     """
     def __init__(self, n_samples, psi):
-        super().__init__()
+        super(DictLayer, self).__init__()
 
         # No deberíamos pasar el funcional sino pasar el objeto entero
 
@@ -95,7 +92,19 @@ class DictLayer(torch.nn.Module):
             if log_losses:
                 self.losses.append(loss.item())
             
-    def forward(self, x, rho_flag, mu_flag):
-      result = self.psi(x.mT, self.Theta, rho_flag, mu_flag)
-      self.dictionary = result
-      return torch.sum(result)
+    def forward(self, x, rho_flag: bool, mu_flag: bool):
+        """
+
+        Args:
+            x:
+            rho_flag:
+            mu_flag:
+
+        Returns:
+
+        """
+        result = self.psi(x.mT, self.Theta, rho_flag, mu_flag)
+        # Parameter readjust must happen outside this function as it should return the new weights
+        self.dictionary = result
+        # RETURN VALUE NEVER USED
+        return torch.sum(result)

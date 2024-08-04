@@ -1,6 +1,6 @@
 import logging
 
-def setup_logger():
+def setup_logger() -> logging.Logger:
     # Configure root logger
     logging.basicConfig(level=logging.DEBUG)
 

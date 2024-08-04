@@ -79,7 +79,7 @@ def locate_samples_in_sub_blocks(x_n, y, t, T):
 
 def generate_list_of_subblock(sub_blocks, l_functions, SEED):
   """
-    Generate a list for all the sub-blocks with there expected squeze factor
+    Generate a list for all the sub-blocks with there expected squeeze factor
 
     Arg:
       np.ndarray: Array of SubBlock instances representing the sub-blocks.
