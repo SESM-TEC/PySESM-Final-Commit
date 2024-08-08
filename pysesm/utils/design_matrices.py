@@ -1,5 +1,5 @@
 import torch
-from PySESM.utils.sampling_data import generate_uniform_sampling, sample_data
+from pysesm.utils.sampling_data import generate_uniform_sampling, sample_data
 
 def unstack_design_matrix(X_test):
     """

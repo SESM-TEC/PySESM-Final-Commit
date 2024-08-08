@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from PySESM.models.ISTALayer import ISTALayer
+from pysesm.models.ISTALayer import ISTALayer
 from collections import defaultdict
 
 class SubBlock:
