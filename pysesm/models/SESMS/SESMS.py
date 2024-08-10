@@ -3,6 +3,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
+from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.functions.GaussianApproximateSurrogateFunction import GaussianApproximateSurrogateFunction
 from pysesm.models.SESM.SESM import SESM
 from pysesm.base_functions.sub_block_partition import predict_on_test_set, data_mapping
@@ -35,7 +36,27 @@ class SESMS(SESM):
     #     self.train_dataset = train_dataset
     #     self.test_dataset = test_dataset
 
-    def __init__(self, hyperparams, fngroup, iter, seed, logger, debug=True):
+    def __init__(self,
+                 n_samples: int,
+                 n_features: int,
+                 l_functions: int,
+                 eig_range,
+                 mu_range,
+                 vector_range,
+                 model_epochs: int,
+                 ista_epochs: int,
+                 rho_epochs: int,
+                 mu_epochs: int,
+                 ista_alpha: float,
+                 ista_lambd: float,
+                 dictionary_alpha,
+                 weight_decay,
+                 surrogate_function: ApproximateSurrogateFunction,
+                 dfngroup,
+                 iter,
+                 seed,
+                 logger,
+                 debug=True):
         # TODO: Work in progress in aims to abstract the current Class like a usable Module
 
         n_samples = self.hyperparams["n_samples"]

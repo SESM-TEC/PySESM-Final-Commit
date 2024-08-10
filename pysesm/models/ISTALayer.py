@@ -22,10 +22,11 @@ class ISTALayer(torch.nn.Module):
             Returns:
                 Tensor: The predicted values for each sample of the objective function.
     """
-    def __init__(self, n_functions, seed):
+    def __init__(self, n_functions, seed, h=None):
         super().__init__()
         self.n_functions = n_functions
         torch.manual_seed(seed)
+
         self.h = torch.nn.Parameter(torch.rand(n_functions), requires_grad=True)
         self.h.data /= self.h.data.sum()
 
