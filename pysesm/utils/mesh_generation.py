@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from PySESM.utils.gaussian_covariance_density import generate_z
+from pysesm.utils.gaussian_covariance_density import generate_z
 
 def generate_mesh(n_points, xl, xr, sigma, mu):
   """
