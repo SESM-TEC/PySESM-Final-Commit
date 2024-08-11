@@ -1,7 +1,5 @@
 import torch
-# TODO: UNUSED IMPORTS must be deleted
-import numpy as np
-from tqdm import tqdm
+
 
 class ISTALayer(torch.nn.Module):
     """
@@ -22,16 +20,22 @@ class ISTALayer(torch.nn.Module):
             Returns:
                 Tensor: The predicted values for each sample of the objective function.
     """
-    def __init__(self, n_functions, seed, h=None):
+
+    def __init__(self, n_functions, random_seed, h: torch.nn.Parameter = None):
         super().__init__()
         self.n_functions = n_functions
-        torch.manual_seed(seed)
-
-        self.h = torch.nn.Parameter(torch.rand(n_functions), requires_grad=True)
-        self.h.data /= self.h.data.sum()
-
+        self.random_seed = random_seed
         self.losses = []
+        torch.manual_seed(self.random_seed)
 
+        if h is None:
+            self.initialize_h_vector()
+        else:
+            self.h = h
+
+    def initialize_h_vector(self) -> None:
+        self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
+        self.h.data /= self.h.data.sum()
 
     def shrinkage(self, alpha, lambd) -> torch.Tensor:
         """
@@ -44,7 +48,7 @@ class ISTALayer(torch.nn.Module):
             torch.Tensor: The updated sparse vector.
 
         """
-        return torch.sign(self.h) * torch.max(torch.abs(self.h) - alpha*lambd, torch.zeros_like(self.h))
+        return torch.sign(self.h) * torch.max(torch.abs(self.h) - alpha * lambd, torch.zeros_like(self.h))
 
     # TODO: Fit methods should redefine the weights, if continuous learning is wanted it should be called 'partial_fit'
     def fit(self, y, epochs, dictionary, alpha, lambd, weight_decay, log_losses=True) -> None:
@@ -54,7 +58,7 @@ class ISTALayer(torch.nn.Module):
         # TODO: Perhaps arguments such as alpha, weight_decay and others should be passed at init?
         optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
 
-        #for i in tqdm(range(epochs), desc='Training sparse vector'):
+        # for i in tqdm(range(epochs), desc='Training sparse vector'):
         for _ in range(epochs):
             y_pred = dictionary @ self.h
             loss = criterion(y_pred, y)

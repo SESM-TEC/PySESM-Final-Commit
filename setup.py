@@ -8,5 +8,6 @@ if __name__ == "__main__":
             'torch>=2.4.0',
             'scipy>=1.14.0',
             'logger>=3.12.4'
-        ]
+        ],
+        py_modules=[]
     )

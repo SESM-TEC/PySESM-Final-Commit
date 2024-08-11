@@ -5,6 +5,7 @@ from collections import defaultdict
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.base_functions.sub_block_partition import *
 
+
 def test_subblock_initialization():
     # Test for initializing SubBlock with default values
     sub_block = SubBlock()
@@ -13,6 +14,7 @@ def test_subblock_initialization():
     assert sub_block._X == []
     assert sub_block.output_values == []
 
+
 def test_add_point():
     # Test for adding a point to SubBlock
     sub_block = SubBlock()
@@ -20,11 +22,12 @@ def test_add_point():
     y = 10
 
     sub_block.add_point(point, y)
-    
+
     assert len(sub_block._X) == 1
     assert len(sub_block.output_values) == 1
     assert np.array_equal(sub_block._X[0], point)
     assert sub_block.output_values[0] == y
+
 
 def test_get_sub_block_vertices():
     # Test for obtaining the vertices of a sub-block
@@ -37,6 +40,7 @@ def test_get_sub_block_vertices():
 
     assert np.allclose(vertices, expected_vertices)
 
+
 def test_locate_samples_in_sub_blocks():
     # Test for locating samples in sub-blocks
     x_n = np.array([[0.1, 0.2], [0.5, 0.6], [0.9, 0.8]])
@@ -45,11 +49,12 @@ def test_locate_samples_in_sub_blocks():
     T = 3
 
     sub_blocks = locate_samples_in_sub_blocks(x_n, y, t, T)
-    
+
     assert len(sub_blocks) == T * T
     assert sub_blocks[0].output_values == [1]
     assert sub_blocks[4].output_values == [2]
     assert sub_blocks[8].output_values == [3]
+
 
 def test_data_mapping():
     # Test for mapping the data
@@ -64,6 +69,7 @@ def test_data_mapping():
     assert np.array_equal(t, expected_t)
     assert torch.allclose(x_n, expected_x_n)
 
+
 def test_squeze_factor():
     # Test for calculating the squeeze factor
     Y = [0.5, 2.0, 0.8]
@@ -77,6 +83,7 @@ def test_squeze_factor():
     factor = squeze_factor(Y)
 
     assert factor == expected_factor
+
 
 def test_generate_list_of_subblock():
     # Test for generating the list of sub-blocks with expected squeeze factor
@@ -107,6 +114,7 @@ def test_generate_list_of_subblock():
     assert result[1].ista_layer is not None
     assert result[1].output_values == [0.5]
 
+
 def test_predict_on_test_set():
     # Test for predicting on the test set
     X_test = torch.tensor([[0.1, 0.1], [0.9, 0.9]])
@@ -125,6 +133,7 @@ def test_predict_on_test_set():
     assert len(predictions) == len(X_test)
     assert predictions[0] == pytest.approx(2.0)  # Adjust as necessary
     assert predictions[1] == pytest.approx(1.0)  # Adjust as necessary
+
 
 def test_count_unique_combinations():
     # Test for counting unique combinations
@@ -145,5 +154,6 @@ class MockModel:
 class MockISTALayer:
     def __init__(self):
         self.h = torch.tensor([1.0])
+
 
 print("Todo salio bien")

@@ -16,7 +16,7 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
         self.vector_range = vector_range
         self.theta_size = int(n_features*(n_features+3)/2)
 
-    def initialize(self):
+    def initialize(self) -> torch.nn.Parameter:
         """
         Here comes the initialization
         In every interface there comes an initialization
@@ -74,7 +74,7 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
 
         return Theta
 
-    def __call__(self, x, Theta: torch.nn.Parameter, rho_flag: bool, mu_flag: bool):
+    def __call__(self, x, Theta: torch.nn.Parameter, rho_flag: bool = False, mu_flag: bool = False):
         # Toma los Rho del Theta que recibe
         rho = Theta[:-self.n_features, :]
         # Toma los Myu del Theta que recibe
