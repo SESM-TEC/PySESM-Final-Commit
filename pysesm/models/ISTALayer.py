@@ -12,32 +12,40 @@ class ISTALayer(torch.nn.Module):
         h (torch.nn.Parameter): The sparse vector computed by the layer.
         losses (list): A list of the losses computed during training.
 
-    Methods: TODO: Delete methods section as they should be documented at their declaration
-        predict(x): TODO: No predict method, should it have it? And also the dictionary layer?
-            Predicts the value of a function using a given dictionary.
-            Args:
-                dictionary (Tensor): A dictionary of shape (n_samples, n_functions).
-            Returns:
-                Tensor: The predicted values for each sample of the objective function.
     """
 
-    def __init__(self, n_functions, random_seed, h: torch.nn.Parameter = None):
+    def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
+                 criterion=None, optimizer=None, h: torch.nn.Parameter = None):
+
         super().__init__()
         self.n_functions = n_functions
         self.random_seed = random_seed
+        self.weight_decay = weight_decay
+        self.alpha = alpha
+        self.lambd = lambd
         self.losses = []
-        torch.manual_seed(self.random_seed)
+        torch.manual_seed(random_seed)
 
         if h is None:
             self.initialize_h_vector()
         else:
             self.h = h
 
+        if criterion is None:
+            self.criterion = torch.nn.MSELoss()
+        else:
+            self.criterion = criterion
+
+        if optimizer is None:
+            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
+        else:
+            self.optimizer = optimizer(parameters=self.parameters(), lr=alpha, weight_decay=weight_decay)
+
     def initialize_h_vector(self) -> None:
         self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
         self.h.data /= self.h.data.sum()
 
-    def shrinkage(self, alpha, lambd) -> torch.Tensor:
+    def shrinkage(self) -> torch.Tensor:
         """
         Performs the shrinkage operation on the layer's parameters with the given hyperparameters.
 
@@ -48,31 +56,22 @@ class ISTALayer(torch.nn.Module):
             torch.Tensor: The updated sparse vector.
 
         """
-        return torch.sign(self.h) * torch.max(torch.abs(self.h) - alpha * lambd, torch.zeros_like(self.h))
+        return torch.sign(self.h) * torch.max(torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h))
 
-    # TODO: Fit methods should redefine the weights, if continuous learning is wanted it should be called 'partial_fit'
-    def fit(self, y, epochs, dictionary, alpha, lambd, weight_decay, log_losses=True) -> None:
-        # TODO: Criterion should be passed as argument, recommendable to do it at the init method
-        criterion = torch.nn.MSELoss()
-        # TODO: Not sure if the optimizer should be passed as argument as well, because it receives arguments such as alpha and weight decay
-        # TODO: Perhaps arguments such as alpha, weight_decay and others should be passed at init?
-        optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
-
-        # for i in tqdm(range(epochs), desc='Training sparse vector'):
+    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         for _ in range(epochs):
-            y_pred = dictionary @ self.h
-            loss = criterion(y_pred, y)
-            optimizer.zero_grad()
-            loss.backward(retain_graph=True)
-            optimizer.step()
+            new_h = self.forward(y, dictionary, log_losses)
+            if new_h: self.h.data = new_h
 
-            with torch.no_grad():
-                self.h.data = self.shrinkage(alpha, lambd)
+    def forward(self, y, dictionary, log_losses=True):
+        y_pred = dictionary @ self.h
+        loss = self.criterion(y_pred, y)
+        self.optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
 
-            if log_losses:
-                self.losses.append(loss.item())
+        if log_losses:
+            self.losses.append(loss.item())
 
-    def forward(self):
-        # TODO: forward method not implemented and it is defined in the torch.nn.Module Interface class. Should encapsulate
-        # TODO: each epoch code in here.
-        pass
+        with torch.no_grad():
+            return self.shrinkage()

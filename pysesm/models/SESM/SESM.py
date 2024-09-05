@@ -78,7 +78,13 @@ class SESM(torch.nn.Module):
         }
 
         # Instantiate model layers
-        self.ista_layer = ISTALayer(self.n_features, self.seed)
+        self.ista_layer = ISTALayer(
+            n_functions=self.n_features,
+            random_seed=self.seed,
+            alpha=self.ista_alpha,
+            lambd=self.ista_lambd,
+            weight_decay=self.weight_decay
+        )
 
         self.dictionary_layer = DictLayer(
             n_samples=self.n_samples,
@@ -117,7 +123,8 @@ class SESM(torch.nn.Module):
             epoch_end_time = time.time()
             self.elapsed_time += (epoch_end_time - epoch_start_time)
 
-            logging.info(f'Fit epoch {epoch + 1} Loss_ISTA: {self.ista_layer_losses[-1]} Loss_Dictionary: {self.dictionary_layer_losses[-1]} \n')
+            logging.info(
+                f'Fit epoch {epoch + 1} Loss_ISTA: {self.ista_layer_losses[-1]} Loss_Dictionary: {self.dictionary_layer_losses[-1]} \n')
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor) -> None:
         """
@@ -171,13 +178,10 @@ class SESM(torch.nn.Module):
 
         self.loss_analysis(self.rho_epochs)
 
-        self.ista_layer.fit(
+        self.ista_layer.partial_fit(
             y=y,
             epochs=self.ista_epochs,
-            dictionary=self.dictionary_layer.dictionary,
-            alpha=self.ista_alpha,
-            lambd=self.ista_lambd,
-            weight_decay=self.weight_decay
+            dictionary=self.dictionary_layer.dictionary
         )
 
     def predict(self, X: torch.Tensor, custom_ista_layer: ISTALayer = None) -> torch.Tensor:
