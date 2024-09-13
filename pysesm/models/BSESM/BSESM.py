@@ -1,18 +1,10 @@
-import numpy as np
-import torch
-from sklearn.metrics import mean_squared_error
-
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
+from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
-from pysesm.base_functions.sub_block_partition import predict_on_test_set, data_mapping
+import torch
+import numpy as np
 
-
-class SESMS(SESM):
-    """
-    A PyTorch module extending the SESM architecture to implement a surrogate model
-    using a sequential approach. This class is designed for function approximation
-    and surrogate modeling tasks by utilizing sub-block partitioning.
-    """
+class BSESM(SESM):
 
     def __init__(self,
                  n_samples: int,
@@ -30,9 +22,9 @@ class SESMS(SESM):
                  dictionary_alpha: float,
                  weight_decay: float,
                  surrogate_function: ApproximateSurrogateFunction,
-                 permutation_times: int,
                  dfngroup,
                  iter,
+                 T: int,
                  seed,
                  logger,
                  debug=True):
@@ -55,7 +47,6 @@ class SESMS(SESM):
             dictionary_alpha (float): Learning rate for the dictionary layer.
             weight_decay (float): Weight decay for regularization to prevent overfitting.
             surrogate_function (ApproximateSurrogateFunction): The surrogate function used to create the dictionary.
-            permutation_times (int): Number of times to permute the dataset for training.
             dfngroup: Grouping information for the functions (implementation-specific).
             iter (int): Iteration count of the experiment.
             seed (int): Random seed for reproducibility.
@@ -68,9 +59,10 @@ class SESMS(SESM):
         self.eig_range = eig_range
         self.mu_range = mu_range
         self.vector_range = vector_range
-        self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.iter = iter
+        self.T = T
+        self.partition_manager = UniformPartitionManager(self.T)
         self.logger = logger
         self.debug = debug
 
@@ -88,56 +80,9 @@ class SESMS(SESM):
             weight_decay=weight_decay
         )
 
-    def partial_fit(self, list_sub_blocks, T):
-        """
-        Incrementally train the SESM model using a sequential approach with sub-blocks.
-
-        Args:
-            list_sub_blocks (list): A list of sub-blocks to be used for training.
-            T (int): Scaling factor for normalization (implementation-specific).
-
-        Returns:
-            None
-        """
-        permutation_times = self.hyperparams["permutation_times"]
-        for _ in range(permutation_times):
-            selected_indexes = np.random.permutation(T**2)
-            permuted_list_sub_blocks = [list_sub_blocks[i] for i in selected_indexes]
-            for block in permuted_list_sub_blocks:
-                y = torch.tensor(block.output_values, dtype=torch.float32)
-                X = torch.tensor(np.array(block._X), dtype=torch.float32)
-                self.ista_layer = block.ista_layer
-                super().partial_fit(X, y)
-
-    def predict(self, X_test, list_sub_blocks):
-        """
-        Predict the output using the trained SESM model with sub-blocks.
-
-        Args:
-            X_test (torch.Tensor): Input features for prediction.
-            list_sub_blocks (list): A list of sub-blocks used for the prediction process.
-
-        Returns:
-            torch.Tensor: Predicted values for the test set.
-        """
-        return predict_on_test_set(X_test, super(), self.T, list_sub_blocks)
-
-    def forward(self, X: torch.Tensor, y: torch.Tensor, list_sub_blocks: list):
-        """
-        Perform a forward pass for model evaluation with sub-blocks.
-
-        Args:
-            X (torch.Tensor): Input features for evaluation.
-            y (torch.Tensor): True target values for evaluation.
-            list_sub_blocks (list): A list of sub-blocks to be used for evaluation.
-
-        Returns:
-            tuple: A tuple containing:
-                - Predicted values (torch.Tensor).
-                - Training time (float): Time taken for the training process (in minutes).
-                - Mean squared error (float): MSE between predicted and true target values.
-        """
-        y = self.predict(X, list_sub_blocks)
-        time = self.model.time / 60
-        mse = mean_squared_error(y.clone().detach(), y)
-        return y, time, mse
+    def partial_fit(self, X, y):
+        for block in self.partition_manager.blocks:
+            y = torch.tensor(block.target, dtype=torch.float32)
+            X = torch.tensor(np.array(block.get_X()), dtype=torch.float32)
+            # self.ista_layer = block.ista_layer TODO: Needed?
+            super().partial_fit(X, y)

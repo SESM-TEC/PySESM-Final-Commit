@@ -3,6 +3,7 @@ import torch
 from pysesm.models.ISTALayer import ISTALayer
 from collections import defaultdict
 
+
 class SubBlock:
     """
     Represents a sub-block in a 2D grid.
@@ -17,17 +18,24 @@ class SubBlock:
     Methods:
     - add_point(point): Add a point to the sub-block.
     """
+
     def __init__(self, amplitude=1, ista_layer=None):
         self.amplitude = amplitude
         self.ista_layer = ista_layer
-        self._X  = []
-        self._index  = []
+        self._X = []
+        self._index = []
         self.predicted_output = []
         self.output_values = []
 
     def add_point(self, point, y):
         self._X.append(point)
         self.output_values.append(y)
+
+    def get_X(self):
+        return self._X
+
+    def set_X(self, new_X):
+        self._X = new_X
 
 
 def get_sub_block_vertices(grid_size, row, col):
@@ -64,21 +72,22 @@ def locate_samples_in_sub_blocks(x_n, y, t, T):
     np.ndarray: Array of SubBlock instances representing the sub-blocks.
     """
 
-    sub_blocks = np.empty((T*T), dtype=object)
+    sub_blocks = np.empty((T * T), dtype=object)
 
-    for index in range(T*T):
-          sub_blocks[index] = SubBlock()
+    for index in range(T * T):
+        sub_blocks[index] = SubBlock()
 
     for i in range(x_n.shape[0]):
         point = x_n[i]
         location = t[i]
-        sub_block = sub_blocks[location[0]*T + location[1]]
+        sub_block = sub_blocks[location[0] * T + location[1]]
         sub_block.add_point(point, y[i])
 
     return sub_blocks
 
+
 def generate_list_of_subblock(sub_blocks, l_functions, SEED):
-  """
+    """
     Generate a list for all the sub-blocks with there expected squeeze factor
 
     Arg:
@@ -88,17 +97,17 @@ def generate_list_of_subblock(sub_blocks, l_functions, SEED):
     Returns:
     list: List of all sub-block with there block.output_values modified.
   """
-  list_sub_blocks = []
-  for block in sub_blocks:
-    print(f"OUTPUT VALUES: {len(block.output_values) }")
-    if(len(block.output_values) != 0):
-      block.amplitude = squeze_factor(block.output_values)
-      block.ista_layer = ISTALayer(l_functions, SEED)
-      block.output_values = [value * block.amplitude for value in block.output_values]
+    list_sub_blocks = []
+    for block in sub_blocks:
+        print(f"OUTPUT VALUES: {len(block.output_values)}")
+        if (len(block.output_values) != 0):
+            block.amplitude = squeze_factor(block.output_values)
+            block.ista_layer = ISTALayer(l_functions, SEED)
+            block.output_values = [value * block.amplitude for value in block.output_values]
 
-      list_sub_blocks.append(block)
+            list_sub_blocks.append(block)
 
-  return list_sub_blocks
+    return list_sub_blocks
 
 
 def data_mapping(X, T):
@@ -114,8 +123,8 @@ def data_mapping(X, T):
     - x_n (torch.Tensor): A tensor of fractional parts of the normalized data.
     """
     delta = torch.max(X) - torch.min(X)
-    eps   = delta*1e-6
-    norm_x = ((X - torch.min(X)) / (delta + eps))*T
+    eps = delta * 1e-6
+    norm_x = ((X - torch.min(X)) / (delta + eps)) * T
     t = norm_x.numpy().astype(int)
     x_n = norm_x - t
     return t, x_n
@@ -136,7 +145,8 @@ def predict_on_test_set(X_test, model, T, train_sb):
     """
     t_test, x_n_test = data_mapping(X_test, T)
 
-    sorted_predictions = torch.zeros(len(X_test), dtype=torch.float32)  # Tensor para almacenar las predicciones ordenadas
+    sorted_predictions = torch.zeros(len(X_test),
+                                     dtype=torch.float32)  # Tensor para almacenar las predicciones ordenadas
 
     for row in range(T):
         for col in range(T):
@@ -174,15 +184,16 @@ def count_unique_combinations(T):
 
     # Contar las combinaciones únicas en T
     for combinacion in T:
-      combinacion_tuple = tuple(combinacion)
-      conteo_combinaciones[combinacion_tuple] += 1
+        combinacion_tuple = tuple(combinacion)
+        conteo_combinaciones[combinacion_tuple] += 1
 
     # Imprimir el conteo de combinaciones únicas
     for combinacion, cantidad in conteo_combinaciones.items():
-      print(f"Combinación {combinacion}: {cantidad} veces")
+        print(f"Combinación {combinacion}: {cantidad} veces")
+
 
 def squeze_factor(Y):
-  """
+    """
   Calculates a squeezing factor for a given set of values.
 
   Args:
@@ -191,11 +202,10 @@ def squeze_factor(Y):
   Returns:
   - float: The squeezing factor. If the maximum value in Y is greater than 1, returns the reciprocal of the maximum value. Otherwise, returns 1.0.
   """
-  e_f   = 0.0
-  max_y = max(Y)
-  if max_y > 1:
-    e_f = 1/max_y
-  else:
-    e_f = 1.0
-  return e_f
-
+    e_f = 0.0
+    max_y = max(Y)
+    if max_y > 1:
+        e_f = 1 / max_y
+    else:
+        e_f = 1.0
+    return e_f
