@@ -61,7 +61,7 @@ class ISTALayer(torch.nn.Module):
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         for _ in range(epochs):
             new_h = self.forward(y, dictionary, log_losses)
-            if new_h: self.h.data = new_h
+            if new_h is not None: self.h.data = new_h
 
     def forward(self, y, dictionary, log_losses=True):
         y_pred = dictionary @ self.h

@@ -50,3 +50,16 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, SEED):
   zz = generate_z(X, sigma, mu)
 
   return xx, yy, zz
+
+def generate_mu(x_center, y_center):
+  """
+  Generates a mean vector for a multivariate normal distribution.
+
+  Args:
+  - x_center (float): The x-coordinate of the center.
+  - y_center (float): The y-coordinate of the center.
+
+  Returns:
+  - torch.Tensor: A tensor containing the mean vector [x_center, y_center].
+  """
+  return torch.tensor([x_center, y_center], dtype=torch.float32)

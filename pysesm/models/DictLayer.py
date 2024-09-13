@@ -37,11 +37,14 @@ class DictLayer(torch.nn.Module):
 
         self.n_samples = n_samples
         self.alpha = alpha
+        
+        self.psi = psi
+        
         self.n_features = self.psi.n_features
         self.n_functions = self.psi.n_functions
         self.losses = []
 
-        self.psi = psi
+       
         self.theta_parameter_vector = self.psi.initialize()
 
         self.dictionary = None
@@ -127,9 +130,8 @@ class DictLayer(torch.nn.Module):
         """
 
         for _ in range(epochs):
-            self.forward(X, rho_flag, mu_flag)
+            self.dictionary = self.forward(X, rho_flag, mu_flag)
             y_pred = self.dictionary @ h
-
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
 

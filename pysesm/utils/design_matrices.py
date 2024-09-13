@@ -39,7 +39,7 @@ def create_design_matrix_train(xx, yy, zz, hyperparams):
 
     total_points = len(x_values)
 
-    sampled_indices = generate_uniform_sampling(total_points, n_samples=n_samples)
+    sampled_indices = generate_uniform_sampling(total_points, hyperparams["Seed"], n_samples=n_samples)
     X, y = sample_data(x_values, y_values, z_values, sampled_indices)
 
     return X, y
