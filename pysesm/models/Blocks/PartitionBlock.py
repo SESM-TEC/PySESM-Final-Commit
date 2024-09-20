@@ -1,3 +1,4 @@
+import torch
 
 class PartitionBlock:
     """
@@ -14,20 +15,28 @@ class PartitionBlock:
     - add_point(point): Add a point to the sub-block.
     """
 
-    def __init__(self, amplitude=1, ista_layer=None):
+    def __init__(self, block_index: list[int], block_size: torch.Tensor, amplitude=1, h=None):
+        self.block_index = block_index
+        self.block_size = block_size
+        self.block_scope = block_index * block_size
+        self.h = h
         self.amplitude = amplitude
-        self.ista_layer = ista_layer
-        self._X = []
-        self._index = []
+        self.X = []
+        self.y = []
         self.predicted_output = []
-        self.target = []
 
     def new_point(self, point_x, point_y):
-        self._X.append(point_x)
-        self.target.append(point_y)
+        self.X.append(point_x)
+        self.y.append(point_y)
 
-    def get_X(self):
-        return self._X
+    @property
+    def is_active(self):
+        return len(self.X) > 0
 
-    def set_X(self, new_X):
-        self._X = new_X
+    def is_point_in_block(self, point_x):
+        # TODO: Refactor logic
+        return self.block_scope - point_x <= 0
+
+    def normalize(self):
+        pass
+

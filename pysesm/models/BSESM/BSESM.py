@@ -1,8 +1,9 @@
+import torch
+
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
-import torch
-import numpy as np
+
 
 class BSESM(SESM):
 
@@ -63,6 +64,7 @@ class BSESM(SESM):
         self.iter = iter
         self.T = T
         self.partition_manager = UniformPartitionManager(self.T)
+        self.partition_manager.create_blocks()
         self.logger = logger
         self.debug = debug
 
@@ -81,8 +83,13 @@ class BSESM(SESM):
         )
 
     def partial_fit(self, X, y):
-        for block in self.partition_manager.blocks:
-            y = torch.tensor(block.target, dtype=torch.float32)
-            X = torch.tensor(np.array(block.get_X()), dtype=torch.float32)
-            # self.ista_layer = block.ista_layer TODO: Needed?
-            super().partial_fit(X, y)
+        self.partition_manager.add_points(X, y)
+        active_blocks = self.partition_manager.retrieve_active_blocks()
+
+        long_h = torch.column_stack(tuple([block.h for block in active_blocks]))
+        self.ista_layer.h.data = long_h
+
+        max_points_in_block = max(self.partition_manager.blocks, key=lambda block: len(block.X))
+
+        fat_dictionary = torch.row_stack(tuple([self.dictionary_layer.dictionary for _ in range(len(active_blocks))]))
+        self.dictionary_layer.dictionary = fat_dictionary

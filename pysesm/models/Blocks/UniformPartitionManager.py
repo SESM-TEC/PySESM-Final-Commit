@@ -1,8 +1,10 @@
-from pysesm.models.Blocks.BlockManager import BlockManager
 import numpy as np
 import torch
 
+from pysesm.models.Blocks.BlockManager import BlockManager
 from pysesm.models.Blocks.PartitionBlock import PartitionBlock
+
+DEFAULT_BLOCKS_PER_DIM = 4
 
 
 def squeeze_factor(y: np.ndarray):
@@ -25,9 +27,76 @@ def squeeze_factor(y: np.ndarray):
 
 
 class UniformPartitionManager(BlockManager):
-    def __init__(self, T: int):
+    """
+
+    """
+
+    def __init__(self, logger, T: torch.Tensor(int), initial_bounds: np.ndarray = None, threshold: float = 0):
+        """
+
+        Args:
+            T(int):
+            initial_bounds:
+            threshold:
+        """
         super().__init__()
+
         self.T = T
+        self.initial_bounds = initial_bounds
+        self.threshold = threshold
+        self.logger = logger
+        self.blocks = None
+        self.X = None
+        self.y = None
+
+    def _find_block(self, X: torch.Tensor):
+        # TODO: Find efficient way to find block
+        for block in self.blocks:
+            if block.is_point_in_block(X):
+                return block
+        return -1
+
+    def _update_block_arrangement(self, X: torch.Tensor) -> None:
+        def calculate_next_index(block_index: list[int]) -> list[int] | int:
+            # If is the last index return -1
+            if block_index == (self.T - 1):
+                return -1
+            # If first dim haven't reach max size increase it
+            if block_index[0] < (self.T[0] - 1):
+                block_index[0] += 1
+                return block_index
+            else:
+                # If so, update all dims that have reach max size
+                block_index[0] = 0
+                for block_dim in range(X.dim()[1:]):
+                    if block_index[block_dim] == self.T[block_dim]:
+                        block_index[block_dim] = 0
+                    else:
+                        block_index[block_dim] += 1
+                        break
+                return block_index
+
+        if self.T is None:
+            self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
+
+        if self.blocks is None:
+            if self.initial_bounds is None:
+                self.initial_bounds = torch.column_stack(
+                    [torch.min(X), torch.max(X)])  # Calculates the range covered by the X vector
+
+            delta = torch.sum(self.initial_bounds * torch.tensor([-1, 0]))
+            block_size = delta / self.T
+            block_count = torch.prod(self.T)
+
+            self.blocks = np.empty(self.T, dtype=PartitionBlock)
+
+            current_index = [0 for _ in range(X.dim())]
+            while current_index != -1:
+                self.blocks[current_index] = PartitionBlock(current_index, block_size)
+                current_index = calculate_next_index(current_index)
+        else:
+            new_max_x = torch.max(X)
+            new_min_x = torch.min(X)
 
     def _configure_blocks(self):
         """
@@ -35,8 +104,8 @@ class UniformPartitionManager(BlockManager):
         """
         for block in self.blocks:
             if len(block.output_values) != 0:
-                block.amplitude = squeeze_factor(block.target)
-                # block.ista_layer = ISTALayer(l_functions, SEED) TODO: Is this needed?
+                block.amplitude = squeeze_factor(block.y)
+                # block.ista_layer = ISTALayer(l_functions, SEED) TODO: Is this needed? Yes it is
                 block.target = [value * block.amplitude for value in block.output_values]
 
     def _data_mapping(self, X: torch.Tensor):
@@ -57,7 +126,10 @@ class UniformPartitionManager(BlockManager):
         x_n = norm_x - t
         return t, x_n
 
-    def _distribute_items_in_blocks(self, t: np.ndarray, x_n: torch.Tensor, y: np.ndarray):
+    def _normalize_blocks(self):
+        map(lambda x: x.normalize(), self.blocks)
+
+    def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
         Locate points in their respective sub-blocks.
 
@@ -66,20 +138,16 @@ class UniformPartitionManager(BlockManager):
         - t (np.ndarray): The integer part of the normalized points.
         - y (np.ndarray) : The output values associated with the samples
         """
-        for i in range(x_n.shape[0]):
-            point = x_n[i]
-            location = t[i]
-            block = self.blocks[location[0] * self.T + location[1]]
-            # TODO: Verify if is valid
-            block.new_point(point, y[i])
+        for i in range(X.shape[0]):
+            selected_block = self._find_block(X[i])
+            selected_block.new_point(X[i], y[i])
 
     def add_points(self, X: torch.Tensor, y: np.ndarray):
-        t, x_n = self._data_mapping(X)
-        self._distribute_items_in_blocks(t, x_n, y)
+        self._update_block_arrangement(X)
+
+        self._map_points(X, y)
+        self._normalize_blocks()
         self._configure_blocks()
 
-    def create_blocks(self):
-        self.blocks = np.empty((self.T ** 2), dtype=object)
-
-        for index in range(self.T ** 2):
-            self.blocks[index] = PartitionBlock()
+    def retrieve_active_blocks(self):
+        return [block for block in self.blocks if block.is_active]

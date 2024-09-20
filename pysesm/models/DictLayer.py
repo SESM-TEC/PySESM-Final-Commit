@@ -102,7 +102,7 @@ class DictLayer(torch.nn.Module):
     #     # RETURN VALUE NEVER USED
     #     return torch.sum(result)
 
-    def initialize_layer(self, X: torch.Tensor) -> None:
+    def  initialize_layer(self, X: torch.Tensor) -> None:
         """
         Method that initializes the dictionary of the layer. It needs a input value to do so, so it can be done at __init__.
 
