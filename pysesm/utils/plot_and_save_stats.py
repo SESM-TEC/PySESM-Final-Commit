@@ -1,8 +1,8 @@
 import csv
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.express as px
 import pandas as pd
+import plotly.graph_objects as go
 
 def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, losses_ISTA, losses_Dictionary):
     """
@@ -19,69 +19,41 @@ def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, 
     - losses_ISTA (list): List of ISTA losses over epochs.
     - losses_Dictionary (list): List of Dictionary losses over epochs.
     """
-    fig = plt.figure(figsize=(15, 10))
+    # Gráfica interactiva de las pérdidas
+    fig_loss_ISTA = px.scatter(x=range(len(losses_ISTA)), y=losses_ISTA, labels={'x':'Total epochs', 'y':'losses_ISTA'}, title='losses_ISTA vs Total epochs')
+    fig_loss_Dictionary = px.scatter(x=range(len(losses_Dictionary)), y=losses_Dictionary, labels={'x':'Total epochs', 'y':'losses_Dictionary'}, title='losses_Dictionary vs Total epochs')
+    
+    # Datos de entrenamiento
+    x_samples_train = X_train[:, 0].detach().numpy()
+    y_samples_train = X_train[:, 1].detach().numpy()
+    z_samples_train = y_train.detach().numpy()
+
+    # Remodelar los datos de entrada
     X = test_dataset["X"].reshape(50, 50)  # Remodelar X a una matriz 2D
     Y = test_dataset["Y"].reshape(50, 50)  # Remodelar Y a una matriz 2D
     Z = Z.clone().reshape(50, 50).detach().numpy()
 
-    x_samples_train = X_train[:, 0]
-    y_samples_train = X_train[:, 1]
-    z_samples_train = y_train
+    # Gráfica interactiva de la función original
+    fig_original_function = go.Figure(data=[go.Surface(z=test_dataset["Z"].reshape(50, 50), x=X, y=Y)])
+    fig_original_function.update_traces(contours_z=dict(show=True, usecolormap=True))
+    fig_original_function.add_scatter3d(x=x_samples_train, y=y_samples_train, z=z_samples_train, mode='markers', marker=dict(color='red'))
+    fig_original_function.update_layout(title="Original Function", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
 
-    #Total epochs = 6 [2 * ( 3 permutaciones )] * 16 bloques
-    ax1 = fig.add_subplot(231)
-    ax1.scatter(range(len(losses_ISTA)), losses_ISTA)
-    ax1.set_xlabel('Total epochs')
-    ax1.set_ylabel('losses_ISTA')
-    ax1.set_title('losses_ISTA vs Total epochs')
+    # Gráfica interactiva del modelo sustituto
+    fig_surrogate_model = go.Figure(data=[go.Surface(z=Z, x=X, y=Y)])
+    fig_surrogate_model.update_traces(contours_z=dict(show=True, usecolormap=True))
+    fig_surrogate_model.add_scatter3d(x=x_samples_train, y=y_samples_train, z=z_samples_train, mode='markers', marker=dict(color='red'))
+    fig_surrogate_model.update_layout(title="Surrogate Model", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
 
-    ax5 = fig.add_subplot(232)
-    ax5.scatter(range(len(losses_Dictionary)), losses_Dictionary)
-    ax5.set_xlabel('Total epochs')
-    ax5.set_ylabel('losses_Dictionary')
-    ax5.set_title('losses_Dictionary vs Total epochs')
+    # Mostrar las gráficas
+    fig_loss_ISTA.show()
+    fig_loss_Dictionary.show()
+    fig_original_function.show()
+    fig_surrogate_model.show()
 
-    ax3 = fig.add_subplot(233)
-    ax3.scatter(x_samples_train, y_samples_train)
-    ax3.set_xlabel('X')
-    ax3.set_ylabel('Y')
-    ax3.set_title('Sampled Data')
-
-    # Ajuste de los límites de los ejes
-    ax3.set_xlim([min(x_samples_train), max(x_samples_train)])
-    ax3.set_ylim([min(y_samples_train), max(y_samples_train)])
-
-    ax4 = fig.add_subplot(234, projection='3d')
-    ax4.plot_surface(X, Y, test_dataset["Z"].reshape(50, 50), cmap='viridis', alpha=0.9)
-    ax4.scatter(x_samples_train, y_samples_train, z_samples_train, c='red')
-    ax4.set_xlabel('X')
-    ax4.set_ylabel('Y')
-    ax4.set_zlabel('Z')
-    ax4.set_title('Original Function')
-
-    # Ajuste de los límites de los ejes
-    ax4.set_xlim([min(x_samples_train), max(x_samples_train)])
-    ax4.set_ylim([min(y_samples_train), max(y_samples_train)])
-    ax4.set_zlim([min(z_samples_train), max(z_samples_train)])
-
-    ax2 = fig.add_subplot(212, projection='3d')
-    ax2.plot_surface(X, Y, Z, cmap='viridis', alpha=0.9)
-    ax2.scatter(x_samples_train, y_samples_train, z_samples_train, c='red')
-    ax2.set_xlabel('X')
-    ax2.set_ylabel('Y')
-    ax2.set_zlabel('Z')
-    ax2.set_title('Surrogate Model')
-
-    # Ajuste de los límites de los ejes
-    ax2.set_xlim([min(x_samples_train), max(x_samples_train)])
-    ax2.set_ylim([min(y_samples_train), max(y_samples_train)])
-    ax2.set_zlim([min(z_samples_train), max(z_samples_train)])
-
-    filename = f"results_{hypset}/plots/{fngroup}.{iteration}.png"
-
-    plt.tight_layout()
-    plt.savefig(filename)
-    plt.close(fig)
+    # Guardar las gráficas en archivos PNG
+    fig_original_function.write_image(f"results_{hypset}/plots/{fngroup}.{iteration}_original_function.png")
+    fig_surrogate_model.write_image(f"results_{hypset}/plots/{fngroup}.{iteration}_surrogate_model.png")
 
 
 def plot_stats(directory, num_files):
