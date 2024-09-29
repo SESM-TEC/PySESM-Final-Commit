@@ -143,4 +143,4 @@ class SESMS(SESM):
         y_pred = self.predict(X, list_sub_blocks)
         time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.clone().detach(), y)
-        return y, time, mse
+        return y_pred, time, mse

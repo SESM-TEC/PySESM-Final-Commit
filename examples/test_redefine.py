@@ -31,11 +31,11 @@ experiment_1 = {
       "ista_alpha"	: 0.05502,
       "ista_lambd"	 : 0.01007,
       "dictionary_alpha": 0.08928,
-      "rho_epochs": 10,
-      "mu_epochs": 10,
-      "model_epochs" : 10,
-      "dict_epochs": 10,
-      "ista_epochs": 10,
+      "rho_epochs": 5,
+      "mu_epochs": 5,
+      "model_epochs" : 5,
+      "dict_epochs": 5,
+      "ista_epochs": 5,
       "T": 4,
       "weight_decay": 0.004875,
       "permutation_times": 1,
@@ -66,14 +66,7 @@ mu_list = [mu1,mu2,mu3]
 
 xx, yy, zz = generate_mesh(50, -2, 2, sigma_list, mu_list)
 
-
 xx_r, yy_r, zz_r = generate_random_samples(500, -2, 2, sigma_list, mu_list, experiment_1["Seed"])
-
-fig = go.Figure(data=[go.Surface(z=zz.numpy(), x=xx, y=yy)])
-fig.update_layout(scene=dict(aspectmode='data'))
-fig.update_layout(scene=dict(camera=dict(eye=dict(x=2, y=2, z=1))))
-# Mostrar la gráfica
-fig.show()
 
 # Dataset
 data = []
@@ -97,6 +90,7 @@ def run_experiment(X_train, y_train, X_test, y_test, hyperparams, model):
   weight_decay = hyperparams["weight_decay"]
   alpha = hyperparams["ista_alpha"]
   lambd = hyperparams["ista_lambd"]
+  time, mse_value = 0, 0
 
   t = data_mapping(X_train, T)
 
@@ -105,13 +99,10 @@ def run_experiment(X_train, y_train, X_test, y_test, hyperparams, model):
   list_sub_blocks = generate_list_of_subblock(sub_blocks,l_functions, seed, weight_decay, alpha,lambd)
 
   normalize_sub_blocks(list_sub_blocks, T)
-
-  time, mse_value = 0, 0
-
   model.partial_fit(list_sub_blocks, T)
-  Z, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
+  Z_predict, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
 
-  plot_surface(testDataset, X_train, y_train, Z, experiment_1["hyp_set"], model.dfngroup, model.iter, model.losses_ISTA, model.losses_Dictionary)
+  plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], model.dfngroup, model.iter, model.losses_ISTA, model.losses_Dictionary)
 
   return time, mse_value
 

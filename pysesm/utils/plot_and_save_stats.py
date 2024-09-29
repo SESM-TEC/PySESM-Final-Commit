@@ -3,12 +3,16 @@ import numpy as np
 import plotly.express as px
 import pandas as pd
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import os
+
 
 def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, losses_ISTA, losses_Dictionary):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
     Args:
+    - train_dataset (dict): A dictionary containing the training dataset.
     - test_dataset (dict): A dictionary containing the test dataset.
     - X_train (torch.Tensor): The input data points for training.
     - y_train (torch.Tensor): The target values for training.
@@ -19,41 +23,73 @@ def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, 
     - losses_ISTA (list): List of ISTA losses over epochs.
     - losses_Dictionary (list): List of Dictionary losses over epochs.
     """
-    # Gráfica interactiva de las pérdidas
-    fig_loss_ISTA = px.scatter(x=range(len(losses_ISTA)), y=losses_ISTA, labels={'x':'Total epochs', 'y':'losses_ISTA'}, title='losses_ISTA vs Total epochs')
-    fig_loss_Dictionary = px.scatter(x=range(len(losses_Dictionary)), y=losses_Dictionary, labels={'x':'Total epochs', 'y':'losses_Dictionary'}, title='losses_Dictionary vs Total epochs')
-    
-    # Datos de entrenamiento
-    x_samples_train = X_train[:, 0].detach().numpy()
-    y_samples_train = X_train[:, 1].detach().numpy()
-    z_samples_train = y_train.detach().numpy()
+    # Asegurarse de que el directorio exista
+    os.makedirs(f"results_{hypset}/plots", exist_ok=True)
 
-    # Remodelar los datos de entrada
-    X = test_dataset["X"].reshape(50, 50)  # Remodelar X a una matriz 2D
-    Y = test_dataset["Y"].reshape(50, 50)  # Remodelar Y a una matriz 2D
-    Z = Z.clone().reshape(50, 50).detach().numpy()
+    # Matplotlib subplots (no interactivas)
+    fig = plt.figure(figsize=(15, 10))
 
-    # Gráfica interactiva de la función original
-    fig_original_function = go.Figure(data=[go.Surface(z=test_dataset["Z"].reshape(50, 50), x=X, y=Y)])
-    fig_original_function.update_traces(contours_z=dict(show=True, usecolormap=True))
-    fig_original_function.add_scatter3d(x=x_samples_train, y=y_samples_train, z=z_samples_train, mode='markers', marker=dict(color='red'))
-    fig_original_function.update_layout(title="Original Function", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    # Total epochs = 6 [2 * ( 3 permutaciones )] * 16 bloques
+    ax1 = fig.add_subplot(231)
+    ax1.scatter(range(len(losses_ISTA)), losses_ISTA)
+    ax1.set_xlabel('Total epochs')
+    ax1.set_ylabel('losses_ISTA')
+    ax1.set_title('losses_ISTA vs Total epochs')
 
-    # Gráfica interactiva del modelo sustituto
-    fig_surrogate_model = go.Figure(data=[go.Surface(z=Z, x=X, y=Y)])
-    fig_surrogate_model.update_traces(contours_z=dict(show=True, usecolormap=True))
-    fig_surrogate_model.add_scatter3d(x=x_samples_train, y=y_samples_train, z=z_samples_train, mode='markers', marker=dict(color='red'))
-    fig_surrogate_model.update_layout(title="Surrogate Model", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    ax5 = fig.add_subplot(232)
+    ax5.scatter(range(len(losses_Dictionary)), losses_Dictionary)
+    ax5.set_xlabel('Total epochs')
+    ax5.set_ylabel('losses_Dictionary')
+    ax5.set_title('losses_Dictionary vs Total epochs')
 
-    # Mostrar las gráficas
-    fig_loss_ISTA.show()
-    fig_loss_Dictionary.show()
-    fig_original_function.show()
-    fig_surrogate_model.show()
+    ax3 = fig.add_subplot(233)
+    ax3.scatter(X_train[:, 0], X_train[:, 1])
+    ax3.set_xlabel('X')
+    ax3.set_ylabel('Y')
+    ax3.set_title('Sampled Data')
 
-    # Guardar las gráficas en archivos PNG
-    fig_original_function.write_image(f"results_{hypset}/plots/{fngroup}.{iteration}_original_function.png")
-    fig_surrogate_model.write_image(f"results_{hypset}/plots/{fngroup}.{iteration}_surrogate_model.png")
+    # Ajuste de los límites de los ejes
+    ax3.set_xlim([min(X_train[:, 0]), max(X_train[:, 0])])
+    ax3.set_ylim([min(X_train[:, 1]), max(X_train[:, 1])])
+
+    # Matplotlib para "Original Function" (estática)
+    X = test_dataset["X"].reshape(50, 50)
+    Y = test_dataset["Y"].reshape(50, 50)
+    Z_test = test_dataset["Z"].reshape(50, 50)
+
+    ax4 = fig.add_subplot(234, projection='3d')
+    ax4.plot_surface(X, Y, Z_test, cmap='viridis', alpha=0.9)
+    ax4.scatter(X_train[:, 0], X_train[:, 1], y_train, c='red')
+    ax4.set_xlabel('X')
+    ax4.set_ylabel('Y')
+    ax4.set_zlabel('Z')
+    ax4.set_title(f'Original Function - {hypset}/{fngroup}')
+
+    # Matplotlib para "Surrogate Model" (estática)
+    Z_pred = Z.clone().reshape(50, 50).detach().cpu().numpy()
+    ax2 = fig.add_subplot(235, projection='3d')
+    ax2.plot_surface(X, Y, Z_pred, cmap='viridis', alpha=0.9)
+    ax2.scatter(X_train[:, 0], X_train[:, 1], y_train, c='red')
+    ax2.set_xlabel('X')
+    ax2.set_ylabel('Y')
+    ax2.set_zlabel('Z')
+    ax2.set_title(f'Surrogate Model - {hypset}/{fngroup}')
+
+    plt.tight_layout()
+    plt.savefig(f"results_{hypset}/plots/{fngroup}.{iteration}_static.png")
+    plt.close(fig)
+
+    # Plotly para la gráfica interactiva de la "Original Function"
+    fig_original = go.Figure(data=[go.Surface(z=Z_test, x=X, y=Y, colorscale='Viridis')])
+    fig_original.add_scatter3d(x=X_train[:, 0], y=X_train[:, 1], z=y_train, mode='markers', marker=dict(size=5, color='red'))
+    fig_original.update_layout(title=f"Original Function - {hypset}/{fngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    fig_original.write_html(f"results_{hypset}/plots/{fngroup}.{iteration}_original.html")
+
+    # Plotly para la gráfica interactiva del "Surrogate Model"
+    fig_surrogate = go.Figure(data=[go.Surface(z=Z_pred, x=X, y=Y, colorscale='Viridis')])
+    fig_surrogate.add_scatter3d(x=X_train[:, 0], y=X_train[:, 1], z=y_train, mode='markers', marker=dict(size=5, color='red'))
+    fig_surrogate.update_layout(title=f"Surrogate Model - {hypset}/{fngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    fig_surrogate.write_html(f"results_{hypset}/plots/{fngroup}.{iteration}_surrogate.html")
 
 
 def plot_stats(directory, num_files):
