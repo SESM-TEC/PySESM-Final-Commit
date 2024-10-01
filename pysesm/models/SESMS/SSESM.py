@@ -35,6 +35,7 @@ class SSESM(SESM):
                  iter,
                  seed,
                  logger,
+                 T:int,
                  debug=True):
         """
         Initialize the SESMS model with a sequential approach.
@@ -60,6 +61,7 @@ class SSESM(SESM):
             iter (int): Iteration count of the experiment.
             seed (int): Random seed for reproducibility.
             logger: Logger instance to capture runtime information.
+            T (int): The scaling factor for normalization.
             debug (bool): Flag to enable or disable debug mode. Default is True.
         """
         self.n_samples = n_samples
@@ -71,6 +73,7 @@ class SSESM(SESM):
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.iter = iter
+        self.T = T
         self.logger = logger
         self.debug = debug
 
@@ -106,6 +109,7 @@ class SSESM(SESM):
                 y = torch.tensor(block.output_values, dtype=torch.float32)
                 X = torch.tensor(np.array(block.get_X()), dtype=torch.float32)
                 self.ista_layer = block.ista_layer
+
                 super().partial_fit(X, y)
 
     def predict(self, X_test, list_sub_blocks):
@@ -121,7 +125,7 @@ class SSESM(SESM):
         """
         return predict_on_test_set(X_test, super(), self.T, list_sub_blocks)
 
-    def forward(self, X: torch.Tensor, y: torch.Tensor, list_sub_blocks: list):
+    def performance_stats(self, X: torch.Tensor, y: torch.Tensor, list_sub_blocks: list):
         """
         Perform a forward pass for model evaluation with sub-blocks.
 
@@ -136,7 +140,7 @@ class SSESM(SESM):
                 - Training time (float): Time taken for the training process (in minutes).
                 - Mean squared error (float): MSE between predicted and true target values.
         """
-        y = self.predict(X, list_sub_blocks)
-        time = self.model.time / 60
-        mse = mean_squared_error(y.clone().detach(), y)
-        return y, time, mse
+        y_pred = self.predict(X, list_sub_blocks)
+        time = self.elapsed_time / 60
+        mse = mean_squared_error(y_pred.clone().detach(), y)
+        return y_pred, time, mse

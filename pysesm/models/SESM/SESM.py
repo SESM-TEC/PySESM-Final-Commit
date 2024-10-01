@@ -69,7 +69,10 @@ class SESM(torch.nn.Module):
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
         self.weight_decay = weight_decay
+        self.losses_ISTA = []
+        self.losses_Dictionary = []
         self.elapsed_time = 0
+
         self.loss_stats = {
             "loss_mean": [],
             "loss_std": [],
@@ -145,7 +148,7 @@ class SESM(torch.nn.Module):
 
             epoch_end_time = time.time()
             self.elapsed_time += (epoch_end_time - epoch_start_time)
-
+        
             logging.info(
                 f'Partial fit epoch {epoch + 1} Loss_ISTA: {self.ista_layer_losses[-1]} Loss_Dictionary: {self.dictionary_layer_losses[-1]} \n')
 
@@ -183,6 +186,8 @@ class SESM(torch.nn.Module):
             epochs=self.ista_epochs,
             dictionary=self.dictionary_layer.dictionary
         )
+        self.losses_ISTA.append(self.ista_layer.losses[-1])
+        self.losses_Dictionary.append(self.dictionary_layer.losses[-1])
 
     def predict(self, X: torch.Tensor, custom_ista_layer: ISTALayer = None) -> torch.Tensor:
         """

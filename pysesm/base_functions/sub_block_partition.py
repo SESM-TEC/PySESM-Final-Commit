@@ -85,24 +85,32 @@ def locate_samples_in_sub_blocks(x_n, y, t, T):
 
     return sub_blocks
 
-
-def generate_list_of_subblock(sub_blocks, l_functions, SEED):
+def generate_list_of_subblock(sub_blocks, l_functions, SEED, weight_decay, alpha, lambd):
     """
-    Generate a list for all the sub-blocks with there expected squeeze factor
+    Generate a list for all the sub-blocks with their expected squeeze factor.
 
     Arg:
       np.ndarray: Array of SubBlock instances representing the sub-blocks.
-      int: A random number SEED
+      int: A random number SEED.
+      float: Weight decay for the optimizer in ISTALayer.
+      float: Learning rate alpha.
+      float: Regularization parameter lambda.
 
     Returns:
-    list: List of all sub-block with there block.output_values modified.
-  """
+    list: List of all sub-blocks with their block.output_values modified.
+    """
     list_sub_blocks = []
     for block in sub_blocks:
         print(f"OUTPUT VALUES: {len(block.output_values)}")
-        if (len(block.output_values) != 0):
+        if len(block.output_values) != 0:
             block.amplitude = squeze_factor(block.output_values)
-            block.ista_layer = ISTALayer(l_functions, SEED)
+            block.ista_layer = ISTALayer(
+                n_functions=l_functions,
+                random_seed=SEED,
+                weight_decay=weight_decay,
+                alpha=alpha,
+                lambd=lambd
+            )
             block.output_values = [value * block.amplitude for value in block.output_values]
 
             list_sub_blocks.append(block)
