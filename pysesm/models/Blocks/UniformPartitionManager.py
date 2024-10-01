@@ -76,24 +76,26 @@ class UniformPartitionManager(BlockManager):
                         break
                 return block_index
 
+        # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
 
+        # When no points and no blocks have been created
         if self.blocks is None:
+            # Check for user given initial bounds
             if self.initial_bounds is None:
                 self.initial_bounds = torch.column_stack(
                     [torch.min(X), torch.max(X)])  # Calculates the range covered by the X vector
 
-            delta = torch.sum(self.initial_bounds * torch.tensor([-1, 0]))
+            # Space to be partitioned
+            delta = torch.sum(self.initial_bounds * torch.tensor([-1, 1]))
             block_size = delta / self.T
             block_count = torch.prod(self.T)
 
             self.blocks = np.empty(self.T, dtype=PartitionBlock)
 
-            current_index = [0 for _ in range(X.dim())]
-            while current_index != -1:
-                self.blocks[current_index] = PartitionBlock(current_index, block_size)
-                current_index = calculate_next_index(current_index)
+            for index in np.ndindex(self.blocks.shape):
+                self.blocks[index] = PartitionBlock(index, block_size)
         else:
             new_max_x = torch.max(X)
             new_min_x = torch.min(X)

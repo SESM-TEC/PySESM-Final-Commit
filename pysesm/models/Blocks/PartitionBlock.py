@@ -1,5 +1,6 @@
 import torch
 
+
 class PartitionBlock:
     """
     Represents a sub-block in a 2D grid.
@@ -15,10 +16,11 @@ class PartitionBlock:
     - add_point(point): Add a point to the sub-block.
     """
 
-    def __init__(self, block_index: list[int], block_size: torch.Tensor, amplitude=1, h=None):
+    def __init__(self, block_index: tuple[int, ...], block_size: torch.Tensor, amplitude=1, h=None):
         self.block_index = block_index
         self.block_size = block_size
-        self.block_scope = block_index * block_size
+        base_edge = block_index * block_size
+        self.block_scope = torch.tensor([base_edge, base_edge + block_size])
         self.h = h
         self.amplitude = amplitude
         self.X = []
@@ -34,9 +36,7 @@ class PartitionBlock:
         return len(self.X) > 0
 
     def is_point_in_block(self, point_x):
-        # TODO: Refactor logic
-        return self.block_scope - point_x <= 0
+        return self.block_scope[0] <= point_x <= self.block_scope[1]
 
     def normalize(self):
         pass
-
