@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
@@ -63,8 +64,7 @@ class BSESM(SESM):
         self.dfngroup = dfngroup
         self.iter = iter
         self.T = T
-        self.partition_manager = UniformPartitionManager(self.T)
-        self.partition_manager.create_blocks()
+        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=l_functions)
         self.logger = logger
         self.debug = debug
 
@@ -89,7 +89,13 @@ class BSESM(SESM):
         long_h = torch.column_stack(tuple([block.h for block in active_blocks]))
         self.ista_layer.h.data = long_h
 
-        max_points_in_block = max(self.partition_manager.blocks, key=lambda block: len(block.X))
+        max_points_in_block = max(active_blocks, key=lambda block: len(block.X))
 
-        fat_dictionary = torch.row_stack(tuple([self.dictionary_layer.dictionary for _ in range(len(active_blocks))]))
-        self.dictionary_layer.dictionary = fat_dictionary
+        standardized_points = np.empty((max_points_in_block, ))
+        for index, block in enumerate(active_blocks):
+            evaluated_X = self.psi(block.normalized_X.mT, self.theta_parameter_vector, True, True)
+            result = torch.zeros(max_points_in_block)
+            result[:len(evaluated_X)] = evaluated_X
+            standardized_points.append(result)
+
+        super().partial_fit(torch.tensor(standardized_points).mT, y)

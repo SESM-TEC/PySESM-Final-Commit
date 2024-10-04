@@ -31,7 +31,7 @@ class UniformPartitionManager(BlockManager):
 
     """
 
-    def __init__(self, logger, T: torch.Tensor(int), initial_bounds: np.ndarray = None, threshold: float = 0):
+    def __init__(self, logger, T: torch.Tensor(int), n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
         """
 
         Args:
@@ -42,6 +42,7 @@ class UniformPartitionManager(BlockManager):
         super().__init__()
 
         self.T = T
+        self.n_functions = n_functions
         self.initial_bounds = initial_bounds
         self.threshold = threshold
         self.logger = logger
@@ -57,25 +58,6 @@ class UniformPartitionManager(BlockManager):
         return -1
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
-        def calculate_next_index(block_index: list[int]) -> list[int] | int:
-            # If is the last index return -1
-            if block_index == (self.T - 1):
-                return -1
-            # If first dim haven't reach max size increase it
-            if block_index[0] < (self.T[0] - 1):
-                block_index[0] += 1
-                return block_index
-            else:
-                # If so, update all dims that have reach max size
-                block_index[0] = 0
-                for block_dim in range(X.dim()[1:]):
-                    if block_index[block_dim] == self.T[block_dim]:
-                        block_index[block_dim] = 0
-                    else:
-                        block_index[block_dim] += 1
-                        break
-                return block_index
-
         # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
@@ -107,7 +89,8 @@ class UniformPartitionManager(BlockManager):
         for block in self.blocks:
             if len(block.output_values) != 0:
                 block.amplitude = squeeze_factor(block.y)
-                # block.ista_layer = ISTALayer(l_functions, SEED) TODO: Is this needed? Yes it is
+                block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
+                block.h.data /= block.h.data.sum()
                 block.target = [value * block.amplitude for value in block.output_values]
 
     def _data_mapping(self, X: torch.Tensor):

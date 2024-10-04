@@ -25,6 +25,7 @@ class PartitionBlock:
         self.amplitude = amplitude
         self.X = []
         self.y = []
+        self.normalized_X = []
         self.predicted_output = []
 
     def new_point(self, point_x, point_y):
@@ -39,4 +40,6 @@ class PartitionBlock:
         return self.block_scope[0] <= point_x <= self.block_scope[1]
 
     def normalize(self):
-        pass
+        tensor_X = torch.tensor(self.X)
+        eps = self.block_scope * 1e-6
+        self.normalized_X = ((tensor_X - torch.min(tensor_X)) / (self.block_scope + eps))

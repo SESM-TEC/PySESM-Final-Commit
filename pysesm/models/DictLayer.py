@@ -37,14 +37,13 @@ class DictLayer(torch.nn.Module):
 
         self.n_samples = n_samples
         self.alpha = alpha
-        
+
         self.psi = psi
-        
+
         self.n_features = self.psi.n_features
         self.n_functions = self.psi.n_functions
         self.losses = []
 
-       
         self.theta_parameter_vector = self.psi.initialize()
 
         self.dictionary = None
@@ -59,53 +58,7 @@ class DictLayer(torch.nn.Module):
         else:
             self.optimizer = optimizer
 
-    # def fit(self, X, y, epochs, h, alpha, rho_flag, mu_flag, log_losses=True):
-    #     """
-    #     Let's train the model.
-    #
-    #     Args:
-    #         X (Tensor): Input data of shape (n_samples, n_features).
-    #         y (Tensor): Target data of shape (n_samples,).
-    #         epochs (int): Number of training epochs.
-    #         h (Tensor): Sparse vector for selecting basis functions.
-    #         alpha (float): Learning rate for optimization.
-    #         log_losses (bool): Whether to log losses during training (default True).
-    #     """
-    #     optimizer = torch.optim.SGD(self.parameters(), lr=alpha)
-    #     criterion = torch.nn.MSELoss()
-    #
-    #     # for i in tqdm(range(epochs), desc='Training dictionary'):
-    #     for _ in range(epochs):
-    #         self.forward(X, rho_flag, mu_flag)
-    #         y_pred = self.dictionary @ h
-    #
-    #         loss = criterion(y_pred, y)
-    #         optimizer.zero_grad()
-    #
-    #         loss.backward(retain_graph=True)
-    #         optimizer.step()
-    #
-    #         if log_losses:
-    #             self.losses.append(loss.item())
-    #
-    # def forward_old(self, x, rho_flag: bool, mu_flag: bool):
-    #     """
-    #
-    #     Args:
-    #         x:
-    #         rho_flag:
-    #         mu_flag:
-    #
-    #     Returns:
-    #
-    #     """
-    #     result = self.psi(x.mT, self.theta_parameter_vector, rho_flag, mu_flag)
-    #     # Parameter readjust must happen outside this function as it should return the new weights
-    #     self.dictionary = result
-    #     # RETURN VALUE NEVER USED
-    #     return torch.sum(result)
-
-    def  initialize_layer(self, X: torch.Tensor) -> None:
+    def initialize_layer(self, X: torch.Tensor) -> None:
         """
         Method that initializes the dictionary of the layer. It needs a input value to do so, so it can be done at __init__.
 

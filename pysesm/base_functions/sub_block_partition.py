@@ -202,14 +202,14 @@ def count_unique_combinations(T):
 
 def squeze_factor(Y):
     """
-  Calculates a squeezing factor for a given set of values.
+    Calculates a squeezing factor for a given set of values.
 
-  Args:
-  - Y (iterable): An iterable containing numeric values.
+    Args:
+    - Y (iterable): An iterable containing numeric values.
 
-  Returns:
-  - float: The squeezing factor. If the maximum value in Y is greater than 1, returns the reciprocal of the maximum value. Otherwise, returns 1.0.
-  """
+    Returns:
+    - float: The squeezing factor. If the maximum value in Y is greater than 1, returns the reciprocal of the maximum value. Otherwise, returns 1.0.
+    """
     e_f = 0.0
     max_y = max(Y)
     if max_y > 1:

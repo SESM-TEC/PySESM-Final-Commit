@@ -79,11 +79,9 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
         rho = Theta[:-self.n_features, :]
         # Toma los Myu del Theta que recibe
         mu = Theta[-self.n_features:, :].mT.unsqueeze(2)
-        # DO NOT evaluate a boolean
         # Detach the computational graph for the RHO parameters tensor
         if not rho_flag:
             rho = rho.detach()
-        # DO NOT evaluate a boolean
         # Detach the computational graph for the MU parameters tensor
         elif not mu_flag:
             mu = mu.detach()
