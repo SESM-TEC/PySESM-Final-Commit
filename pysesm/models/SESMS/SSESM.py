@@ -107,7 +107,7 @@ class SSESM(SESM):
             permuted_list_sub_blocks = [list_sub_blocks[i] for i in selected_indexes]
             for block in permuted_list_sub_blocks:
                 y = torch.tensor(block.output_values, dtype=torch.float32)
-                X = torch.tensor(np.array(block.get_X()), dtype=torch.float32)
+                X = torch.tensor(np.array(block.X), dtype=torch.float32)
                 self.ista_layer = block.ista_layer
 
                 super().partial_fit(X, y)

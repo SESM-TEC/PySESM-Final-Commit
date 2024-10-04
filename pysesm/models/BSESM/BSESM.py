@@ -91,11 +91,11 @@ class BSESM(SESM):
 
         max_points_in_block = max(active_blocks, key=lambda block: len(block.X))
 
-        standardized_points = np.empty((max_points_in_block, ))
+        standardized_points = np.empty((max_points_in_block, self.l_functions * len(active_blocks)))
         for index, block in enumerate(active_blocks):
             evaluated_X = self.psi(block.normalized_X.mT, self.theta_parameter_vector, True, True)
             result = torch.zeros(max_points_in_block)
             result[:len(evaluated_X)] = evaluated_X
-            standardized_points.append(result)
+            standardized_points[index] = result
 
         super().partial_fit(torch.tensor(standardized_points).mT, y)
