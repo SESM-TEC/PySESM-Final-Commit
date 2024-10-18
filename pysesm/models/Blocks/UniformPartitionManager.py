@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+
 import numpy as np
 import torch
 
@@ -31,7 +34,7 @@ class UniformPartitionManager(BlockManager):
 
     """
 
-    def __init__(self, logger, T: torch.Tensor(int), n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
+    def __init__(self, logger, T: torch.Tensor, n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
         """
 
         Args:
@@ -50,12 +53,13 @@ class UniformPartitionManager(BlockManager):
         self.X = None
         self.y = None
 
-    def _find_block(self, X: torch.Tensor):
+    def _find_block(self, X: torch.Tensor) -> PartitionBlock | None:
         # TODO: Find efficient way to find block
-        for block in self.blocks:
-            if block.is_point_in_block(X):
-                return block
-        return -1
+        print(X)
+        for index in np.ndindex(self.blocks.shape):
+            if self.blocks[index].is_point_in_block(X):
+                return self.blocks[index]
+        return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         # If no T is given, create a T with a default size
@@ -66,18 +70,27 @@ class UniformPartitionManager(BlockManager):
         if self.blocks is None:
             # Check for user given initial bounds
             if self.initial_bounds is None:
-                self.initial_bounds = torch.column_stack(
-                    [torch.min(X), torch.max(X)])  # Calculates the range covered by the X vector
+                print("MIN TEST", torch.min(X, dim=0))
+                self.initial_bounds = torch.vstack(
+                    [torch.min(X, dim=0).values, torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
+                logging.warning('[UniformPartitionManager] No initial bounds provided using calculated one {}'.format(
+                    self.initial_bounds
+                ))
 
             # Space to be partitioned
-            delta = torch.sum(self.initial_bounds * torch.tensor([-1, 1]))
-            block_size = delta / self.T
+            delta = self.initial_bounds[1] - self.initial_bounds[0]
+            block_size = torch.div(delta, self.T)
+            print("INITIAL BOUNDS", self.initial_bounds)
+            print("DELTA", delta)
+            print("BLOCK SIZE", block_size)
+            print("T", self.T)
+
             block_count = torch.prod(self.T)
 
-            self.blocks = np.empty(self.T, dtype=PartitionBlock)
+            self.blocks = np.empty(self.T.numpy(), dtype=PartitionBlock)
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(index, block_size)
+                self.blocks[index] = PartitionBlock(self.initial_bounds[0], index, block_size)
         else:
             new_max_x = torch.max(X)
             new_min_x = torch.min(X)
@@ -86,12 +99,13 @@ class UniformPartitionManager(BlockManager):
         """
         Configures the blocks with their expected squeeze factor
         """
-        for block in self.blocks:
-            if len(block.output_values) != 0:
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            if len(block.y) != 0:
                 block.amplitude = squeeze_factor(block.y)
                 block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
                 block.h.data /= block.h.data.sum()
-                block.target = [value * block.amplitude for value in block.output_values]
+                block.target = [value * block.amplitude for value in block.y]
 
     def _data_mapping(self, X: torch.Tensor):
         """
@@ -135,4 +149,4 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks()
 
     def retrieve_active_blocks(self):
-        return [block for block in self.blocks if block.is_active]
+        return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]

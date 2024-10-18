@@ -5,16 +5,17 @@ import torch
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.utils.linalg import to_triu_matrix, generate_random_vectors, get_upper_triangle, gram_schmidt
 
-#Meter un metodo para optimizar los rho y los mu
+
+# Meter un metodo para optimizar los rho y los mu
 # Renamed GaussianFunctions -> GaussianApproximateSurrogateFunction
 class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
-    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range,seed):
+    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range, seed):
         super().__init__(n_features, n_functions, logger)
         self.eig_range = eig_range
         self.mu_range = mu_range
         self.seed = seed
         self.vector_range = vector_range
-        self.theta_size = int(n_features*(n_features+3)/2)
+        self.theta_size = int(n_features * (n_features + 3) / 2)
 
     def initialize(self) -> torch.nn.Parameter:
         """
@@ -31,7 +32,9 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
         """
         torch.manual_seed(self.seed)
 
-        Theta = torch.nn.Parameter(torch.normal(mean=0, std=np.sqrt(1/self.theta_size), size=(self.theta_size, self.n_functions), requires_grad=True))
+        Theta = torch.nn.Parameter(
+            torch.normal(mean=0, std=np.sqrt(1 / self.theta_size), size=(self.theta_size, self.n_functions),
+                         requires_grad=True))
 
         mu = torch.rand(self.n_features, self.n_functions) * (self.mu_range[1] - self.mu_range[0]) + self.mu_range[0]
 
@@ -86,7 +89,7 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
         elif not mu_flag:
             mu = mu.detach()
         # Toma los Rho y los representa como una matriz diagonal superior
-        A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim = 0)
+        A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim=0)
         Sigma_inv = torch.matmul(A, A.mT)
         x_mu = x - mu
         exponent = -0.5 * torch.einsum('bij,bik,bji->jb', x_mu, Sigma_inv, x_mu.mT)

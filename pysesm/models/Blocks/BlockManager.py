@@ -1,4 +1,4 @@
-import PartitionBlock
+from pysesm.models.Blocks.PartitionBlock import PartitionBlock
 
 
 class BlockManager:

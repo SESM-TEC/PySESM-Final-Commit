@@ -7,6 +7,7 @@ import time
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
+from pysesm.validation.sesm_validation import validate_sesm_partial_fit
 
 
 class SESM(torch.nn.Module):
@@ -39,7 +40,7 @@ class SESM(torch.nn.Module):
 
     def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, seed: float, model_epochs: int,
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
-                 dictionary_alpha: float, weight_decay):
+                 dictionary_alpha: float, weight_decay: float, h = None):
         """
         Method that initializes the SESM.
 
@@ -86,7 +87,8 @@ class SESM(torch.nn.Module):
             random_seed=self.seed,
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
-            weight_decay=self.weight_decay
+            weight_decay=self.weight_decay,
+            h=h
         )
 
         self.dictionary_layer = DictLayer(
@@ -105,7 +107,7 @@ class SESM(torch.nn.Module):
         """Returns the losses for the Dictionary layer and acts as an attribute due to the @property decorator."""
         return self.dictionary_layer.losses
 
-    def fit(self, X: torch.Tensor, y: torch.Tensor):
+    def fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor = None):
         """
         Trains the model by learning a sparse vector and a dictionary that represent the original function, and it
         redefines the weight each time its called.
@@ -116,7 +118,7 @@ class SESM(torch.nn.Module):
         """
 
         self.dictionary_layer.initialize_layer(X)
-        self.ista_layer.initialize_h_vector()
+        self.ista_layer.initialize_h_vector(h)
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -127,9 +129,12 @@ class SESM(torch.nn.Module):
             self.elapsed_time += (epoch_end_time - epoch_start_time)
 
             logging.info(
-                f'Fit epoch {epoch + 1} Loss_ISTA: {self.ista_layer_losses[-1]} Loss_Dictionary: {self.dictionary_layer_losses[-1]} \n')
+                "Epoch {} - Fit: Loss ISTA Layer: {:.6f}, Loss Dictionary Layer: {:.6f}".format(
+                    epoch + 1, self.ista_layer_losses[-1], self.dictionary_layer_losses[-1]
+                )
+            )
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor) -> None:
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor = None) -> None:
         """
         Trains the model by learning a sparse vector and a dictionary that represent the original function without redefining the weight each time.
 
@@ -138,8 +143,19 @@ class SESM(torch.nn.Module):
             y (torch.Tensor): Target data of shape (n_samples,).
         """
 
+        validate_sesm_partial_fit(self, X, y)
+
         if self.dictionary_layer.dictionary is None:
+            logging.warning("[SESM] Initializing dictionary layer with first iteration of model")
             self.dictionary_layer.initialize_layer(X)
+
+        if h is not None:
+            logging.info(
+                "[SESM] Overriding h vector in ISTA Layer because a custom 'h' parameter was provided during SESM partial fit. New h: {}".format(
+                    h
+                )
+            )
+            self.ista_layer.h.data = h
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -148,9 +164,12 @@ class SESM(torch.nn.Module):
 
             epoch_end_time = time.time()
             self.elapsed_time += (epoch_end_time - epoch_start_time)
-        
+
             logging.info(
-                f'Partial fit epoch {epoch + 1} Loss_ISTA: {self.ista_layer_losses[-1]} Loss_Dictionary: {self.dictionary_layer_losses[-1]} \n')
+                "Epoch {} - Partial Fit: Loss ISTA: {:.6f}, Loss Dictionary: {:.6f}".format(
+                    epoch + 1, self.ista_layer_losses[-1], self.dictionary_layer_losses[-1]
+                )
+            )
 
     def forward(self, X: torch.Tensor, y: torch.Tensor) -> None:
         """
@@ -186,6 +205,7 @@ class SESM(torch.nn.Module):
             epochs=self.ista_epochs,
             dictionary=self.dictionary_layer.dictionary
         )
+
         self.losses_ISTA.append(self.ista_layer.losses[-1])
         self.losses_Dictionary.append(self.dictionary_layer.losses[-1])
 

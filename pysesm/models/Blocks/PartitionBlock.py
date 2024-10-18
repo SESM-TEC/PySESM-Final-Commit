@@ -16,11 +16,14 @@ class PartitionBlock:
     - add_point(point): Add a point to the sub-block.
     """
 
-    def __init__(self, block_index: tuple[int, ...], block_size: torch.Tensor, amplitude=1, h=None):
+    def __init__(self, space_bound: torch.Tensor, block_index: tuple[int, ...], block_size: torch.Tensor, amplitude: int = 1, h=None):
         self.block_index = block_index
         self.block_size = block_size
-        base_edge = block_index * block_size
-        self.block_scope = torch.tensor([base_edge, base_edge + block_size])
+        eps = torch.finfo(torch.float32).eps
+        base_edge = space_bound + torch.mul(torch.tensor(block_index), block_size)
+        print(block_size)
+        self.block_scope = torch.stack((base_edge - eps, base_edge + block_size + eps))
+        print("Block config", base_edge, self.block_scope)
         self.h = h
         self.amplitude = amplitude
         self.X = []
@@ -37,7 +40,7 @@ class PartitionBlock:
         return len(self.X) > 0
 
     def is_point_in_block(self, point_x):
-        return self.block_scope[0] <= point_x <= self.block_scope[1]
+        return torch.all(self.block_scope[0] <= point_x) and torch.all(point_x <= self.block_scope[1])
 
     def normalize(self):
         tensor_X = torch.tensor(self.X)

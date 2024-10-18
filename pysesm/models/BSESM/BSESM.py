@@ -1,6 +1,7 @@
-import numpy as np
 import torch
+from sklearn.metrics import mean_squared_error
 
+from pysesm.base_functions.sub_block_partition import predict_on_test_set
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
@@ -26,7 +27,7 @@ class BSESM(SESM):
                  surrogate_function: ApproximateSurrogateFunction,
                  dfngroup,
                  iter,
-                 T: int,
+                 T: list[int],
                  seed,
                  logger,
                  debug=True):
@@ -63,7 +64,7 @@ class BSESM(SESM):
         self.vector_range = vector_range
         self.dfngroup = dfngroup
         self.iter = iter
-        self.T = T
+        self.T = torch.tensor(T)
         self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=l_functions)
         self.logger = logger
         self.debug = debug
@@ -82,20 +83,70 @@ class BSESM(SESM):
             weight_decay=weight_decay
         )
 
-    def partial_fit(self, X, y):
+    def partial_fit(self, X, y, h=None):
         self.partition_manager.add_points(X, y)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         long_h = torch.column_stack(tuple([block.h for block in active_blocks]))
-        self.ista_layer.h.data = long_h
 
-        max_points_in_block = max(active_blocks, key=lambda block: len(block.X))
+        max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
 
-        standardized_points = np.empty((max_points_in_block, self.l_functions * len(active_blocks)))
-        for index, block in enumerate(active_blocks):
-            evaluated_X = self.psi(block.normalized_X.mT, self.theta_parameter_vector, True, True)
-            result = torch.zeros(max_points_in_block)
-            result[:len(evaluated_X)] = evaluated_X
-            standardized_points[index] = result
+        empty_X = [0 for _ in range(self.n_features)]
 
-        super().partial_fit(torch.tensor(standardized_points).mT, y)
+        filled_active_blocks_X = []
+        filled_active_blocks_y = []
+
+        for block in active_blocks:
+            filled_active_blocks_X.extend(
+                [
+                    block.normalized_X[index] if len(block.normalized_X) > index else empty_X
+                    for index in range(max_points_in_block)
+                ])
+            filled_active_blocks_y.extend(
+                [
+                    block.y[index] if len(block.normalized_X) > index else 0
+                    for index in range(max_points_in_block)
+                ]
+            )
+
+        filled_active_blocks_X = torch.tensor(filled_active_blocks_X)
+        filled_active_blocks_y = torch.tensor(filled_active_blocks_y)
+
+        print(long_h)
+        super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h)
+
+    def forward(self, X: torch.Tensor, y: torch.Tensor) -> None:
+        super().forward(X, y)
+
+    def predict(self, X_test):
+        """
+        Predict the output using the trained SESM model with sub-blocks.
+
+        Args:
+            X_test (torch.Tensor): Input features for prediction.
+            list_sub_blocks (list): A list of sub-blocks used for the prediction process.
+
+        Returns:
+            torch.Tensor: Predicted values for the test set.
+        """
+        return predict_on_test_set(X_test, super(), self.T, self.partition_manager.blocks)
+
+    def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
+        """
+        Perform a forward pass for model evaluation with sub-blocks.
+
+        Args:
+            X (torch.Tensor): Input features for evaluation.
+            y (torch.Tensor): True target values for evaluation.
+            list_sub_blocks (list): A list of sub-blocks to be used for evaluation.
+
+        Returns:
+            tuple: A tuple containing:
+                - Predicted values (torch.Tensor).
+                - Training time (float): Time taken for the training process (in minutes).
+                - Mean squared error (float): MSE between predicted and true target values.
+        """
+        y_pred = self.predict(X, self.partition_manager.blocks)
+        time = self.elapsed_time / 60
+        mse = mean_squared_error(y_pred.clone().detach(), y)
+        return y_pred, time, mse

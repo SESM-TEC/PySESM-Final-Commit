@@ -15,7 +15,7 @@ class ISTALayer(torch.nn.Module):
     """
 
     def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
-                 criterion=None, optimizer=None, h: torch.nn.Parameter = None):
+                 criterion=None, optimizer=None, h: torch.Tensor = None):
 
         super().__init__()
         self.n_functions = n_functions
@@ -26,10 +26,7 @@ class ISTALayer(torch.nn.Module):
         self.losses = []
         torch.manual_seed(random_seed)
 
-        if h is None:
-            self.initialize_h_vector()
-        else:
-            self.h = h
+        self.initialize_h_vector(h)
 
         if criterion is None:
             self.criterion = torch.nn.MSELoss()
@@ -41,9 +38,13 @@ class ISTALayer(torch.nn.Module):
         else:
             self.optimizer = optimizer(parameters=self.parameters(), lr=alpha, weight_decay=weight_decay)
 
-    def initialize_h_vector(self) -> None:
-        self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
-        self.h.data /= self.h.data.sum()
+    def initialize_h_vector(self, h: torch.Tensor) -> None:
+        if h is not None:
+            self.h = torch.nn.Parameter(h)
+        else:
+            self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
+            self.h.data /= self.h.data.sum()
+
 
     def shrinkage(self) -> torch.Tensor:
         """
@@ -58,10 +59,12 @@ class ISTALayer(torch.nn.Module):
         """
         return torch.sign(self.h) * torch.max(torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h))
 
+
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         for _ in range(epochs):
             new_h = self.forward(y, dictionary, log_losses)
             if new_h is not None: self.h.data = new_h
+
 
     def forward(self, y, dictionary, log_losses=True):
         y_pred = dictionary @ self.h
