@@ -176,6 +176,44 @@ def predict_on_test_set(X_test, model, T, train_sb):
 
     return sorted_predictions
 
+def predict_on_test_set_bsesm(X_test, model, T, train_sb):
+    """
+    Predicts on a test set using a given model and training sub-blocks.
+
+    Args:
+    - X_test (torch.Tensor): A tensor containing the test data.
+    - model (Model): The model used for prediction.
+    - T (int): The scaling factor for normalizing the data.
+    - train_sb (list): A list of training sub-blocks used for prediction.
+
+    Returns:
+    - sorted_predictions (torch.Tensor): A tensor containing the sorted predictions for the test data.
+    """
+    t_test, x_n_test = data_mapping(X_test, T)
+
+    sorted_predictions = torch.zeros(len(X_test),
+                                     dtype=torch.float32)  # Tensor para almacenar las predicciones ordenadas
+
+    for row in range(T):
+        for col in range(T):
+            sub_block_points = x_n_test[(t_test[:, 0] == row) & (t_test[:, 1] == col)]
+            indices = np.where((t_test[:, 0] == row) & (t_test[:, 1] == col))[0]
+
+            if len(sub_block_points) > 0:
+                X_sub_block = torch.tensor(sub_block_points, dtype=torch.float32)
+
+                try:
+                    current_train_block = train_sb[row * T + col]
+                    predictions_sub_block = model.predict(X_sub_block, current_train_block.ista_layer)
+                    print("CURRENT ISTA on sub block ", current_train_block.ista_layer.h)
+                    print("SUM VALUES H ", current_train_block.ista_layer.h.data.sum())
+                    sorted_predictions[indices] = predictions_sub_block.float() / current_train_block.amplitude
+                except IndexError:
+                    # No se hace nada para los bloques dummy
+                    pass
+
+    return sorted_predictions
+
 
 def count_unique_combinations(T):
     """

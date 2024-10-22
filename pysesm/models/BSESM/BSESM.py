@@ -1,3 +1,5 @@
+import logging
+
 import torch
 from sklearn.metrics import mean_squared_error
 
@@ -87,10 +89,11 @@ class BSESM(SESM):
         self.partition_manager.add_points(X, y)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
-        long_h = torch.column_stack(tuple([block.h for block in active_blocks]))
+        long_h = torch.cat(tuple([block.h for block in active_blocks])).resize(len(active_blocks) * self.l_functions, 1)
+        long_h.t()
 
         max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
-
+        logging.warning("MAX_POINTS_BLOCK {}".format(max_points_in_block))
         empty_X = [0 for _ in range(self.n_features)]
 
         filled_active_blocks_X = []
@@ -102,6 +105,7 @@ class BSESM(SESM):
                     block.normalized_X[index] if len(block.normalized_X) > index else empty_X
                     for index in range(max_points_in_block)
                 ])
+
             filled_active_blocks_y.extend(
                 [
                     block.y[index] if len(block.normalized_X) > index else 0
@@ -109,14 +113,15 @@ class BSESM(SESM):
                 ]
             )
 
-        filled_active_blocks_X = torch.tensor(filled_active_blocks_X)
-        filled_active_blocks_y = torch.tensor(filled_active_blocks_y)
+        filled_active_blocks_X = torch.tensor(filled_active_blocks_X, dtype=torch.float32)
+        filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
 
-        print(long_h)
+        print(filled_active_blocks_X)
+        print(filled_active_blocks_y)
         super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h)
 
-    def forward(self, X: torch.Tensor, y: torch.Tensor) -> None:
-        super().forward(X, y)
+    def forward(self, X: torch.Tensor, y: torch.Tensor, block_size: int = 1) -> None:
+        super().forward(X, y, block_size)
 
     def predict(self, X_test):
         """
@@ -146,7 +151,7 @@ class BSESM(SESM):
                 - Training time (float): Time taken for the training process (in minutes).
                 - Mean squared error (float): MSE between predicted and true target values.
         """
-        y_pred = self.predict(X, self.partition_manager.blocks)
+        y_pred = self.predict(X)
         time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.clone().detach(), y)
         return y_pred, time, mse

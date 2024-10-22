@@ -191,8 +191,9 @@ for i in range(N_iter):
     bsesm.iter = i
     # Ejecuta el experimento
 
-    print(X_train, y_train)
     bsesm.partial_fit(X_train, y_train)
+    print("LOSSES ISTA", bsesm.losses_ISTA)
+    print("LOSSES DICT", bsesm.losses_Dictionary)
     Z_predict, time, mse_value = bsesm.performance_stats(X_test, y_test)
 
     plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], bsesm.dfngroup, bsesm.iter,

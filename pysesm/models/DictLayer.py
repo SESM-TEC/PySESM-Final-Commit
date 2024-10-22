@@ -1,4 +1,5 @@
 import torch
+from sympy.codegen.ast import float32
 
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 
@@ -84,10 +85,39 @@ class DictLayer(torch.nn.Module):
 
         for _ in range(epochs):
             self.dictionary = self.forward(X, rho_flag, mu_flag)
+            print("dictionary", self.dictionary.shape)
+            print("h", h.shape)
+            print("X", X.shape)
+            print("y", y.shape)
+
+            n = 40
+            # Initialize newDictionary with zeros or another value
+            newDictionary = torch.empty((n, self.n_functions * 16), dtype=torch.float32)
+
+            i = 0
+            while i < X.shape[0]:
+                idx = i % n  # Row index in newDictionary
+                chunk_start = (i // n) * self.n_functions  # Starting index for column slice
+                chunk_end = (i // n + 1) * self.n_functions  # Ending index for column slice
+
+                if torch.all(newDictionary[idx] == 0):  # Check if the row is empty
+                    newDictionary[idx, chunk_start:chunk_end] = self.dictionary[i]  # Assign the first chunk
+                else:
+                    # Assign the next chunk into the corresponding columns
+                    newDictionary[idx, chunk_start:chunk_end] = self.dictionary[i]
+
+                print(i)
+                i += 1
+            # Update self.dictionary with the new tensor
+            self.dictionary = newDictionary
+            print("dictionary", self.dictionary.shape)
+
             y_pred = self.dictionary @ h
+            print("Y_PRED", y_pred)
+            print("Y", y)
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
-
+            print(loss)
             loss.backward(retain_graph=True)
             self.optimizer.step()
 

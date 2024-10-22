@@ -171,11 +171,12 @@ class SESM(torch.nn.Module):
                 )
             )
 
-    def forward(self, X: torch.Tensor, y: torch.Tensor) -> None:
+    def forward(self, X: torch.Tensor, y: torch.Tensor, block_size:int=1) -> None:
         """
         Computes the forward pass for the model.
 
         Args:
+           block_size:
            X (torch.Tensor): Input data of shape (n_samples, n_features).
            y (torch.Tensor): Target data of shape (n_samples,).
         """

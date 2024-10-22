@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Union
 
 import numpy as np
 import torch
@@ -53,9 +53,8 @@ class UniformPartitionManager(BlockManager):
         self.X = None
         self.y = None
 
-    def _find_block(self, X: torch.Tensor) -> PartitionBlock | None:
+    def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
         # TODO: Find efficient way to find block
-        print(X)
         for index in np.ndindex(self.blocks.shape):
             if self.blocks[index].is_point_in_block(X):
                 return self.blocks[index]
@@ -70,7 +69,6 @@ class UniformPartitionManager(BlockManager):
         if self.blocks is None:
             # Check for user given initial bounds
             if self.initial_bounds is None:
-                print("MIN TEST", torch.min(X, dim=0))
                 self.initial_bounds = torch.vstack(
                     [torch.min(X, dim=0).values, torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
                 logging.warning('[UniformPartitionManager] No initial bounds provided using calculated one {}'.format(
@@ -80,10 +78,6 @@ class UniformPartitionManager(BlockManager):
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
             block_size = torch.div(delta, self.T)
-            print("INITIAL BOUNDS", self.initial_bounds)
-            print("DELTA", delta)
-            print("BLOCK SIZE", block_size)
-            print("T", self.T)
 
             block_count = torch.prod(self.T)
 
