@@ -6,7 +6,7 @@ import torch
 
 from pysesm.models.Blocks.BlockManager import BlockManager
 from pysesm.models.Blocks.PartitionBlock import PartitionBlock
-
+from pysesm.models.ISTALayer import ISTALayer
 DEFAULT_BLOCKS_PER_DIM = 4
 
 
@@ -138,8 +138,19 @@ class UniformPartitionManager(BlockManager):
 
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks)
-        print(self.blocks)
         self._configure_blocks()
-
+    
+    def init_ista_per_block(self, n_features: int, seed:int, ista_alpha: float,ista_lambd: float,weight_decay: float, h = None):
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            block.ista_layer = ISTALayer(
+                n_functions=n_features,
+                random_seed=seed,
+                alpha=ista_alpha,
+                lambd=ista_lambd,
+                weight_decay=weight_decay,
+                h=h
+                )
+    
     def retrieve_active_blocks(self):
         return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]
