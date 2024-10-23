@@ -52,6 +52,7 @@ class UniformPartitionManager(BlockManager):
         self.blocks = None
         self.X = None
         self.y = None
+        self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
     def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
         # TODO: Find efficient way to find block
@@ -119,9 +120,6 @@ class UniformPartitionManager(BlockManager):
         x_n = norm_x - t
         return t, x_n
 
-    def _normalize_blocks(self):
-        map(lambda x: x.normalize(), self.blocks)
-
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
         Locate points in their respective sub-blocks.
@@ -139,7 +137,8 @@ class UniformPartitionManager(BlockManager):
         self._update_block_arrangement(X)
 
         self._map_points(X, y)
-        self._normalize_blocks()
+        self._vectorized_normalization(self.blocks)
+        print(self.blocks)
         self._configure_blocks()
 
     def retrieve_active_blocks(self):

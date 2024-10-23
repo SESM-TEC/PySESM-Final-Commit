@@ -43,7 +43,6 @@ class PartitionBlock:
         return torch.all(self.block_scope[0] <= point_x) and torch.all(point_x <= self.block_scope[1])
 
     def normalize(self):
-        tensor_X = torch.tensor(self.X)
+        tensor_X = torch.stack(self.X)
         eps = self.block_scope * 1e-6
-        # Cambiar torch min oor average?
-        self.normalized_X = ((tensor_X - torch.min(tensor_X)) / (self.block_scope + eps))
+        self.normalized_X = (tensor_X - self.block_scope[0])/self.block_scope[1]
