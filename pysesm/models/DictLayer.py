@@ -115,17 +115,13 @@ class DictLayer(torch.nn.Module):
         if not max_points_in_block and not active_blocks_count:
             return evaluated_dictionary
         else:
-            print("dictionary", evaluated_dictionary.shape)
             # Initialize newDictionary with zeros or another value
             newDictionary = torch.empty((max_points_in_block, self.n_functions * active_blocks_count), dtype=torch.float32)
             i = 0
-            print("X.shape", X.shape)
             while i < X.shape[0]:
                 idx = i % max_points_in_block  # Row index in newDictionary
                 chunk_start = (i // max_points_in_block) * self.n_functions  # Starting index for column slice
                 chunk_end = (i // max_points_in_block + 1) * self.n_functions  # Ending index for column slice
-                print("shape evaluated_dictionary[{}]".format(i), evaluated_dictionary[i].shape)
-                print("shape newDictionary[idx, chunk_start:chunk_end]", newDictionary[idx, chunk_start:chunk_end])
                 newDictionary[idx, chunk_start:chunk_end] = evaluated_dictionary[i]
 
                 i += 1

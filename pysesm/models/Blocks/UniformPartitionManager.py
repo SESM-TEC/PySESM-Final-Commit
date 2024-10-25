@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import Union
 
 import numpy as np
@@ -7,6 +8,7 @@ import torch
 from pysesm.models.Blocks.BlockManager import BlockManager
 from pysesm.models.Blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
+
 DEFAULT_BLOCKS_PER_DIM = 4
 
 
@@ -72,7 +74,8 @@ class UniformPartitionManager(BlockManager):
             # Check for user given initial bounds
             if self.initial_bounds is None:
                 self.initial_bounds = torch.vstack(
-                    [torch.min(X, dim=0).values, torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
+                    [torch.min(X, dim=0).values,
+                     torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
                 logging.warning('[UniformPartitionManager] No initial bounds provided using calculated one {}'.format(
                     self.initial_bounds
                 ))
@@ -130,7 +133,8 @@ class UniformPartitionManager(BlockManager):
         """
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
-            selected_block.new_point(X[i], y[i])
+            if selected_block is not None:
+                selected_block.new_point(X[i], y[i])
 
     def add_points(self, X: torch.Tensor, y: np.ndarray):
         self._update_block_arrangement(X)
@@ -138,8 +142,9 @@ class UniformPartitionManager(BlockManager):
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks)
         self._configure_blocks()
-    
-    def init_ista_per_block(self, n_features: int, seed:int, ista_alpha: float,ista_lambd: float,weight_decay: float, h = None):
+
+    def init_ista_per_block(self, n_features: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
+                            h=None):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
@@ -149,17 +154,25 @@ class UniformPartitionManager(BlockManager):
                 lambd=ista_lambd,
                 weight_decay=weight_decay,
                 h=h
-                )
-    
+            )
+
     def retrieve_active_blocks(self):
         return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]
 
-    def retrieve_test_blocks(self, X, y):
-        #Copy blocks
-        #Clone blocks
-        #Delete x and y from blocks
+    def retrieve_test_active_blocks(self, X, y):
+        # Copy blocks without X and y
+        test_blocks = deepcopy(self.blocks)
 
+        # Save temporally current blocks
+        temp_current_blocks = self.blocks
+        self.blocks = test_blocks
+
+        # Map and normalize points into test blocks
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks)
-        self._configure_blocks()
 
+        # Retrieved mapped test blocks and return to usual blocks
+        test_active_blocks = self.retrieve_active_blocks()
+        self.blocks = temp_current_blocks
+
+        return test_active_blocks

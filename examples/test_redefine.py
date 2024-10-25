@@ -173,7 +173,8 @@ bsesm = BSESM(
     seed=experiment_1["Seed"],
     logger=logger,
     T=[experiment_1["T"], experiment_1["T"]],
-    debug=True
+    debug=True,
+    initial_bounds= torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32)
 )
 
 # for i in range(N_iter):

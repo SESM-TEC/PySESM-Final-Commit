@@ -48,5 +48,19 @@ class PartitionBlock:
         self.normalized_X = (tensor_X - self.block_scope[0])/self.block_scope[1]
 
     def clone_test(self):
-        cloned_block = copy.copy(self)
+        cloned_block = PartitionBlock.__new__(PartitionBlock)
+        cloned_block.block_index = self.block_index
+        cloned_block.block_size = self.block_size
+        cloned_block.block_scope = self.block_scope
+        cloned_block.h = self.h
+        cloned_block.amplitude = self.amplitude
+        cloned_block.X = []
+        cloned_block.y = []
+        cloned_block.normalized_X = None
+        cloned_block.predicted_output = []
+        cloned_block.ista_layer = self.ista_layer
+        return cloned_block
+
+
+    __deepcopy__ = lambda self, _: self.clone_test()
 
