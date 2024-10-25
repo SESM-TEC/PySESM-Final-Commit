@@ -50,6 +50,7 @@ class UniformPartitionManager(BlockManager):
         self.threshold = threshold
         self.logger = logger
         self.blocks = None
+        self.block_size = None
         self.X = None
         self.y = None
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
@@ -78,14 +79,12 @@ class UniformPartitionManager(BlockManager):
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
-            block_size = torch.div(delta, self.T)
-
-            block_count = torch.prod(self.T)
+            self.block_size = torch.div(delta, self.T)
 
             self.blocks = np.empty(self.T.numpy(), dtype=PartitionBlock)
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(self.initial_bounds[0], index, block_size)
+                self.blocks[index] = PartitionBlock(self.initial_bounds[0], index, self.block_size)
         else:
             new_max_x = torch.max(X)
             new_min_x = torch.min(X)
@@ -138,8 +137,16 @@ class UniformPartitionManager(BlockManager):
 
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks)
-        print(self.blocks)
         self._configure_blocks()
 
     def retrieve_active_blocks(self):
         return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]
+
+    def retrieve_test_blocks(self, X, y):
+        #Copy blocks
+        #Clone blocks
+        #Delete x and y from blocks
+
+        self._map_points(X, y)
+        self._vectorized_normalization(self.blocks)
+        self._configure_blocks()

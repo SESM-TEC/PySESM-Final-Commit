@@ -195,6 +195,7 @@ for i in range(N_iter):
     print("LOSSES ISTA", bsesm.losses_ISTA)
     print("LOSSES DICT", bsesm.losses_Dictionary)
     Z_predict, time, mse_value = bsesm.performance_stats(X_test, y_test)
+    print(Z_predict, time, mse_value)
 
     plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], bsesm.dfngroup, bsesm.iter,
                  bsesm.losses_ISTA, bsesm.losses_Dictionary)
