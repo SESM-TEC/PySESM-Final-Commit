@@ -14,7 +14,7 @@ from pysesm.models.BSESM.BSESM import BSESM
 os.makedirs('results_1/plots', exist_ok=True)
 os.makedirs('results_1/stats', exist_ok=True)
 
-N_iter = 5  #
+N_iter = 1  #
 
 experiment_1 = {
     "hyp_set": 1,
@@ -127,7 +127,7 @@ surrogate_function = GaussianApproximateSurrogateFunction(
 
 
 # Crea una instancia de la clase SESMS
-ssesm_model = SSESM(
+ssesm = SSESM(
     n_samples=experiment_1["n_samples"],
     n_features=experiment_1["n_features"],
     l_functions=experiment_1["l_functions"],
@@ -147,7 +147,7 @@ ssesm_model = SSESM(
     dfngroup=1,
     iter=0,
     seed=experiment_1["Seed"],
-    T=experiment_1["T"],
+    T=[experiment_1["T"], experiment_1["T"]],
     logger=logger,
 debug=True
 )
@@ -189,9 +189,11 @@ bsesm = BSESM(
 
 for i in range(N_iter):
     bsesm.iter = i
+
     # Ejecuta el experimento
 
     bsesm.partial_fit(X_train, y_train)
+    #ssesm.partial_fit(X_train, y_train)
     print("LOSSES ISTA", bsesm.losses_ISTA)
     print("LOSSES DICT", bsesm.losses_Dictionary)
     Z_predict, time, mse_value = bsesm.performance_stats(X_test, y_test)
