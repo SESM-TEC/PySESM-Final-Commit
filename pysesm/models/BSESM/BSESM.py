@@ -99,26 +99,27 @@ class BSESM(SESM):
         filled_active_blocks_y = []
 
         for block in active_blocks:
-            filled_active_blocks_X.extend(
-                [
-                    block.normalized_X[index] if len(block.normalized_X) > index else empty_X
-                    for index in range(max_points_in_block)
+            filled_active_blocks_X.append(
+                torch.cat([
+                    block.normalized_X,
+                    torch.tensor(
+                        [empty_X for i
+                         in range(max_points_in_block - block.normalized_X.shape[0])]
+                    )
                 ])
-
-            filled_active_blocks_y.extend(
-                [
-                    block.y[index] if len(block.normalized_X) > index else 0
-                    for index in range(max_points_in_block)
-                ]
             )
 
-        filled_active_blocks_X = torch.tensor(filled_active_blocks_X, dtype=torch.float32)
+            filled_active_blocks_y += block.y + [0 for _ in range(max_points_in_block - len(block.y))]
+
+        filled_active_blocks_X = torch.cat(filled_active_blocks_X)
         filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
+        print("FILLED X", filled_active_blocks_X)
+        print("FILLED Y", filled_active_blocks_y)
+        super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h, max_points_in_block, len(active_blocks))
 
-        super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h)
-
-    def forward(self, X: torch.Tensor, y: torch.Tensor, block_size: int = 1) -> None:
-        super().forward(X, y, block_size)
+    def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
+                active_blocks_count: int = 0) -> None:
+        super().forward(X, y, max_points_in_block, active_blocks_count)
 
     def predict(self, X_test):
         """
@@ -131,7 +132,29 @@ class BSESM(SESM):
         Returns:
             torch.Tensor: Predicted values for the test set.
         """
-        return predict_on_test_set(X_test, super(), self.T, self.partition_manager.blocks)
+
+        filled_active_blocks_X = []
+        active_blocks = self.partition_manager.retrieve_active_blocks()
+        max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
+        empty_X = [0 for _ in range(self.n_features)]
+        for block in active_blocks:
+            filled_active_blocks_X.append(
+                torch.cat([
+                    block.normalized_X,
+                    torch.tensor(
+                        [empty_X for i
+                         in range(max_points_in_block - block.normalized_X.shape[0])]
+                    )
+                ])
+            )
+        y_pred = super().predict(torch.cat(filled_active_blocks_X), max_points_in_block, len(active_blocks))
+        y_pred_per_block = []
+
+        for index, block in enumerate(active_blocks):
+            y_pred_per_block += y_pred[index * max_points_in_block: (index * max_points_in_block) + len(block.y)]
+
+        return torch.cat(y_pred_per_block)
+        # return predict_on_test_set(X_test, super(), self.T, self.partition_manager.blocks)
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """

@@ -66,9 +66,10 @@ class DictLayer(torch.nn.Module):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
+        print(X)
         self.dictionary = self.psi(X.mT, self.theta_parameter_vector)
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, rho_flag: bool = False,
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, max_points_in_block:int=0, active_blocks_count:int=0, rho_flag: bool = False,
                     mu_flag: bool = False, log_losses: bool = True) -> None:
         """
         Method that does a partial fit on the model without redefining the weights of its layers.
@@ -84,32 +85,7 @@ class DictLayer(torch.nn.Module):
         """
 
         for _ in range(epochs):
-            self.dictionary = self.forward(X, rho_flag, mu_flag)
-            print("dictionary", self.dictionary.shape)
-            print("h", h.shape)
-            print("X", X.shape)
-            print("y", y.shape)
-
-            n = 40
-            # Initialize newDictionary with zeros or another value
-            newDictionary = torch.empty((n, self.n_functions * 16), dtype=torch.float32)
-
-            i = 0
-            while i < X.shape[0]:
-                idx = i % n  # Row index in newDictionary
-                chunk_start = (i // n) * self.n_functions  # Starting index for column slice
-                chunk_end = (i // n + 1) * self.n_functions  # Ending index for column slice
-
-                if torch.all(newDictionary[idx] == 0):  # Check if the row is empty
-                    newDictionary[idx, chunk_start:chunk_end] = self.dictionary[i]  # Assign the first chunk
-                else:
-                    # Assign the next chunk into the corresponding columns
-                    newDictionary[idx, chunk_start:chunk_end] = self.dictionary[i]
-
-                print(i)
-                i += 1
-            # Update self.dictionary with the new tensor
-            self.dictionary = newDictionary
+            self.dictionary = self.forward(X,max_points_in_block, active_blocks_count, rho_flag, mu_flag)
             print("dictionary", self.dictionary.shape)
 
             y_pred = self.dictionary @ h
@@ -117,14 +93,13 @@ class DictLayer(torch.nn.Module):
             print("Y", y)
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
-            print(loss)
             loss.backward(retain_graph=True)
             self.optimizer.step()
 
             if log_losses:
                 self.losses.append(loss.item())
 
-    def forward(self, X: torch.Tensor, rho_flag: bool = False, mu_flag: bool = False):
+    def forward(self, X: torch.Tensor,max_points_in_block:int, active_blocks_count:int, rho_flag: bool = False, mu_flag: bool = False):
         """
         Method that computes the forward pass for the current layer.
 
@@ -136,4 +111,23 @@ class DictLayer(torch.nn.Module):
         Returns:
             torch.Tensor: Input values evaluated using the psi function.
         """
-        return self.psi(X.mT, self.theta_parameter_vector, rho_flag, mu_flag)
+        evaluated_dictionary = self.psi(X.mT, self.theta_parameter_vector, rho_flag, mu_flag)
+        if not max_points_in_block and not active_blocks_count:
+            return evaluated_dictionary
+        else:
+            print("dictionary", evaluated_dictionary.shape)
+            # Initialize newDictionary with zeros or another value
+            newDictionary = torch.empty((max_points_in_block, self.n_functions * active_blocks_count), dtype=torch.float32)
+            i = 0
+            print("X.shape", X.shape)
+            while i < X.shape[0]:
+                idx = i % max_points_in_block  # Row index in newDictionary
+                chunk_start = (i // max_points_in_block) * self.n_functions  # Starting index for column slice
+                chunk_end = (i // max_points_in_block + 1) * self.n_functions  # Ending index for column slice
+                print("shape evaluated_dictionary[{}]".format(i), evaluated_dictionary[i].shape)
+                print("shape newDictionary[idx, chunk_start:chunk_end]", newDictionary[idx, chunk_start:chunk_end])
+                newDictionary[idx, chunk_start:chunk_end] = evaluated_dictionary[i]
+
+                i += 1
+            # Update self.dictionary with the new tensor
+            return newDictionary

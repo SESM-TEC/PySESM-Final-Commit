@@ -4,8 +4,8 @@ from sklearn.metrics import mean_squared_error
 
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
 from pysesm.models.SESM.SESM import SESM
-from pysesm.base_functions.sub_block_partition import predict_on_test_set, data_mapping
-
+from pysesm.base_functions.sub_block_partition import predict_on_test_set
+from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 
 class SSESM(SESM):
     """
@@ -35,7 +35,7 @@ class SSESM(SESM):
                  iter,
                  seed,
                  logger,
-                 T:int,
+                 T: list[int],
                  debug=True):
         """
         Initialize the SESMS model with a sequential approach.
@@ -73,7 +73,8 @@ class SSESM(SESM):
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.iter = iter
-        self.T = T
+        self.T = torch.tensor(T)
+        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=l_functions)
         self.logger = logger
         self.debug = debug
 
@@ -91,7 +92,7 @@ class SSESM(SESM):
             weight_decay=weight_decay
         )
 
-    def partial_fit(self, list_sub_blocks, T):
+    def partial_fit2(self, list_sub_blocks, T):
         """
         Incrementally train the SESM model using a sequential approach with sub-blocks.
 
@@ -110,7 +111,27 @@ class SSESM(SESM):
                 X = torch.tensor(np.array(block.X), dtype=torch.float32)
                 self.ista_layer = block.ista_layer
 
-                super().partial_fit(X, y)
+                #super().partial_fit(X, y)
+    
+    def partial_fit(self, X, y):
+        self.partition_manager.add_points(X, y)
+        self.partition_manager.init_ista_per_block(self.n_features, 
+                                                   self.seed,
+                                                   self.ista_alpha,
+                                                   self.ista_alpha,
+                                                   self.weight_decay)
+        active_blocks = self.partition_manager.retrieve_active_blocks()
+        
+        for _ in range(self.permutation_times):
+             selected_indexes = np.random.permutation( len(active_blocks) )
+             permuted_list_sub_blocks = [active_blocks[i] for i in selected_indexes]
+             for block in permuted_list_sub_blocks:
+                self.ista_layer = block.ista_layer
+                X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
+                y_torch = torch.tensor(block.target, dtype=torch.float32)
+                print("---X_torch", X_torch)
+                print("---y_torch", y_torch)
+                super().partial_fit(X_torch, y_torch)
 
     def predict(self, X_test, list_sub_blocks):
         """
