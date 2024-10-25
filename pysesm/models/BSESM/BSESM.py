@@ -93,7 +93,6 @@ class BSESM(SESM):
         long_h.t()
 
         max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
-        logging.warning("MAX_POINTS_BLOCK {}".format(max_points_in_block))
         empty_X = [0 for _ in range(self.n_features)]
 
         filled_active_blocks_X = []
@@ -116,8 +115,6 @@ class BSESM(SESM):
         filled_active_blocks_X = torch.tensor(filled_active_blocks_X, dtype=torch.float32)
         filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
 
-        print(filled_active_blocks_X)
-        print(filled_active_blocks_y)
         super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h)
 
     def forward(self, X: torch.Tensor, y: torch.Tensor, block_size: int = 1) -> None:
