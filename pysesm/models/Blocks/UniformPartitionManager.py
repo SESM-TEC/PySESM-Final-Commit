@@ -76,7 +76,7 @@ class UniformPartitionManager(BlockManager):
                 self.initial_bounds = torch.vstack(
                     [torch.min(X, dim=0).values,
                      torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
-                logging.warning('[UniformPartitionManager] No initial bounds provided using calculated one {}'.format(
+                logging.warning('[UniformPartitionManager] No initial bounds provided, using calculated one {}'.format(
                     self.initial_bounds
                 ))
 
@@ -163,7 +163,7 @@ class UniformPartitionManager(BlockManager):
         # Copy blocks without X and y
         test_blocks = deepcopy(self.blocks)
 
-        # Save temporally current blocks
+        # Save temporarily current blocks
         temp_current_blocks = self.blocks
         self.blocks = test_blocks
 

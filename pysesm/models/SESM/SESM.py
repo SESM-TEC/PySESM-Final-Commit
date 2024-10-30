@@ -218,6 +218,7 @@ class SESM(torch.nn.Module):
         """
         Predicts the value of a function using the learned sparse vector and dictionary.
         Args:
+            max_points_in_block:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             custom_ista_layer (ISTALayer): New ISTA Layer to be used in the prediction process
 

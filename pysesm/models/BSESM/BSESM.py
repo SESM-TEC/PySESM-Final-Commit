@@ -2,6 +2,7 @@ import torch
 from sklearn.metrics import mean_squared_error
 
 from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
+from pysesm.models.Blocks.PartitionBlock import PartitionBlock
 from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
 
@@ -83,20 +84,18 @@ class BSESM(SESM):
             weight_decay=weight_decay
         )
 
-    def partial_fit(self, X, y, h=None):
-        self.partition_manager.add_points(X, y)
-        active_blocks = self.partition_manager.retrieve_active_blocks()
-
-        long_h = torch.cat(tuple([block.h for block in active_blocks])).resize(len(active_blocks) * self.l_functions, 1)
+    def _arrange_batch_h(self, blocks: list[PartitionBlock]):
+        long_h = torch.cat(tuple([block.h for block in blocks])).resize(len(blocks) * self.l_functions, 1)
         long_h.t()
+        return long_h
 
-        max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
-        empty_X = [0 for _ in range(self.n_features)]
-
+    def _fill_block_points(self, blocks: list[PartitionBlock]):
         filled_active_blocks_X = []
         filled_active_blocks_y = []
+        empty_X = [0 for _ in range(self.n_features)]
+        max_points_in_block = len(max(blocks, key=lambda each_block: len(each_block.X)).X)
 
-        for block in active_blocks:
+        for block in blocks:
             filled_active_blocks_X.append(
                 torch.cat([
                     block.normalized_X,
@@ -111,16 +110,25 @@ class BSESM(SESM):
 
         filled_active_blocks_X = torch.cat(filled_active_blocks_X)
         filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
-        print("FILLED X", filled_active_blocks_X)
-        print("FILLED Y", filled_active_blocks_y)
-        super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h, max_points_in_block,
-                            len(active_blocks))
+
+        return filled_active_blocks_X, filled_active_blocks_y, max_points_in_block
+
+
+    def partial_fit(self, X, y, h=None):
+        self.partition_manager.add_points(X, y)
+        active_blocks = self.partition_manager.retrieve_active_blocks()
+
+        long_h = self._arrange_batch_h(active_blocks)
+
+        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = self._fill_block_points(active_blocks)
+
+        super().partial_fit(filled_active_blocks_X, filled_active_blocks_y, long_h, max_points_in_block, len(active_blocks))
 
     def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
                 active_blocks_count: int = 0) -> None:
         super().forward(X, y, max_points_in_block, active_blocks_count)
 
-    def predict(self, X, y):
+    def predict(self, X, y) -> [torch.Tensor, torch.Tensor]:
         """
         Predict the output using the trained SESM model with sub-blocks.
 
@@ -132,32 +140,20 @@ class BSESM(SESM):
             torch.Tensor: Predicted values for the test set.
         """
 
-        filled_active_blocks_X = []
-        print(X)
         active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
-        long_h = torch.cat(tuple([block.h for block in active_blocks])).resize(len(active_blocks) * self.l_functions, 1)
-        long_h.t()
+        long_h = self._arrange_batch_h(active_blocks)
         self.ista_layer.h.data = long_h.data
-        max_points_in_block = len(max(active_blocks, key=lambda block: len(block.X)).X)
-        empty_X = [0 for _ in range(self.n_features)]
-        for block in active_blocks:
-            filled_active_blocks_X.append(
-                torch.cat([
-                    block.normalized_X,
-                    torch.tensor(
-                        [empty_X for i
-                         in range(max_points_in_block - block.normalized_X.shape[0])]
-                    )
-                ])
-            )
-        y_pred = super().predict(torch.cat(filled_active_blocks_X), max_points_in_block, len(active_blocks))
+
+        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = self._fill_block_points(active_blocks)
+
+        y_pred = super().predict(filled_active_blocks_X, max_points_in_block, len(active_blocks))
         y_pred_per_block = []
-        print("y_pred", y_pred)
-        print("y_pred shape", y_pred.shape)
         for index, block in enumerate(active_blocks):
             y_pred_per_block += y_pred[index * max_points_in_block: (index * max_points_in_block) + len(block.y)]
 
-        return torch.cat(y_pred_per_block)
+        y_pred_per_block = torch.cat(y_pred_per_block)
+        filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
+        return y_pred_per_block, filled_active_blocks_y
         # return predict_on_test_set(X_test, super(), self.T, self.partition_manager.blocks)
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
@@ -175,12 +171,12 @@ class BSESM(SESM):
                 - Training time (float): Time taken for the training process (in minutes).
                 - Mean squared error (float): MSE between predicted and true target values.
         """
-        y_pred = self.predict(X, y)
+        y_pred, target = self.predict(X, y)
         print("y_pred", y_pred)
-        print("y", y)
+        print("target", target)
         print("y_pred shape", y_pred.shape)
-        print("y shape", y.shape)
+        print("y shape", target.shape)
         time = self.elapsed_time / 60
         print(time)
-        mse = mean_squared_error(y_pred.clone().detach(), y)
+        mse = mean_squared_error(y_pred.clone().detach(), target)
         return y_pred, time, mse
