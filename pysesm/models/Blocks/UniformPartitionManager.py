@@ -143,12 +143,12 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization(self.blocks)
         self._configure_blocks()
 
-    def init_ista_per_block(self, n_features: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
+    def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
                             h=None):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
-                n_functions=n_features,
+                n_functions=n_functions,
                 random_seed=seed,
                 alpha=ista_alpha,
                 lambd=ista_lambd,

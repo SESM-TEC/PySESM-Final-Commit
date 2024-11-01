@@ -17,7 +17,7 @@ class SSESM(SESM):
     def __init__(self,
                  n_samples: int,
                  n_features: int,
-                 l_functions: int,
+                 n_functions: int,
                  eig_range,
                  mu_range,
                  vector_range,
@@ -43,7 +43,7 @@ class SSESM(SESM):
         Args:
             n_samples (int): Number of samples in the dataset.
             n_features (int): Number of input features.
-            l_functions (int): Number of latent functions used in the model.
+            n_functions (int): Number of latent functions used in the model.
             eig_range (tuple): Range for eigenvalues during dictionary creation.
             mu_range (tuple): Range for mu parameter during dictionary creation.
             vector_range (tuple): Range for vector parameter initialization.
@@ -66,7 +66,7 @@ class SSESM(SESM):
         """
         self.n_samples = n_samples
         self.n_features = n_features
-        self.l_functions = l_functions
+        self.n_functions = n_functions
         self.eig_range = eig_range
         self.mu_range = mu_range
         self.vector_range = vector_range
@@ -74,7 +74,7 @@ class SSESM(SESM):
         self.dfngroup = dfngroup
         self.iter = iter
         self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=l_functions)
+        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions)
         self.logger = logger
         self.debug = debug
 
@@ -115,7 +115,7 @@ class SSESM(SESM):
     
     def partial_fit(self, X, y):
         self.partition_manager.add_points(X, y)
-        self.partition_manager.init_ista_per_block(self.n_features, 
+        self.partition_manager.init_ista_per_block(self.n_functions, 
                                                    self.seed,
                                                    self.ista_alpha,
                                                    self.ista_alpha,

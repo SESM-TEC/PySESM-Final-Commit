@@ -20,7 +20,7 @@ experiment_1 = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "l_functions": 100,
+    "n_functions": 100,
     "eig_range": [1e0, 1e1],
     "mu_range": [-2, 2],
     "vector_range": [1e0, 1e1],
@@ -89,35 +89,35 @@ X_test, y_test = create_design_matrix_test(xx, yy, zz)
 # Un condicional para una grafica de > dimensiones
 # run_experiment deberia de estar fuera de esta clase
 
-def run_experiment(X_train, y_train, X_test, y_test, hyperparams, model):
-    T = hyperparams["T"]
-    l_functions = hyperparams["l_functions"]
-    seed = hyperparams["Seed"]
-    weight_decay = hyperparams["weight_decay"]
-    alpha = hyperparams["ista_alpha"]
-    lambd = hyperparams["ista_lambd"]
-    time, mse_value = 0, 0
+# def run_experiment(X_train, y_train, X_test, y_test, hyperparams, model):
+#     T = hyperparams["T"]
+#     l_functions = hyperparams["l_functions"]
+#     seed = hyperparams["Seed"]
+#     weight_decay = hyperparams["weight_decay"]
+#     alpha = hyperparams["ista_alpha"]
+#     lambd = hyperparams["ista_lambd"]
+#     time, mse_value = 0, 0
 
-    t, x_n = data_mapping(X_train, T)
+#     t, x_n = data_mapping(X_train, T)
 
-    sub_blocks = locate_samples_in_sub_blocks(X_train, y_train, t, T)
+#     sub_blocks = locate_samples_in_sub_blocks(X_train, y_train, t, T)
 
-    list_sub_blocks = generate_list_of_subblock(sub_blocks, l_functions, seed, weight_decay, alpha, lambd)
+#     list_sub_blocks = generate_list_of_subblock(sub_blocks, l_functions, seed, weight_decay, alpha, lambd)
 
-    normalize_sub_blocks(list_sub_blocks, T)
-    model.partial_fit(list_sub_blocks, T)
-    Z_predict, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
+#     normalize_sub_blocks(list_sub_blocks, T)
+#     model.partial_fit(list_sub_blocks, T)
+#     Z_predict, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
 
-    plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], model.dfngroup, model.iter,
-                 model.losses_ISTA, model.losses_Dictionary)
+#     plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], model.dfngroup, model.iter,
+#                  model.losses_ISTA, model.losses_Dictionary)
 
-    return time, mse_value
+#     return time, mse_value
 
 
 # Instanciar la función de aproximación (surrogate function)
 surrogate_function = GaussianApproximateSurrogateFunction(
     n_features=experiment_1["n_features"],
-    n_functions=experiment_1["l_functions"],
+    n_functions=experiment_1["n_functions"],
     eig_range=experiment_1["eig_range"],
     mu_range=experiment_1["mu_range"],
     vector_range=experiment_1["vector_range"],
@@ -130,7 +130,7 @@ surrogate_function = GaussianApproximateSurrogateFunction(
 ssesm = SSESM(
     n_samples=experiment_1["n_samples"],
     n_features=experiment_1["n_features"],
-    l_functions=experiment_1["l_functions"],
+    n_functions=experiment_1["n_functions"],
     eig_range=tuple(experiment_1["eig_range"]),
     mu_range=tuple(experiment_1["mu_range"]),
     vector_range=tuple(experiment_1["vector_range"]),
@@ -155,7 +155,7 @@ debug=True
 bsesm = BSESM(
     n_samples=experiment_1["n_samples"],
     n_features=experiment_1["n_features"],
-    l_functions=experiment_1["l_functions"],
+    l_functions=experiment_1["n_functions"],
     eig_range=tuple(experiment_1["eig_range"]),
     mu_range=tuple(experiment_1["mu_range"]),
     vector_range=tuple(experiment_1["vector_range"]),
