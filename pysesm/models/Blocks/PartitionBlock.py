@@ -28,13 +28,16 @@ class PartitionBlock:
         self.amplitude = amplitude
         self.X = []
         self.y = []
+        self.positions = []
         self.normalized_X = None
+        self.target = []
         self.predicted_output = []
         self.ista_layer = ista_layer
 
-    def new_point(self, point_x, point_y):
+    def new_point(self, point_x, point_y, pos):
         self.X.append(point_x)
         self.y.append(point_y)
+        self.positions.append(pos)
 
     @property
     def is_active(self):
@@ -56,6 +59,8 @@ class PartitionBlock:
         cloned_block.amplitude = self.amplitude
         cloned_block.X = []
         cloned_block.y = []
+        cloned_block.positions = []
+        cloned_block.target = []
         cloned_block.normalized_X = None
         cloned_block.predicted_output = []
         cloned_block.ista_layer = self.ista_layer

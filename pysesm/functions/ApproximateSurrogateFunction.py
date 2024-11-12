@@ -1,5 +1,7 @@
 import logging
 
+import torch
+
 
 # TODO: Understanding how it works maybe this class could be thought as a Provider rather than a Function abstraction.
 # TODO: As it doesnt hold any function values but more like configuration attributes
@@ -30,5 +32,5 @@ class ApproximateSurrogateFunction:
     def initialize(self):
         pass
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> torch.Tensor:
         pass

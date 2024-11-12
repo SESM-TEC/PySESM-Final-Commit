@@ -45,7 +45,6 @@ class ISTALayer(torch.nn.Module):
             self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
             self.h.data /= self.h.data.sum()
 
-
     def shrinkage(self) -> torch.Tensor:
         """
         Performs the shrinkage operation on the layer's parameters with the given hyperparameters.
@@ -59,15 +58,13 @@ class ISTALayer(torch.nn.Module):
         """
         return torch.sign(self.h) * torch.max(torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h))
 
-
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         for _ in range(epochs):
             new_h = self.forward(y, dictionary, log_losses)
             if new_h is not None: self.h.data = new_h
 
-
     def forward(self, y, dictionary, log_losses=True):
-        y_pred = dictionary @ self.h
+        y_pred = torch.bmm(dictionary, self.h).squeeze(-1).flatten()
         loss = self.criterion(y_pred, y)
         self.optimizer.zero_grad()
         loss.backward(retain_graph=True)

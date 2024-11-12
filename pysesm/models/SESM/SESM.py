@@ -134,7 +134,7 @@ class SESM(torch.nn.Module):
                 )
             )
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor = None, max_points_in_block:int=0, active_blocks_count:int=0) -> None:
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block:int=0, active_blocks_count:int=0) -> None:
         """
         Trains the model by learning a sparse vector and a dictionary that represent the original function without redefining the weight each time.
 
@@ -144,18 +144,12 @@ class SESM(torch.nn.Module):
         """
 
         validate_sesm_partial_fit(self, X, y)
+        print("X.shape ", X.shape)
+        print("y.shape ", y.shape)
 
         if self.dictionary_layer.dictionary is None:
             logging.warning("[SESM] Initializing dictionary layer with first iteration of model")
             self.dictionary_layer.initialize_layer(X)
-
-        if h is not None:
-            logging.info(
-                "[SESM] Overriding h vector in ISTA Layer because a custom 'h' parameter was provided during SESM partial fit. New h: {}".format(
-                    h
-                )
-            )
-            self.ista_layer.h.data = h
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -235,7 +229,7 @@ class SESM(torch.nn.Module):
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()
 
-        return dictionary @ h
+        return torch.bmm(dictionary, h).squeeze(-1).flatten()
 
     def loss_analysis(self, dict_epochs: int) -> None:
         current_loss = self.dictionary_layer.losses[-dict_epochs:]

@@ -62,6 +62,7 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             if self.blocks[index].is_point_in_block(X):
                 return self.blocks[index]
+        print("Could not find a block for point", X)
         return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
@@ -134,7 +135,7 @@ class UniformPartitionManager(BlockManager):
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
-                selected_block.new_point(X[i], y[i])
+                selected_block.new_point(X[i], y[i], i)
 
     def add_points(self, X: torch.Tensor, y: np.ndarray):
         self._update_block_arrangement(X)

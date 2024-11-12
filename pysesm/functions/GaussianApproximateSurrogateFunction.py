@@ -77,7 +77,7 @@ class GaussianApproximateSurrogateFunction(ApproximateSurrogateFunction):
 
         return Theta
 
-    def __call__(self, x, Theta: torch.nn.Parameter, rho_flag: bool = False, mu_flag: bool = False):
+    def __call__(self, x, Theta: torch.nn.Parameter, rho_flag: bool = False, mu_flag: bool = False) -> torch.Tensor:
         # Toma los Rho del Theta que recibe
         rho = Theta[:-self.n_features, :]
         # Toma los Myu del Theta que recibe

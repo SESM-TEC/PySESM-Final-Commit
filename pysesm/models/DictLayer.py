@@ -69,7 +69,8 @@ class DictLayer(torch.nn.Module):
         print(X)
         self.dictionary = self.psi(X.mT, self.theta_parameter_vector)
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, max_points_in_block:int=0, active_blocks_count:int=0, rho_flag: bool = False,
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, max_points_in_block: int = 0,
+                    active_blocks_count: int = 0, rho_flag: bool = False,
                     mu_flag: bool = False, log_losses: bool = True) -> None:
         """
         Method that does a partial fit on the model without redefining the weights of its layers.
@@ -85,12 +86,13 @@ class DictLayer(torch.nn.Module):
         """
 
         for _ in range(epochs):
-            self.dictionary = self.forward(X,max_points_in_block, active_blocks_count, rho_flag, mu_flag)
+            self.dictionary = self.forward(X, max_points_in_block, active_blocks_count, rho_flag, mu_flag)
             print("dictionary", self.dictionary.shape)
+            print("h", h.shape)
 
-            y_pred = self.dictionary @ h
-            print("Y_PRED", y_pred)
-            print("Y", y)
+            y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
+            print("Y_PRED", y_pred.shape)
+            print("Y", y.shape)
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
             loss.backward(retain_graph=True)
@@ -99,11 +101,14 @@ class DictLayer(torch.nn.Module):
             if log_losses:
                 self.losses.append(loss.item())
 
-    def forward(self, X: torch.Tensor,max_points_in_block:int, active_blocks_count:int, rho_flag: bool = False, mu_flag: bool = False):
+    def forward(self, X: torch.Tensor, max_points_in_block: int, active_blocks_count: int, rho_flag: bool = False,
+                mu_flag: bool = False):
         """
         Method that computes the forward pass for the current layer.
 
         Args:
+            active_blocks_count:
+            max_points_in_block:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             rho_flag (bool): Whether the rho values will be updated or not.
             mu_flag (book): Whether the mu values will be updated or not.
@@ -115,15 +120,4 @@ class DictLayer(torch.nn.Module):
         if not max_points_in_block and not active_blocks_count:
             return evaluated_dictionary
         else:
-            # Initialize newDictionary with zeros or another value
-            newDictionary = torch.empty((max_points_in_block, self.n_functions * active_blocks_count), dtype=torch.float32)
-            i = 0
-            while i < X.shape[0]:
-                idx = i % max_points_in_block  # Row index in newDictionary
-                chunk_start = (i // max_points_in_block) * self.n_functions  # Starting index for column slice
-                chunk_end = (i // max_points_in_block + 1) * self.n_functions  # Ending index for column slice
-                newDictionary[idx, chunk_start:chunk_end] = evaluated_dictionary[i]
-
-                i += 1
-            # Update self.dictionary with the new tensor
-            return newDictionary
+            return evaluated_dictionary.view((active_blocks_count, max_points_in_block, self.n_functions))
