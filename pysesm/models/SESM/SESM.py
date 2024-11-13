@@ -40,7 +40,7 @@ class SESM(torch.nn.Module):
 
     def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, seed: float, model_epochs: int,
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
-                 dictionary_alpha: float, weight_decay: float, h = None):
+                 dictionary_alpha: float, weight_decay: float, h = None, calculate_y_pred=None):
         """
         Method that initializes the SESM.
 
@@ -73,6 +73,7 @@ class SESM(torch.nn.Module):
         self.losses_ISTA = []
         self.losses_Dictionary = []
         self.elapsed_time = 0
+        self.calculate_y_pred = calculate_y_pred or None
 
         self.loss_stats = {
             "loss_mean": [],
@@ -88,13 +89,15 @@ class SESM(torch.nn.Module):
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
             weight_decay=self.weight_decay,
-            h=h
+            h=h,
+            calculate_y_pred = self.calculate_y_pred
         )
 
         self.dictionary_layer = DictLayer(
             n_samples=self.n_samples,
             psi=psi,
-            alpha=self.dictionary_alpha
+            alpha=self.dictionary_alpha,
+            calculate_y_pred = self.calculate_y_pred
         )
 
     @property
@@ -228,8 +231,9 @@ class SESM(torch.nn.Module):
 
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()
-
-        return torch.bmm(dictionary, h).squeeze(-1).flatten()
+        
+        return self.calculate_y_pred(dictionary, h)
+        #return torch.bmm(dictionary, h).squeeze(-1).flatten()
 
     def loss_analysis(self, dict_epochs: int) -> None:
         current_loss = self.dictionary_layer.losses[-dict_epochs:]

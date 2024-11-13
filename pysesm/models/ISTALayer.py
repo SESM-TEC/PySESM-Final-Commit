@@ -15,7 +15,7 @@ class ISTALayer(torch.nn.Module):
     """
 
     def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
-                 criterion=None, optimizer=None, h: torch.Tensor = None):
+                 criterion=None, optimizer=None, h: torch.Tensor = None, calculate_y_pred=None):
 
         super().__init__()
         self.n_functions = n_functions
@@ -25,7 +25,7 @@ class ISTALayer(torch.nn.Module):
         self.lambd = lambd
         self.losses = []
         torch.manual_seed(random_seed)
-
+        self.calculate_y_pred = calculate_y_pred or None
         self.initialize_h_vector(h)
 
         if criterion is None:
@@ -64,7 +64,8 @@ class ISTALayer(torch.nn.Module):
             if new_h is not None: self.h.data = new_h
 
     def forward(self, y, dictionary, log_losses=True):
-        y_pred = torch.bmm(dictionary, self.h).squeeze(-1).flatten()
+        #y_pred = torch.bmm(dictionary, self.h).squeeze(-1).flatten()
+        y_pred = self.calculate_y_pred(dictionary, self.h)
         loss = self.criterion(y_pred, y)
         self.optimizer.zero_grad()
         loss.backward(retain_graph=True)

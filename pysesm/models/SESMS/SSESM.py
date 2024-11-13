@@ -77,6 +77,7 @@ class SSESM(SESM):
         self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions)
         self.logger = logger
         self.debug = debug
+        self.calculate_y_pred = lambda dictionary, h: dictionary @ h
 
         super().__init__(
             n_samples=n_samples,
@@ -89,29 +90,9 @@ class SSESM(SESM):
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
-            weight_decay=weight_decay
+            weight_decay=weight_decay,
+            calculate_y_pred = self.calculate_y_pred
         )
-
-    def partial_fit2(self, list_sub_blocks, T):
-        """
-        Incrementally train the SESM model using a sequential approach with sub-blocks.
-
-        Args:
-            list_sub_blocks (list): A list b sub-blocks to be used for training.
-            T (int): Scaling factor for normalization (implementation-specific).
-
-        Returns:
-            None
-        """
-        for _ in range(self.permutation_times):
-            selected_indexes = np.random.permutation(T**2)
-            permuted_list_sub_blocks = [list_sub_blocks[i] for i in selected_indexes]
-            for block in permuted_list_sub_blocks:
-                y = torch.tensor(block.output_values, dtype=torch.float32)
-                X = torch.tensor(np.array(block.X), dtype=torch.float32)
-                self.ista_layer = block.ista_layer
-
-                #super().partial_fit(X, y)
     
     def partial_fit(self, X, y):
         self.partition_manager.add_points(X, y)
