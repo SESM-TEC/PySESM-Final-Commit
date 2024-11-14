@@ -77,7 +77,7 @@ class SSESM(SESM):
         self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions)
         self.logger = logger
         self.debug = debug
-        self.calculate_y_pred = lambda dictionary, h: dictionary @ h
+        self.calculate_y_pred = lambda dictionary, h: torch.matmul(dictionary, h)
 
         super().__init__(
             n_samples=n_samples,
