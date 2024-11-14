@@ -23,7 +23,7 @@ class DictLayer(torch.nn.Module):
     """
 
     def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, alpha: float,
-                 criterion: torch.nn.modules.loss._Loss = None, optimizer: torch.optim.Optimizer = None):
+                 criterion: torch.nn.modules.loss._Loss = None, optimizer: torch.optim.Optimizer = None,calculate_y_pred=None):
         """
         Method
 
@@ -48,6 +48,8 @@ class DictLayer(torch.nn.Module):
         self.theta_parameter_vector = self.psi.initialize()
 
         self.dictionary = None
+
+        self.calculate_y_pred = calculate_y_pred or None
 
         if criterion is None:
             self.criterion = torch.nn.MSELoss()
@@ -90,7 +92,9 @@ class DictLayer(torch.nn.Module):
             print("dictionary", self.dictionary.shape)
             print("h", h.shape)
 
-            y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
+            #y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
+            y_pred = self.calculate_y_pred(self.dictionary, h)
+            
             print("Y_PRED", y_pred.shape)
             print("Y", y.shape)
             loss = self.criterion(y_pred, y)

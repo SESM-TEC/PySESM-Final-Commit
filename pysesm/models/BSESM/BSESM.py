@@ -69,6 +69,7 @@ class BSESM(SESM):
                                                          initial_bounds=initial_bounds)
         self.logger = logger
         self.debug = debug
+        self.calculate_y_pred = lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten()
 
         super().__init__(
             n_samples=n_samples,
@@ -81,7 +82,8 @@ class BSESM(SESM):
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
-            weight_decay=weight_decay
+            weight_decay=weight_decay,
+            calculate_y_pred = self.calculate_y_pred
         )
 
     def _arrange_batch_h(self, blocks: list[PartitionBlock]):
@@ -135,7 +137,7 @@ class BSESM(SESM):
                 active_blocks_count: int = 0) -> None:
         super().forward(X, y, max_points_in_block, active_blocks_count)
 
-    def predict(self, X, y) -> [torch.Tensor, torch.Tensor]:
+    def predict(self, X, y) -> [torch.Tensor, torch.Tensor]: # type: ignore
         """
         Predict the output using the trained SESM model with sub-blocks.
 
