@@ -103,7 +103,6 @@ class BSESM(SESM):
                     , dtype=torch.float32)
                 ])
             )
-
             filled_active_blocks_y += block.target + [0 for _ in range(max_points_in_block - len(block.target))]
 
         filled_active_blocks_X = torch.cat(filled_active_blocks_X)
@@ -162,9 +161,6 @@ class BSESM(SESM):
             for pos in block.positions:
                 y_pred_per_block[pos] = y_pred[i]
                 i += 1
-            # y_pred_per_block += y_pred[index * max_points_in_block: (index * max_points_in_block) + len(
-            #     block.y)] * block.amplitude
-            # features.extend(torch.stack(block.X) * block.block_scope[1] + block.block_scope[0])
         y_pred_per_block = torch.tensor(y_pred_per_block, dtype=torch.float32)
 
         for i in range(len(y)):

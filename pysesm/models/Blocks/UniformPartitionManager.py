@@ -61,6 +61,8 @@ class UniformPartitionManager(BlockManager):
         # TODO: Find efficient way to find block
         for index in np.ndindex(self.blocks.shape):
             if self.blocks[index].is_point_in_block(X):
+                print("POINT", X, "is inside block", self.blocks[index].block_scope)
+
                 return self.blocks[index]
         print("Could not find a block for point", X)
         return None
@@ -93,7 +95,7 @@ class UniformPartitionManager(BlockManager):
             new_max_x = torch.max(X)
             new_min_x = torch.min(X)
 
-    def _configure_blocks(self):
+    def _configure_blocks(self, init_h: bool = True):
         """
         Configures the blocks with their expected squeeze factor
         """
@@ -101,8 +103,9 @@ class UniformPartitionManager(BlockManager):
             block = self.blocks[index]
             if len(block.y) != 0:
                 block.amplitude = squeeze_factor(block.y)
-                block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
-                block.h.data /= block.h.data.sum()
+                if init_h:
+                    block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
+                    block.h.data /= block.h.data.sum()
                 block.target = [value * block.amplitude for value in block.y]
 
     def _data_mapping(self, X: torch.Tensor):
@@ -171,6 +174,7 @@ class UniformPartitionManager(BlockManager):
         # Map and normalize points into test blocks
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks)
+        self._configure_blocks(init_h=False)
 
         # Retrieved mapped test blocks and return to usual blocks
         test_active_blocks = self.retrieve_active_blocks()

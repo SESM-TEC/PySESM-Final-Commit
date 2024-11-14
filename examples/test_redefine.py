@@ -29,7 +29,7 @@ experiment_1 = {
     "dictionary_alpha": 0.08928,
     "rho_epochs": 50,
     "mu_epochs": 50,
-    "model_epochs": 200,
+    "model_epochs": 15,
     "dict_epochs": 50,
     "ista_epochs": 50,
     "T": 4,
