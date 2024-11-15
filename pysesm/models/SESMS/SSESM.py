@@ -37,6 +37,7 @@ class SSESM(SESM):
                  seed,
                  logger,
                  T: list[int],
+                 initial_bounds=None,
                  debug=True):
         """
         Initialize the SESMS model with a sequential approach.
@@ -75,7 +76,7 @@ class SSESM(SESM):
         self.dfngroup = dfngroup
         self.iter = iter
         self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions)
+        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions,initial_bounds=initial_bounds)
         self.logger = logger
         self.debug = debug
         self.calculate_y_pred = lambda dictionary, h: torch.matmul(dictionary, h)

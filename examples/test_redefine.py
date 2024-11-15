@@ -1,23 +1,17 @@
-import torch
-
-from pysesm.utils.gaussian_covariance_density import *
-from pysesm.utils.mesh_generation import *
-from pysesm.utils.design_matrices import *
-from pysesm.base_functions.sub_block_partition import *
 from pysesm.functions.GaussianApproximateSurrogateFunction import *
-from pysesm.utils.plot_and_save_stats import *
-from pysesm.utils.loggers import setup_logger
-from pysesm.models.SESMS.SSESM import SSESM
 from pysesm.models.BSESM.BSESM import BSESM
+from pysesm.models.SESMS.SSESM import SSESM
+from pysesm.utils.design_matrices import *
+from pysesm.utils.gaussian_covariance_density import *
+from pysesm.utils.loggers import setup_logger
+from pysesm.utils.mesh_generation import *
+from pysesm.utils.plot_and_save_stats import *
 
-# Crear los directorios de resultados
-os.makedirs('results_2/plots', exist_ok=True)
-os.makedirs('results_2/stats', exist_ok=True)
 
 N_iter = 1  #
 
-experiment_1 = {
-    "hyp_set": 2,
+experiment = {
+    "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
     "n_functions": 25,
@@ -32,12 +26,16 @@ experiment_1 = {
     "model_epochs": 100,
     "dict_epochs": 50,
     "ista_epochs": 50,
-    "T": 1,
+    "T": [1, 1],
+    "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "weight_decay": 0.004875,
     "permutation_times": 1,
-    "mode": "secuencial",
+    "mode": "sequential",
     "Seed": 45
 }
+# modes: sequential || batch
+
+folder_name = f"results_{experiment["hyp_set"]}_{experiment["mode"]}"
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                               datefmt='%Y-%m-%d %H:%M:%S')
@@ -72,17 +70,16 @@ mu_list = [mu1, mu2, mu3]
 
 xx, yy, zz = generate_mesh(50, -2, 2, sigma_list, mu_list)
 
-xx_r, yy_r, zz_r = generate_random_samples(500, -2, 2, sigma_list, mu_list, experiment_1["Seed"])
+xx_r, yy_r, zz_r = generate_random_samples(500, -2, 2, sigma_list, mu_list, experiment["Seed"])
 
 # Dataset
 data = []
 trainDataset = {"X": xx_r.ravel(), "Y": yy_r.ravel(), "Z": zz_r.ravel()}
 testDataset = {"X": xx.ravel(), "Y": yy.ravel(), "Z": zz.ravel()}
 # Crear la matriz de diseño
-X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, experiment_1)
+X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, experiment)
 # Crear la matriz de diseño
 X_test, y_test = create_design_matrix_test(xx, yy, zz)
-
 
 # Ejecutar el experimento
 # Cambiar los datos por una matriz de matriz de diseño X
@@ -108,7 +105,7 @@ X_test, y_test = create_design_matrix_test(xx, yy, zz)
 #     model.partial_fit(list_sub_blocks, T)
 #     Z_predict, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
 
-#     plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], model.dfngroup, model.iter,
+#     plot_surface(testDataset, X_train, y_train, Z_predict, experiment["hyp_set"], model.dfngroup, model.iter,
 #                  model.losses_ISTA, model.losses_Dictionary)
 
 #     return time, mse_value
@@ -116,92 +113,95 @@ X_test, y_test = create_design_matrix_test(xx, yy, zz)
 
 # Instanciar la función de aproximación (surrogate function)
 surrogate_function = GaussianApproximateSurrogateFunction(
-    n_features=experiment_1["n_features"],
-    n_functions=experiment_1["n_functions"],
-    eig_range=experiment_1["eig_range"],
-    mu_range=experiment_1["mu_range"],
-    vector_range=experiment_1["vector_range"],
-    seed=experiment_1["Seed"],
+    n_features=experiment["n_features"],
+    n_functions=experiment["n_functions"],
+    eig_range=experiment["eig_range"],
+    mu_range=experiment["mu_range"],
+    vector_range=experiment["vector_range"],
+    seed=experiment["Seed"],
     logger=logger
 )
 
-
 # Crea una instancia de la clase SESMS
 ssesm = SSESM(
-    n_samples=experiment_1["n_samples"],
-    n_features=experiment_1["n_features"],
-    n_functions=experiment_1["n_functions"],
-    eig_range=tuple(experiment_1["eig_range"]),
-    mu_range=tuple(experiment_1["mu_range"]),
-    vector_range=tuple(experiment_1["vector_range"]),
-    model_epochs=experiment_1["model_epochs"],
-    ista_epochs=experiment_1["ista_epochs"],
-    rho_epochs=experiment_1["rho_epochs"],
-    mu_epochs=experiment_1["mu_epochs"],
-    ista_alpha=experiment_1["ista_alpha"],
-    ista_lambd=experiment_1["ista_lambd"],
-    dictionary_alpha=experiment_1["dictionary_alpha"],
-    weight_decay=experiment_1["weight_decay"],
+    n_samples=experiment["n_samples"],
+    n_features=experiment["n_features"],
+    n_functions=experiment["n_functions"],
+    eig_range=tuple(experiment["eig_range"]),
+    mu_range=tuple(experiment["mu_range"]),
+    vector_range=tuple(experiment["vector_range"]),
+    model_epochs=experiment["model_epochs"],
+    ista_epochs=experiment["ista_epochs"],
+    rho_epochs=experiment["rho_epochs"],
+    mu_epochs=experiment["mu_epochs"],
+    ista_alpha=experiment["ista_alpha"],
+    ista_lambd=experiment["ista_lambd"],
+    dictionary_alpha=experiment["dictionary_alpha"],
+    weight_decay=experiment["weight_decay"],
     surrogate_function=surrogate_function,
-    permutation_times=experiment_1["permutation_times"],
+    permutation_times=experiment["permutation_times"],
     dfngroup=1,
     iter=0,
-    seed=experiment_1["Seed"],
-    T=[experiment_1["T"], experiment_1["T"]],
+    seed=experiment["Seed"],
+    T=experiment["T"],
     logger=logger,
-debug=True
+    debug=True,
+    initial_bounds=experiment["initial_bounds"]
 )
 
 bsesm = BSESM(
-    n_samples=experiment_1["n_samples"],
-    n_features=experiment_1["n_features"],
-    l_functions=experiment_1["n_functions"],
-    eig_range=tuple(experiment_1["eig_range"]),
-    mu_range=tuple(experiment_1["mu_range"]),
-    vector_range=tuple(experiment_1["vector_range"]),
-    model_epochs=experiment_1["model_epochs"],
-    ista_epochs=experiment_1["ista_epochs"],
-    rho_epochs=experiment_1["rho_epochs"],
-    mu_epochs=experiment_1["mu_epochs"],
-    ista_alpha=experiment_1["ista_alpha"],
-    ista_lambd=experiment_1["ista_lambd"],
-    dictionary_alpha=experiment_1["dictionary_alpha"],
-    weight_decay=experiment_1["weight_decay"],
+    n_samples=experiment["n_samples"],
+    n_features=experiment["n_features"],
+    l_functions=experiment["n_functions"],
+    eig_range=tuple(experiment["eig_range"]),
+    mu_range=tuple(experiment["mu_range"]),
+    vector_range=tuple(experiment["vector_range"]),
+    model_epochs=experiment["model_epochs"],
+    ista_epochs=experiment["ista_epochs"],
+    rho_epochs=experiment["rho_epochs"],
+    mu_epochs=experiment["mu_epochs"],
+    ista_alpha=experiment["ista_alpha"],
+    ista_lambd=experiment["ista_lambd"],
+    dictionary_alpha=experiment["dictionary_alpha"],
+    weight_decay=experiment["weight_decay"],
     surrogate_function=surrogate_function,
     dfngroup=1,
     iter=0,
-    seed=experiment_1["Seed"],
+    seed=experiment["Seed"],
     logger=logger,
-    T=[experiment_1["T"], experiment_1["T"]],
+    T=experiment["T"],
     debug=True,
-    initial_bounds= torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32)
+    initial_bounds=experiment["initial_bounds"]
 )
 
 # for i in range(N_iter):
 #     ssesm_model.iter = i
 #     # Ejecuta el experimento
 #
-#     time, mse = run_experiment(X_train, y_train, X_test, y_test, experiment_1, sesms_model)
+#     time, mse = run_experiment(X_train, y_train, X_test, y_test, experiment, sesms_model)
 #
 #     # Almacena los resultados
 #     data.append((i, time, mse))
 
 # save_results(data=data, fngroup=1)
 
+model = None
+if experiment["mode"] == "sequential":
+    model = ssesm
+elif experiment["mode"] == "batch":
+    model = bsesm
+else:
+    raise ValueError("Invalid model mode, must be 'sequential' or 'batch'")
+
 for i in range(N_iter):
-    bsesm.iter = i
+    model.iter = i
+    
+    model.partial_fit(X_train, y_train)
+    Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
+    
+    logger.info("Iteration {}, MSE Value = {}, time ={}", i, mse_value, time)
 
-    # Ejecuta el experimento
-
-    # bsesm.partial_fit(X_train, y_train)
-    ssesm.partial_fit(X_train, y_train)
-    print("LOSSES ISTA", ssesm.losses_ISTA)
-    print("LOSSES DICT", ssesm.losses_Dictionary)
-    Z_predict, time, mse_value = ssesm.performance_stats(X_test, y_test)
-    print(Z_predict, time, mse_value)
-
-    plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], ssesm.dfngroup, ssesm.iter,
-                 ssesm.losses_ISTA, ssesm.losses_Dictionary)
+    plot_surface(testDataset, X_train, y_train, Z_predict, folder_name, model, experiment["hyp_set"])
 
     # Almacena los resultados
     data.append((i, time, mse_value))
