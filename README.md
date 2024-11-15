@@ -25,6 +25,16 @@ proper install configuration.
 
 ## Dependencies and SESM installation
 
-To install PySESM:
+This, will install PySESM and its dependencies:
+
+    > pip install -e . 
+    
+or 
 
     > pip install -e . --use-pep517
+    
+However, if you prefer to install the dependency packages with
+`micromamba` or `conda`, then you can use:
+
+    > conda install numpy matplotlib scipy scikit-learn pandas plotly
+
