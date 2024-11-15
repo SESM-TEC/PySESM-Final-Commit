@@ -148,7 +148,7 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks()
 
     def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
-                            h=None):
+                            calculate_y_pred=None):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
@@ -157,7 +157,7 @@ class UniformPartitionManager(BlockManager):
                 alpha=ista_alpha,
                 lambd=ista_lambd,
                 weight_decay=weight_decay,
-                h=h
+                calculate_y_pred=calculate_y_pred
             )
 
     def retrieve_active_blocks(self):

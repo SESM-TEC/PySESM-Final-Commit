@@ -64,7 +64,6 @@ class ISTALayer(torch.nn.Module):
             if new_h is not None: self.h.data = new_h
 
     def forward(self, y, dictionary, log_losses=True):
-        #y_pred = torch.bmm(dictionary, self.h).squeeze(-1).flatten()
         y_pred = self.calculate_y_pred(dictionary, self.h)
         loss = self.criterion(y_pred, y)
         self.optimizer.zero_grad()

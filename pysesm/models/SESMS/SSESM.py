@@ -101,7 +101,8 @@ class SSESM(SESM):
                                                    self.seed,
                                                    self.ista_alpha,
                                                    self.ista_alpha,
-                                                   self.weight_decay)
+                                                   self.weight_decay,
+                                                   self.calculate_y_pred)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         for _ in range(self.permutation_times):
@@ -110,25 +111,31 @@ class SSESM(SESM):
             for block in permuted_list_sub_blocks:
                 self.ista_layer = block.ista_layer
                 X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
-                y_torch = torch.tensor(block.y, dtype=torch.float32)
-                print("---X_torch", X_torch)
-                print("---y_torch", y_torch)
+                y_torch = torch.tensor(block.target, dtype=torch.float32)
                 super().partial_fit(X_torch, y_torch)
 
-    def predict(self, X_test, list_sub_blocks):
+    def predict(self, X, y):
         """
         Predict the output using the trained SESM model with sub-blocks.
 
         Args:
             X_test (torch.Tensor): Input features for prediction.
-            list_sub_blocks (list): A list of sub-blocks used for the prediction process.
-
+            -
         Returns:
             torch.Tensor: Predicted values for the test set.
         """
-        return predict_on_test_set(X_test, super(), self.T, list_sub_blocks)
+        active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
+        y_pred_per_block = [0 for _ in range(len(y))]
+        for block in active_blocks:
+            self.ista_layer = block.ista_layer
+            X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
+            block_pred = super().predict(X_torch)
+            for i, pos in enumerate(block.positions):
+                 y_pred_per_block[pos] = block_pred[i]
+        
+        return torch.tensor(y_pred_per_block, dtype=torch.float32)
 
-    def performance_stats(self, X: torch.Tensor, y: torch.Tensor, list_sub_blocks: list):
+    def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
         Perform a forward pass for model evaluation with sub-blocks.
 
@@ -143,7 +150,7 @@ class SSESM(SESM):
                 - Training time (float): Time taken for the training process (in minutes).
                 - Mean squared error (float): MSE between predicted and true target values.
         """
-        y_pred = self.predict(X, list_sub_blocks)
+        y_pred = self.predict(X, y)
         time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.clone().detach(), y)
         return y_pred, time, mse
