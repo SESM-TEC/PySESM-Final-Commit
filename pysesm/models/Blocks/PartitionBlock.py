@@ -18,7 +18,8 @@ class PartitionBlock:
     - add_point(point): Add a point to the sub-block.
     """
 
-    def __init__(self, space_bound: torch.Tensor, block_index: tuple[int, ...], block_size: torch.Tensor, amplitude: int = 1, h=None, ista_layer=None):
+    def __init__(self, space_bound: torch.Tensor, block_index: tuple[int, ...], block_size: torch.Tensor,
+                 amplitude: int = 1, h=None, ista_layer=None):
         self.block_index = block_index
         self.block_size = block_size
         eps = torch.finfo(torch.float32).eps
@@ -48,7 +49,7 @@ class PartitionBlock:
 
     def normalize(self):
         tensor_X = torch.stack(self.X)
-        self.normalized_X = (tensor_X - self.block_scope[0])/self.block_size
+        self.normalized_X = (tensor_X - self.block_scope[0]) / self.block_size
 
     def clone_test(self):
         cloned_block = PartitionBlock.__new__(PartitionBlock)
@@ -66,6 +67,4 @@ class PartitionBlock:
         cloned_block.ista_layer = self.ista_layer
         return cloned_block
 
-
     __deepcopy__ = lambda self, _: self.clone_test()
-

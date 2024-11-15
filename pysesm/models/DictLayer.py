@@ -68,7 +68,6 @@ class DictLayer(torch.nn.Module):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
-        print(X)
         self.dictionary = self.psi(X.mT, self.theta_parameter_vector)
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, max_points_in_block: int = 0,

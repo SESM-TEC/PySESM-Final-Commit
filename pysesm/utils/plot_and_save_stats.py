@@ -6,8 +6,10 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import os
 
+from pysesm.models.SESM.SESM import SESM
 
-def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, losses_ISTA, losses_Dictionary):
+
+def plot_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hypset):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
@@ -17,27 +19,28 @@ def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, 
     - X_train (torch.Tensor): The input data points for training.
     - y_train (torch.Tensor): The target values for training.
     - Z (torch.Tensor): The predicted values (surface) from the surrogate model.
-    - hypset (str): The hyperparameter set identifier.
+    - folder_name (str): The hyperparameter set identifier.
     - fngroup (str): The function group identifier.
     - iteration (int): The iteration number of the experiment.
     - losses_ISTA (list): List of ISTA losses over epochs.
     - losses_Dictionary (list): List of Dictionary losses over epochs.
     """
     # Asegurarse de que el directorio exista
-    os.makedirs(f"results_{hypset}/plots", exist_ok=True)
+    os.makedirs(f'{folder_name}/plots', exist_ok=True)
+    os.makedirs(f'{folder_name}/stats', exist_ok=True)
 
     # Matplotlib subplots (no interactivas)
     fig = plt.figure(figsize=(15, 10))
 
     # Total epochs = 6 [2 * ( 3 permutaciones )] * 16 bloques
     ax1 = fig.add_subplot(231)
-    ax1.scatter(range(len(losses_ISTA)), losses_ISTA)
+    ax1.scatter(range(len(model.losses_ISTA)), model.losses_ISTA)
     ax1.set_xlabel('Total epochs')
     ax1.set_ylabel('losses_ISTA')
     ax1.set_title('losses_ISTA vs Total epochs')
 
     ax5 = fig.add_subplot(232)
-    ax5.scatter(range(len(losses_Dictionary)), losses_Dictionary)
+    ax5.scatter(range(len(model.losses_Dictionary)), model.losses_Dictionary)
     ax5.set_xlabel('Total epochs')
     ax5.set_ylabel('losses_Dictionary')
     ax5.set_title('losses_Dictionary vs Total epochs')
@@ -63,7 +66,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, 
     ax4.set_xlabel('X')
     ax4.set_ylabel('Y')
     ax4.set_zlabel('Z')
-    ax4.set_title(f'Original Function - {hypset}/{fngroup}')
+    ax4.set_title(f'Original Function - {hypset}/{model.dfngroup}')
 
     # Matplotlib para "Surrogate Model" (estática)
     Z_pred = Z.clone().reshape(50, 50).detach().cpu().numpy()
@@ -73,23 +76,23 @@ def plot_surface(test_dataset, X_train, y_train, Z, hypset, fngroup, iteration, 
     ax2.set_xlabel('X')
     ax2.set_ylabel('Y')
     ax2.set_zlabel('Z')
-    ax2.set_title(f'Surrogate Model - {hypset}/{fngroup}')
+    ax2.set_title(f'Surrogate Model - {hypset}/{model.dfngroup}')
 
     plt.tight_layout()
-    plt.savefig(f"results_{hypset}/plots/{fngroup}.{iteration}_static.png")
+    plt.savefig(f"{folder_name}/plots/{model.dfngroup}.{model.iter}_static.png")
     plt.close(fig)
 
     # Plotly para la gráfica interactiva de la "Original Function"
     fig_original = go.Figure(data=[go.Surface(z=Z_test, x=X, y=Y, colorscale='Viridis')])
     fig_original.add_scatter3d(x=X_train[:, 0], y=X_train[:, 1], z=y_train, mode='markers', marker=dict(size=5, color='red'))
-    fig_original.update_layout(title=f"Original Function - {hypset}/{fngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
-    fig_original.write_html(f"results_{hypset}/plots/{fngroup}.{iteration}_original.html")
+    fig_original.update_layout(title=f"Original Function - {hypset}/{model.dfngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    fig_original.write_html(f"{folder_name}/plots/{model.dfngroup}.{model.iter}_original.html")
 
     # Plotly para la gráfica interactiva del "Surrogate Model"
     fig_surrogate = go.Figure(data=[go.Surface(z=Z_pred, x=X, y=Y, colorscale='Viridis')])
     fig_surrogate.add_scatter3d(x=X_train[:, 0], y=X_train[:, 1], z=y_train, mode='markers', marker=dict(size=5, color='red'))
-    fig_surrogate.update_layout(title=f"Surrogate Model - {hypset}/{fngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
-    fig_surrogate.write_html(f"results_{hypset}/plots/{fngroup}.{iteration}_surrogate.html")
+    fig_surrogate.update_layout(title=f"Surrogate Model - {hypset}/{model.dfngroup}", scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'))
+    fig_surrogate.write_html(f"{folder_name}/plots/{model.dfngroup}.{model.iter}_surrogate.html")
 
 
 def plot_stats(directory, num_files):

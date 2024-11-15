@@ -83,7 +83,7 @@ class BSESM(SESM):
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
             weight_decay=weight_decay,
-            calculate_y_pred = self.calculate_y_pred
+            calculate_y_pred=self.calculate_y_pred
         )
 
     def _arrange_batch_h(self, blocks: list[PartitionBlock]):
@@ -102,7 +102,7 @@ class BSESM(SESM):
                     torch.tensor(
                         [empty_X for i
                          in range(max_points_in_block - block.normalized_X.shape[0])]
-                    , dtype=torch.float32)
+                        , dtype=torch.float32)
                 ])
             )
             filled_active_blocks_y += block.target + [0 for _ in range(max_points_in_block - len(block.target))]
@@ -137,7 +137,7 @@ class BSESM(SESM):
                 active_blocks_count: int = 0) -> None:
         super().forward(X, y, max_points_in_block, active_blocks_count)
 
-    def predict(self, X, y) -> [torch.Tensor, torch.Tensor]: # type: ignore
+    def predict(self, X, y) -> [torch.Tensor, torch.Tensor]:  # type: ignore
         """
         Predict the output using the trained SESM model with sub-blocks.
 

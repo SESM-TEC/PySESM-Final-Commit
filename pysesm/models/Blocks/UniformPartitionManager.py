@@ -58,13 +58,12 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
     def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
-        # TODO: Find efficient way to find block
+        # TODO: Find efficient way to find block (currently being worked on by Joshua)
         for index in np.ndindex(self.blocks.shape):
             if self.blocks[index].is_point_in_block(X):
-                print("POINT", X, "is inside block", self.blocks[index].block_scope)
-
                 return self.blocks[index]
-        print("Could not find a block for point", X)
+
+        logging.warning("Could not find a block for point {}", X)
         return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
