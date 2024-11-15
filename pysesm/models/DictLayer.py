@@ -89,14 +89,10 @@ class DictLayer(torch.nn.Module):
 
         for _ in range(epochs):
             self.dictionary = self.forward(X, max_points_in_block, active_blocks_count, rho_flag, mu_flag)
-            print("dictionary", self.dictionary.shape)
-            print("h", h.shape)
 
             #y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
             y_pred = self.calculate_y_pred(self.dictionary, h)
-            
-            print("Y_PRED", y_pred.shape)
-            print("Y", y.shape)
+
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
             loss.backward(retain_graph=True)

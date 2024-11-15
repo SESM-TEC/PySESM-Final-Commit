@@ -148,8 +148,6 @@ class SESM(torch.nn.Module):
         """
 
         validate_sesm_partial_fit(self, X, y)
-        print("X.shape ", X.shape)
-        print("y.shape ", y.shape)
 
         if self.dictionary_layer.dictionary is None:
             logging.warning("[SESM] Initializing dictionary layer with first iteration of model")

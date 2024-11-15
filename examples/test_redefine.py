@@ -11,16 +11,16 @@ from pysesm.models.SESMS.SSESM import SSESM
 from pysesm.models.BSESM.BSESM import BSESM
 
 # Crear los directorios de resultados
-os.makedirs('results_1/plots', exist_ok=True)
-os.makedirs('results_1/stats', exist_ok=True)
+os.makedirs('results_2/plots', exist_ok=True)
+os.makedirs('results_2/stats', exist_ok=True)
 
 N_iter = 1  #
 
 experiment_1 = {
-    "hyp_set": 1,
+    "hyp_set": 2,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 100,
+    "n_functions": 25,
     "eig_range": [1e0, 1e1],
     "mu_range": [-2, 2],
     "vector_range": [1e0, 1e1],
@@ -29,10 +29,10 @@ experiment_1 = {
     "dictionary_alpha": 0.08928,
     "rho_epochs": 50,
     "mu_epochs": 50,
-    "model_epochs": 15,
+    "model_epochs": 100,
     "dict_epochs": 50,
     "ista_epochs": 50,
-    "T": 4,
+    "T": 1,
     "weight_decay": 0.004875,
     "permutation_times": 1,
     "mode": "secuencial",
@@ -193,15 +193,15 @@ for i in range(N_iter):
 
     # Ejecuta el experimento
 
-    bsesm.partial_fit(X_train, y_train)
-    #ssesm.partial_fit(X_train, y_train)
-    print("LOSSES ISTA", bsesm.losses_ISTA)
-    print("LOSSES DICT", bsesm.losses_Dictionary)
-    Z_predict, time, mse_value = bsesm.performance_stats(X_test, y_test)
+    # bsesm.partial_fit(X_train, y_train)
+    ssesm.partial_fit(X_train, y_train)
+    print("LOSSES ISTA", ssesm.losses_ISTA)
+    print("LOSSES DICT", ssesm.losses_Dictionary)
+    Z_predict, time, mse_value = ssesm.performance_stats(X_test, y_test)
     print(Z_predict, time, mse_value)
 
-    plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], bsesm.dfngroup, bsesm.iter,
-                 bsesm.losses_ISTA, bsesm.losses_Dictionary)
+    plot_surface(testDataset, X_train, y_train, Z_predict, experiment_1["hyp_set"], ssesm.dfngroup, ssesm.iter,
+                 ssesm.losses_ISTA, ssesm.losses_Dictionary)
 
     # Almacena los resultados
     data.append((i, time, mse_value))
