@@ -40,7 +40,7 @@ class SESM(torch.nn.Module):
 
     def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, seed: float, model_epochs: int,
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
-                 dictionary_alpha: float, weight_decay: float, h = None, calculate_y_pred=None):
+                 dictionary_alpha: float, weight_decay: float, h=None, calculate_y_pred=None):
         """
         Method that initializes the SESM.
 
@@ -90,14 +90,14 @@ class SESM(torch.nn.Module):
             lambd=self.ista_lambd,
             weight_decay=self.weight_decay,
             h=h,
-            calculate_y_pred = self.calculate_y_pred
+            calculate_y_pred=self.calculate_y_pred
         )
 
         self.dictionary_layer = DictLayer(
             n_samples=self.n_samples,
             psi=psi,
             alpha=self.dictionary_alpha,
-            calculate_y_pred = self.calculate_y_pred
+            calculate_y_pred=self.calculate_y_pred
         )
 
     @property
@@ -137,7 +137,8 @@ class SESM(torch.nn.Module):
                 )
             )
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block:int=0, active_blocks_count:int=0) -> None:
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
+                    active_blocks_count: int = 0) -> None:
         """
         Trains the model by learning a sparse vector and a dictionary that represent the original function without redefining the weight each time.
 
@@ -168,7 +169,8 @@ class SESM(torch.nn.Module):
                 )
             )
 
-    def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block:int=0, active_blocks_count:int=0) -> None:
+    def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
+                active_blocks_count: int = 0) -> None:
         """
         Computes the forward pass for the model.
 
@@ -211,7 +213,8 @@ class SESM(torch.nn.Module):
         self.losses_ISTA.append(self.ista_layer.losses[-1])
         self.losses_Dictionary.append(self.dictionary_layer.losses[-1])
 
-    def predict(self, X: torch.Tensor, max_points_in_block:int=0, active_blocks_count:int=0, custom_ista_layer: ISTALayer = None) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, max_points_in_block: int = 0, active_blocks_count: int = 0,
+                custom_ista_layer: ISTALayer = None) -> torch.Tensor:
         """
         Predicts the value of a function using the learned sparse vector and dictionary.
         Args:
@@ -227,13 +230,14 @@ class SESM(torch.nn.Module):
             self.ista_layer = custom_ista_layer
 
         with torch.no_grad():
-            self.dictionary_layer.dictionary = self.dictionary_layer.forward(X, max_points_in_block, active_blocks_count)
+            self.dictionary_layer.dictionary = self.dictionary_layer.forward(X, max_points_in_block,
+                                                                             active_blocks_count)
 
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()
-        
+
         return self.calculate_y_pred(dictionary, h)
-        #return torch.bmm(dictionary, h).squeeze(-1).flatten()
+        # return torch.bmm(dictionary, h).squeeze(-1).flatten()
 
     def loss_analysis(self, dict_epochs: int) -> None:
         current_loss = self.dictionary_layer.losses[-dict_epochs:]

@@ -3,9 +3,6 @@ import logging
 import torch
 
 
-# TODO: Understanding how it works maybe this class could be thought as a Provider rather than a Function abstraction.
-# TODO: As it doesnt hold any function values but more like configuration attributes
-# TODO: Renamed: Function ->  Approximate Surrogate Function
 class ApproximateSurrogateFunction:
     """
     Class that defines the approximate surrogate function interface that should be used along with the SESM architecture.

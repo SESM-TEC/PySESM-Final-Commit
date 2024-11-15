@@ -7,6 +7,7 @@ from pysesm.models.SESM.SESM import SESM
 from pysesm.base_functions.sub_block_partition import predict_on_test_set
 from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
 
+
 class SSESM(SESM):
     """
     A PyTorch module extending the SESM architecture to implement a surrogate model
@@ -91,22 +92,22 @@ class SSESM(SESM):
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
             weight_decay=weight_decay,
-            calculate_y_pred = self.calculate_y_pred
+            calculate_y_pred=self.calculate_y_pred
         )
-    
+
     def partial_fit(self, X, y):
         self.partition_manager.add_points(X, y)
-        self.partition_manager.init_ista_per_block(self.n_functions, 
+        self.partition_manager.init_ista_per_block(self.n_functions,
                                                    self.seed,
                                                    self.ista_alpha,
                                                    self.ista_alpha,
                                                    self.weight_decay)
         active_blocks = self.partition_manager.retrieve_active_blocks()
-        
+
         for _ in range(self.permutation_times):
-             selected_indexes = np.random.permutation( len(active_blocks) )
-             permuted_list_sub_blocks = [active_blocks[i] for i in selected_indexes]
-             for block in permuted_list_sub_blocks:
+            selected_indexes = np.random.permutation(len(active_blocks))
+            permuted_list_sub_blocks = [active_blocks[i] for i in selected_indexes]
+            for block in permuted_list_sub_blocks:
                 self.ista_layer = block.ista_layer
                 X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
                 y_torch = torch.tensor(block.y, dtype=torch.float32)

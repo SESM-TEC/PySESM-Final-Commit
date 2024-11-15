@@ -109,7 +109,7 @@ def generate_list_of_subblock(sub_blocks, l_functions, SEED, weight_decay, alpha
                 random_seed=SEED,
                 weight_decay=weight_decay,
                 alpha=alpha,
-                lambd=lambd
+                lambd=lambd,
             )
             block.output_values = [value * block.amplitude for value in block.output_values]
 
