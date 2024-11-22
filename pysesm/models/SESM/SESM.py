@@ -1,13 +1,12 @@
-import logging
-
-import torch
-import numpy as np
-import time
-
-from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
+from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.validation.sesm_validation import validate_sesm_partial_fit
+
+import logging
+import torch
+import numpy as np
+import time
 
 
 class SESM(torch.nn.Module):
@@ -38,7 +37,7 @@ class SESM(torch.nn.Module):
         weight_decay (float): Penalty rate applied to the loss function to prevent overfitting.
     """
 
-    def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, seed: float, model_epochs: int,
+    def __init__(self, n_samples: int, psi: SurrogateFunction, seed: float, model_epochs: int,
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
                  dictionary_alpha: float, weight_decay: float, h=None, calculate_y_pred=None):
         """

@@ -1,12 +1,13 @@
-from pysesm.functions.GaussianApproximateSurrogateFunction import *
-from pysesm.models.BSESM.BSESM import BSESM
-from pysesm.models.SESMS.SSESM import SSESM
+import logging
+
+from pysesm.functions import GaussianFunction
+from pysesm.models import BSESM
+from pysesm.models import SSESM
 from pysesm.utils.design_matrices import *
 from pysesm.utils.gaussian_covariance_density import *
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.mesh_generation import *
 from pysesm.utils.plot_and_save_stats import *
-
 
 N_iter = 1  #
 
@@ -16,21 +17,21 @@ experiment = {
     "n_features": 2,
     "n_functions": 25,
     "eig_range": [1e0, 1e1],
-    "mu_range": [-2, 2],
+    "mu_range": [0, 1],
     "vector_range": [1e0, 1e1],
-    "ista_alpha": 0.05502,
+    "ista_alpha": 0.07,
     "ista_lambd": 0.01007,
     "dictionary_alpha": 0.08928,
-    "rho_epochs": 50,
-    "mu_epochs": 50,
-    "model_epochs": 100,
-    "dict_epochs": 50,
-    "ista_epochs": 50,
-    "T": [1, 1],
+    "rho_epochs": 1,
+    "mu_epochs": 1,
+    "model_epochs": 1,
+    "dict_epochs": 1,
+    "ista_epochs": 1,
+    "T": [2, 2],
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "weight_decay": 0.004875,
     "permutation_times": 1,
-    "mode": "sequential",
+    "mode": "batch",
     "Seed": 45
 }
 # modes: sequential || batch
@@ -81,38 +82,8 @@ X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, experiment)
 # Crear la matriz de diseño
 X_test, y_test = create_design_matrix_test(xx, yy, zz)
 
-# Ejecutar el experimento
-# Cambiar los datos por una matriz de matriz de diseño X
-# Un condicional para una grafica de > dimensiones
-# run_experiment deberia de estar fuera de esta clase
-
-# def run_experiment(X_train, y_train, X_test, y_test, hyperparams, model):
-#     T = hyperparams["T"]
-#     l_functions = hyperparams["l_functions"]
-#     seed = hyperparams["Seed"]
-#     weight_decay = hyperparams["weight_decay"]
-#     alpha = hyperparams["ista_alpha"]
-#     lambd = hyperparams["ista_lambd"]
-#     time, mse_value = 0, 0
-
-#     t, x_n = data_mapping(X_train, T)
-
-#     sub_blocks = locate_samples_in_sub_blocks(X_train, y_train, t, T)
-
-#     list_sub_blocks = generate_list_of_subblock(sub_blocks, l_functions, seed, weight_decay, alpha, lambd)
-
-#     normalize_sub_blocks(list_sub_blocks, T)
-#     model.partial_fit(list_sub_blocks, T)
-#     Z_predict, time, mse_value = model.performance_stats(X_test, y_test, list_sub_blocks)
-
-#     plot_surface(testDataset, X_train, y_train, Z_predict, experiment["hyp_set"], model.dfngroup, model.iter,
-#                  model.losses_ISTA, model.losses_Dictionary)
-
-#     return time, mse_value
-
-
 # Instanciar la función de aproximación (surrogate function)
-surrogate_function = GaussianApproximateSurrogateFunction(
+surrogate_function = GaussianFunction(
     n_features=experiment["n_features"],
     n_functions=experiment["n_functions"],
     eig_range=experiment["eig_range"],
@@ -122,7 +93,7 @@ surrogate_function = GaussianApproximateSurrogateFunction(
     logger=logger
 )
 
-# Crea una instancia de la clase SESMS
+# Crea una instancia de la clase SSESM
 ssesm = SSESM(
     n_samples=experiment["n_samples"],
     n_features=experiment["n_features"],
@@ -195,11 +166,11 @@ else:
 
 for i in range(N_iter):
     model.iter = i
-    
+
     model.partial_fit(X_train, y_train)
     Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
-    
-    logger.info("Iteration {}, MSE Value = {}, time ={}", i, mse_value, time)
+
+    logging.info("Iteration {}, MSE Value = {:.6f}, time ={:.6f}".format(i, mse_value, time))
 
     plot_surface(testDataset, X_train, y_train, Z_predict, folder_name, model, experiment["hyp_set"])
 

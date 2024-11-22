@@ -1,7 +1,10 @@
+from torch import Tensor
+from torch.nn import Module
+from typing import Callable
 import torch
 
 
-class ISTALayer(torch.nn.Module):
+class ISTALayer(Module):
     """
     A custom PyTorch module for implementing a sparse vector layer with learnable parameters.
 
@@ -15,7 +18,7 @@ class ISTALayer(torch.nn.Module):
     """
 
     def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
-                 criterion=None, optimizer=None, h: torch.Tensor = None, calculate_y_pred=None):
+                 criterion=None, optimizer=None, h: Tensor = None, calculate_y_pred: Callable[[Tensor, Tensor], Tensor] =None):
 
         super().__init__()
         self.n_functions = n_functions
@@ -23,9 +26,9 @@ class ISTALayer(torch.nn.Module):
         self.weight_decay = weight_decay
         self.alpha = alpha
         self.lambd = lambd
+        self.calculate_y_pred = calculate_y_pred
         self.losses = []
         torch.manual_seed(random_seed)
-        self.calculate_y_pred = calculate_y_pred or None
         self.initialize_h_vector(h)
 
         if criterion is None:
@@ -49,9 +52,6 @@ class ISTALayer(torch.nn.Module):
         """
         Performs the shrinkage operation on the layer's parameters with the given hyperparameters.
 
-        Args:
-            alpha (float): Learning rate.
-            lambd (float): Regularization parameter.
         Returns:
             torch.Tensor: The updated sparse vector.
 

@@ -1,8 +1,6 @@
+from pysesm.functions import SurrogateFunction
+
 import torch
-from sympy.codegen.ast import float32
-
-from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
-
 
 class DictLayer(torch.nn.Module):
     """
@@ -11,7 +9,7 @@ class DictLayer(torch.nn.Module):
     This layer is designed for use in surrogate modeling and function approximation tasks.
 
     Attributes:
-        psi (ApproximateSurrogateFunction): The function used for generating the layer's output.
+        psi (SurrogateFunction): The function used for generating the layer's output.
         theta_parameter_vector (torch.nn.Parameter): Learnable parameter tensor for the layer's functions.
         dictionary (torch.Tensor): The computed output of the layer.
         n_samples (int): The number of samples (not used in this class).
@@ -22,7 +20,7 @@ class DictLayer(torch.nn.Module):
         optimizer (torch.optim.Optimizer): Preferred optimizer used in the training of the model.
     """
 
-    def __init__(self, n_samples: int, psi: ApproximateSurrogateFunction, alpha: float,
+    def __init__(self, n_samples: int, psi: SurrogateFunction, alpha: float,
                  criterion: torch.nn.modules.loss._Loss = None, optimizer: torch.optim.Optimizer = None,calculate_y_pred=None):
         """
         Method

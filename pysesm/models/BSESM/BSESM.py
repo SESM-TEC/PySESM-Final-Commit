@@ -1,9 +1,9 @@
 import torch
 from sklearn.metrics import mean_squared_error
 
-from pysesm.functions.ApproximateSurrogateFunction import ApproximateSurrogateFunction
-from pysesm.models.Blocks.PartitionBlock import PartitionBlock
-from pysesm.models.Blocks.UniformPartitionManager import UniformPartitionManager
+from pysesm.functions import SurrogateFunction
+from pysesm.blocks import PartitionBlock
+from pysesm.blocks import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
 
 
@@ -23,7 +23,7 @@ class BSESM(SESM):
                  ista_lambd: float,
                  dictionary_alpha: float,
                  weight_decay: float,
-                 surrogate_function: ApproximateSurrogateFunction,
+                 surrogate_function: SurrogateFunction,
                  dfngroup,
                  iter,
                  T: list[int],
@@ -32,7 +32,7 @@ class BSESM(SESM):
                  initial_bounds=None,
                  debug=True):
         """
-        Initialize the SESMS model with a sequential approach.
+        Initialize the SSESM model with a sequential approach.
 
         Args:
             n_samples (int): Number of samples in the dataset.
@@ -49,7 +49,7 @@ class BSESM(SESM):
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
             weight_decay (float): Weight decay for regularization to prevent overfitting.
-            surrogate_function (ApproximateSurrogateFunction): The surrogate function used to create the dictionary.
+            surrogate_function (SurrogateFunction): The surrogate function used to create the dictionary.
             dfngroup: Grouping information for the functions (implementation-specific).
             iter (int): Iteration count of the experiment.
             seed (int): Random seed for reproducibility.
@@ -65,8 +65,7 @@ class BSESM(SESM):
         self.dfngroup = dfngroup
         self.iter = iter
         self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=l_functions,
-                                                         initial_bounds=initial_bounds)
+        self.partition_manager = UniformPartitionManager(logger=logger, T=self.T, n_functions=l_functions, initial_bounds=initial_bounds)
         self.logger = logger
         self.debug = debug
         self.calculate_y_pred = lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten()
@@ -156,17 +155,14 @@ class BSESM(SESM):
         filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = self._fill_block_points(active_blocks)
 
         y_pred = super().predict(filled_active_blocks_X, max_points_in_block, len(active_blocks))
-        print("y_pred.shape", y_pred.shape)
         y_pred_per_block = [0 for _ in range(len(y))]
         i = 0
+
         for block in active_blocks:
             for pos in block.positions:
                 y_pred_per_block[pos] = y_pred[i]
                 i += 1
         y_pred_per_block = torch.tensor(y_pred_per_block, dtype=torch.float32)
-
-        for i in range(len(y)):
-            print(f"Value at i {i}, Target is {y[i]}, Predicted value is {y_pred_per_block[i]}")
 
         return y_pred_per_block
 
@@ -186,10 +182,6 @@ class BSESM(SESM):
                 - Mean squared error (float): MSE between predicted and true target values.
         """
         y_pred = self.predict(X, y)
-        print("y_pred", y_pred)
-        print("target", y)
-        print("y_pred shape", y_pred.shape)
         time = self.elapsed_time / 60
-        print(time)
         mse = mean_squared_error(y_pred.clone().detach(), y)
         return y_pred, time, mse
