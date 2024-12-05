@@ -1,6 +1,9 @@
+import logging
+
 from pysesm.functions import SurrogateFunction
-from pysesm.models.SESM.SESM import SESM
 from pysesm.blocks import UniformPartitionManager
+from pysesm.enums import EvaluationFuncEnum
+from pysesm.models.SESM.SESM import SESM
 
 
 import numpy as np
@@ -33,12 +36,13 @@ class SSESM(SESM):
                  surrogate_function: SurrogateFunction,
                  permutation_times: int,
                  dfngroup,
-                 iter,
-                 seed,
-                 logger,
+                 seed: int,
+                 logger: logging.Logger,
                  T: list[int],
+                 iter: int=1,
                  initial_bounds=None,
-                 debug=True):
+                 debug=True,
+                 **kwargs):
         """
         Initialize the SSESM model with a sequential approach.
 
@@ -46,9 +50,6 @@ class SSESM(SESM):
             n_samples (int): Number of samples in the dataset.
             n_features (int): Number of input features.
             n_functions (int): Number of latent functions used in the model.
-            eig_range (tuple): Range for eigenvalues during dictionary creation.
-            mu_range (tuple): Range for mu parameter during dictionary creation.
-            vector_range (tuple): Range for vector parameter initialization.
             model_epochs (int): Number of epochs for the overall model training.
             ista_epochs (int): Number of epochs for the ISTA layer training.
             rho_epochs (int): Number of epochs for adjusting the rho parameter in the dictionary layer.
@@ -69,42 +70,40 @@ class SSESM(SESM):
         self.n_samples = n_samples
         self.n_features = n_features
         self.n_functions = n_functions
-        self.eig_range = eig_range
-        self.mu_range = mu_range
-        self.vector_range = vector_range
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.iter = iter
         self.T = torch.tensor(T)
         self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions,
                                                          initial_bounds=initial_bounds)
-        self.logger = logger
-        self.debug = debug
-        self.calculate_y_pred = lambda dictionary, h: torch.matmul(dictionary, h)
 
         super().__init__(
             n_samples=n_samples,
+            n_features=n_features,
+            n_functions=n_functions,
             psi=surrogate_function,
             seed=seed,
             model_epochs=model_epochs,
             ista_epochs=ista_epochs,
             ista_alpha=ista_alpha,
             ista_lambd=ista_lambd,
+            dictionary_alpha=dictionary_alpha,
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
-            dictionary_alpha=dictionary_alpha,
             weight_decay=weight_decay,
-            calculate_y_pred=self.calculate_y_pred
+            logger=logger,
+            debug = debug,
+            **kwargs
         )
 
-    def partial_fit(self, X, y):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
         self.partition_manager.add_points(X, y)
         self.partition_manager.init_ista_per_block(self.n_functions,
                                                    self.seed,
                                                    self.ista_alpha,
                                                    self.ista_alpha,
                                                    self.weight_decay,
-                                                   self.calculate_y_pred)
+                                                   self.evaluation_func)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         for _ in range(self.permutation_times):
@@ -116,7 +115,7 @@ class SSESM(SESM):
                 y_torch = torch.tensor(block.target, dtype=torch.float32)
                 super().partial_fit(X_torch, y_torch)
 
-    def predict(self, X, y):
+    def predict(self, X, y, *_):
         """
         Predict the output using the trained SESM model with sub-blocks.
 
@@ -145,7 +144,6 @@ class SSESM(SESM):
         Args:
             X (torch.Tensor): Input features for evaluation.
             y (torch.Tensor): True target values for evaluation.
-            list_sub_blocks (list): A list of sub-blocks to be used for evaluation.
 
         Returns:
             tuple: A tuple containing:

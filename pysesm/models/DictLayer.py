@@ -1,6 +1,11 @@
-from pysesm.functions import SurrogateFunction
+import logging
+
+from pysesm.functions import SurrogateFunction, SurrogateFunctionFactory
+from pysesm.enums import SurrogateFunctionEnum
 
 import torch
+from typing import Union, Callable
+
 
 class DictLayer(torch.nn.Module):
     """
@@ -20,8 +25,13 @@ class DictLayer(torch.nn.Module):
         optimizer (torch.optim.Optimizer): Preferred optimizer used in the training of the model.
     """
 
-    def __init__(self, n_samples: int, psi: SurrogateFunction, alpha: float,
-                 criterion: torch.nn.modules.loss._Loss = None, optimizer: torch.optim.Optimizer = None,calculate_y_pred=None):
+    psi: SurrogateFunction
+
+    def __init__(self, n_samples: int, n_features: int, n_functions: int,
+                 psi: Union[SurrogateFunction, SurrogateFunctionEnum], alpha: float,
+                 evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+                 logger: logging.Logger,
+                 criterion: torch.nn.modules.loss._Loss = None, optimizer: torch.optim.Optimizer = None, **kwargs):
         """
         Method
 
@@ -35,19 +45,18 @@ class DictLayer(torch.nn.Module):
         super(DictLayer, self).__init__()
 
         self.n_samples = n_samples
+        self.n_features = n_features
+        self.n_functions = n_functions
         self.alpha = alpha
+        self.evaluation_func = evaluation_func
 
-        self.psi = psi
+        self.psi = psi if issubclass(type(psi), SurrogateFunction) else SurrogateFunctionFactory.make(psi, n_functions=n_functions, n_features=n_functions, logger=logger, **kwargs)
 
-        self.n_features = self.psi.n_features
-        self.n_functions = self.psi.n_functions
         self.losses = []
 
         self.theta_parameter_vector = self.psi.initialize()
 
         self.dictionary = None
-
-        self.calculate_y_pred = calculate_y_pred or None
 
         if criterion is None:
             self.criterion = torch.nn.MSELoss()
@@ -61,12 +70,13 @@ class DictLayer(torch.nn.Module):
 
     def initialize_layer(self, X: torch.Tensor) -> None:
         """
-        Method that initializes the dictionary of the layer. It needs a input value to do so, so it can be done at __init__.
+        Method that initializes the dictionary of the layer.
+        It needs an input value to do so, so it can be done at __init__.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
-        self.dictionary = self.psi(X.mT, self.theta_parameter_vector)
+        self.dictionary = self.psi.__call__(X.mT, self.theta_parameter_vector)
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, epochs: int, max_points_in_block: int = 0,
                     active_blocks_count: int = 0, rho_flag: bool = False,
@@ -87,8 +97,8 @@ class DictLayer(torch.nn.Module):
         for _ in range(epochs):
             self.dictionary = self.forward(X, max_points_in_block, active_blocks_count, rho_flag, mu_flag)
 
-            #y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
-            y_pred = self.calculate_y_pred(self.dictionary, h)
+            # y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
+            y_pred = self.evaluation_func(self.dictionary, h)
 
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
@@ -113,7 +123,7 @@ class DictLayer(torch.nn.Module):
         Returns:
             torch.Tensor: Input values evaluated using the psi function.
         """
-        evaluated_dictionary = self.psi(X.mT, self.theta_parameter_vector, rho_flag, mu_flag)
+        evaluated_dictionary = self.psi.__call__(X.mT, self.theta_parameter_vector, rho_flag, mu_flag)
         if not max_points_in_block and not active_blocks_count:
             return evaluated_dictionary
         else:

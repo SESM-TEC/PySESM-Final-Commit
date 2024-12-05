@@ -3,14 +3,16 @@ from pysesm.blocks.PartitionBlock import PartitionBlock
 from abc import ABC, abstractmethod
 from typing import Union, Callable
 from torch import Tensor
-from numpy import ndarray
+from numpy.typing import NDArray
 
 
 class BlockManager(ABC):
 
+    blocks: NDArray[PartitionBlock]
+
     @abstractmethod
     def __init__(self):
-        self.blocks: list[PartitionBlock] = []
+        pass
 
     @abstractmethod
     def _find_block(self, X: Tensor) -> Union[PartitionBlock, None]:
@@ -33,17 +35,17 @@ class BlockManager(ABC):
         pass
 
     @abstractmethod
-    def _map_points(self, X: Tensor, y: ndarray):
+    def _map_points(self, X: Tensor, y: Tensor):
         pass
 
     @abstractmethod
-    def add_points(self, X: Tensor, y: ndarray):
+    def add_points(self, X: Tensor, y: Tensor):
         pass
 
     @abstractmethod
     def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float,
                             weight_decay: float,
-                            calculate_y_pred: Callable[[Tensor, Tensor], Tensor] = None):
+                            evaluation_func: Callable[[Tensor, Tensor], Tensor]):
         pass
 
     @abstractmethod

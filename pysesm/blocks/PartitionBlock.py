@@ -28,9 +28,9 @@ class PartitionBlock:
         self.h = h
         self.amplitude = amplitude
         self.X = []
+        self.normalized_X = None
         self.y = []
         self.positions = []
-        self.normalized_X = None
         self.target = []
         self.predicted_output = []
         self.ista_layer = ista_layer
@@ -67,4 +67,9 @@ class PartitionBlock:
         cloned_block.ista_layer = self.ista_layer
         return cloned_block
 
-    __deepcopy__ = lambda self, _: self.clone_test()
+    def __deepcopy__(self, memo):
+        # Use the custom clone_test method for deep copying
+        cloned_block = self.clone_test()
+        # Add the cloned object to the memo dictionary to handle circular references
+        memo[id(self)] = cloned_block
+        return cloned_block

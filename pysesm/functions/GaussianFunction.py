@@ -9,12 +9,14 @@ class GaussianFunction(SurrogateFunction):
     """
     TODO: I am not sure about the eig, mu and vector range
     """
-    def __init__(self, n_features, n_functions, logger, eig_range, mu_range, vector_range, seed):
-        super().__init__(n_features=n_features, n_functions=n_functions, logger=logger)
-        self.eig_range = eig_range
-        self.mu_range = mu_range
-        self.seed = seed
-        self.vector_range = vector_range
+    
+    eig_range: list[float]
+    mu_range: list[float]
+    vector_range: list[float]
+    seed: int
+
+    def __init__(self, n_features, n_functions, logger, **kwargs):
+        super().__init__(n_features=n_features, n_functions=n_functions, logger=logger, **kwargs)
         self.theta_size = int(n_features * (n_features + 3) / 2)
 
     def initialize(self) -> torch.nn.Parameter:

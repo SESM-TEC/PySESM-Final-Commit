@@ -1,20 +1,20 @@
-import torch
-from sklearn.metrics import mean_squared_error
-
 from pysesm.functions import SurrogateFunction
-from pysesm.blocks import PartitionBlock
-from pysesm.blocks import UniformPartitionManager
+from pysesm.blocks import PartitionBlock, UniformPartitionManager
+from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
+
+
+import logging
+import torch
+from typing import Union
+from sklearn.metrics import mean_squared_error
 
 
 class BSESM(SESM):
     def __init__(self,
                  n_samples: int,
                  n_features: int,
-                 l_functions: int,
-                 eig_range,
-                 mu_range,
-                 vector_range,
+                 n_functions: int,
                  model_epochs: int,
                  ista_epochs: int,
                  rho_epochs: int,
@@ -23,21 +23,22 @@ class BSESM(SESM):
                  ista_lambd: float,
                  dictionary_alpha: float,
                  weight_decay: float,
-                 surrogate_function: SurrogateFunction,
+                 surrogate_function: Union[SurrogateFunction, SurrogateFunctionEnum],
                  dfngroup,
-                 iter,
                  T: list[int],
-                 seed,
-                 logger,
+                 seed: int,
+                 logger: logging.Logger,
+                 iter:int=1,
                  initial_bounds=None,
-                 debug=True):
+                 debug: bool=False,
+                 **kwargs):
         """
         Initialize the SSESM model with a sequential approach.
 
         Args:
             n_samples (int): Number of samples in the dataset.
             n_features (int): Number of input features.
-            l_functions (int): Number of latent functions used in the model.
+            n_functions (int): Number of latent functions used in the model.
             eig_range (tuple): Range for eigenvalues during dictionary creation.
             mu_range (tuple): Range for mu parameter during dictionary creation.
             vector_range (tuple): Range for vector parameter initialization.
@@ -56,24 +57,15 @@ class BSESM(SESM):
             logger: Logger instance to capture runtime information.
             debug (bool): Flag to enable or disable debug mode. Default is True.
         """
-        self.n_samples = n_samples
-        self.n_features = n_features
-        self.l_functions = l_functions
-        self.eig_range = eig_range
-        self.mu_range = mu_range
-        self.vector_range = vector_range
         self.dfngroup = dfngroup
-        self.iter = iter
         self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger=logger, T=self.T, n_functions=l_functions, initial_bounds=initial_bounds)
-        self.logger = logger
-        self.debug = debug
-        self.calculate_y_pred = lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten()
+        self.partition_manager = UniformPartitionManager(logger=logger, T=self.T, n_functions=n_functions, initial_bounds=initial_bounds)
 
         super().__init__(
             n_samples=n_samples,
+            n_functions=n_functions,
+            n_features=n_features,
             psi=surrogate_function,
-            seed=seed,
             model_epochs=model_epochs,
             ista_epochs=ista_epochs,
             ista_alpha=ista_alpha,
@@ -82,7 +74,11 @@ class BSESM(SESM):
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
             weight_decay=weight_decay,
-            calculate_y_pred=self.calculate_y_pred
+            seed=seed,
+            logger=logger,
+            debug=debug,
+            evaluation_func=EvaluationFuncEnum.BMM_MULT,
+            **kwargs
         )
 
     def _arrange_batch_h(self, blocks: list[PartitionBlock]):
@@ -111,7 +107,7 @@ class BSESM(SESM):
 
         return filled_active_blocks_X, filled_active_blocks_y, max_points_in_block
 
-    def partial_fit(self, X, y):
+    def partial_fit(self, X, y, *_):
         self.partition_manager.add_points(X, y)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
@@ -131,6 +127,10 @@ class BSESM(SESM):
 
         for index, block in enumerate(active_blocks):
             block.h = trained_h[index]
+            if self.debug:
+                # Logging the complete tensor with its content
+                self.logger.debug(
+                    f"Block at index {block.block_index}: Sparse vector 'h' learned: {trained_h[index]} (Tensor with shape {trained_h[index].shape})")
 
     def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
                 active_blocks_count: int = 0) -> None:

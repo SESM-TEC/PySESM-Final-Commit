@@ -34,7 +34,7 @@ class SurrogateFunction(ABC):
     """
 
     @abstractmethod
-    def __init__(self, n_features: int, n_functions: int, logger: Logger):
+    def __init__(self, n_features: int, n_functions: int, logger: Logger, **kwargs):
         """
         Function that initializes the approximate surrogate function with the given parameters
 
@@ -57,6 +57,16 @@ class SurrogateFunction(ABC):
         self.n_features = n_features
         self.n_functions = n_functions
         self.logger = logger
+
+        for attr, attr_type in self.__annotations__.items():
+            if attr not in kwargs.keys():
+                logger.error("When initializing the surrogate function {} the attribute {} was not found. Kwargs = {}"
+                             ", Required attributes = {}".format(self.__class__.__name__, attr, kwargs, self.__annotations__.items()))
+                raise ValueError(f"To initialize the class {self.__class__.__name__} the attribute {attr} is required")
+            elif attr_type is not type(kwargs[attr]):
+                logger.warning("When initializing the surrogate function {} the attribute {} had a different type"
+                               "than expected, expected ({}), actual ({}). Kwargs = {}, Required attributes = {}".format(self.__class__.__name__, attr, attr_type, type(kwargs[attr]), kwargs, self.__annotations__.items()))
+            setattr(self, attr, kwargs[attr])
 
     @abstractmethod
     def initialize(self) -> torch.nn.Parameter:

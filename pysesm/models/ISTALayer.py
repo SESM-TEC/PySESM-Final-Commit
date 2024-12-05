@@ -21,7 +21,7 @@ class ISTALayer(Module):
         optimizer (torch.optim.Optimizer): Optimizer for updating the model parameters (default: SGD).
         h (torch.nn.Parameter): Sparse vector maintained and updated by the layer.
         losses (list): List storing the computed losses during training.
-        calculate_y_pred (callable): Function to compute predictions from input and parameters.
+        evaluation_func (callable): Function to compute predictions from input and parameters.
         threshold (float): Threshold for custom regularization (default: 10.0).
         penalty_weight (float): Weight of the penalty term in custom regularization (default: 0.01).
 
@@ -41,7 +41,8 @@ class ISTALayer(Module):
     """
 
     def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
-                 criterion=None, optimizer=None, h: Tensor = None, calculate_y_pred: Callable[[Tensor, Tensor], Tensor] =None):
+                 criterion=None, optimizer=None, h: Tensor = None,
+                 evaluation_func: Callable[[Tensor, Tensor], Tensor] = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
@@ -57,12 +58,13 @@ class ISTALayer(Module):
             calculate_y_pred (callable, optional): Function to compute predictions (default: None).
         """
         super(ISTALayer, self).__init__()
+        self.h = None
         self.n_functions = n_functions
         self.random_seed = random_seed
         self.weight_decay = weight_decay
         self.alpha = alpha
         self.lambd = lambd
-        self.calculate_y_pred = calculate_y_pred
+        self.evaluation_func = evaluation_func
         self.losses = []
         torch.manual_seed(random_seed)
         self.initialize_h_vector(h)
@@ -76,11 +78,9 @@ class ISTALayer(Module):
             self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
         else:
             self.optimizer = optimizer(parameters=self.parameters(), lr=alpha, weight_decay=weight_decay)
-        
-        self.calculate_y_pred = calculate_y_pred
-        
-        self.threshold = 11  
-        self.penalty_weight = 0.05  
+
+        self.threshold = 11
+        self.penalty_weight = 0.05
 
     def initialize_h_vector(self, h: torch.Tensor) -> None:
         """
@@ -94,7 +94,7 @@ class ISTALayer(Module):
         else:
             self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
             self.h.data /= self.h.data.sum()
-    
+
     def get_custom_regularization(self) -> torch.Tensor:
         """
         Computes the custom regularization term for parameters exceeding the defined threshold.
@@ -107,7 +107,7 @@ class ISTALayer(Module):
             penalty = torch.relu(torch.abs(param) - self.threshold)
             reg_loss += torch.sum(penalty ** 2)
         return self.penalty_weight * reg_loss
-    
+
     def shrinkage(self) -> torch.Tensor:
         """
         Performs the shrinkage operation to enforce sparsity in the layer's parameters.
@@ -117,7 +117,7 @@ class ISTALayer(Module):
         """
         return torch.sign(self.h) * torch.max(torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h))
 
-    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:        
+    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         """
         Performs a partial fit, iteratively updating the sparse vector `h`.
 
@@ -143,12 +143,12 @@ class ISTALayer(Module):
         Returns:
             torch.Tensor: Updated sparse vector after applying shrinkage.
         """
-        y_pred = self.calculate_y_pred(dictionary, self.h)        
+        y_pred = self.evaluation_func(dictionary, self.h)
         loss = self.criterion(y_pred, y)
-        
+
         reg_loss = self.get_custom_regularization()
         total_loss = loss + reg_loss
-        
+
         self.optimizer.zero_grad()
         total_loss.backward(retain_graph=True)
         self.optimizer.step()

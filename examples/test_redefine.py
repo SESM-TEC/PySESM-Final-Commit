@@ -21,34 +21,22 @@ experiment = {
     "vector_range": [1e0, 1e1],
     "ista_alpha": 0.07,
     "ista_lambd": 0.01007,
-    "dictionary_alpha": 0.08928,
-    "rho_epochs": 1,
-    "mu_epochs": 1,
-    "model_epochs": 1,
-    "dict_epochs": 1,
-    "ista_epochs": 1,
+    "dictionary_alpha": 0.07007,
+    "rho_epochs": 150,
+    "mu_epochs": 150,
+    "model_epochs": 150,
+    "dict_epochs": 150,
+    "ista_epochs": 150,
     "T": [2, 2],
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "weight_decay": 0.004875,
     "permutation_times": 1,
-    "mode": "batch",
+    "mode": "sequential",
     "Seed": 45
 }
 # modes: sequential || batch
 
 folder_name = f"results_{experiment["hyp_set"]}_{experiment["mode"]}"
-
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                              datefmt='%Y-%m-%d %H:%M:%S')
-
-# Create a console handler
-console_handler = logging.StreamHandler()
-
-# Set the custom formatter for the console handler
-console_handler.setFormatter(formatter)
-
-# Set up the basic configuration
-logging.basicConfig(level=logging.INFO, handlers=[console_handler])
 
 logger = setup_logger()
 
@@ -86,81 +74,65 @@ X_test, y_test = create_design_matrix_test(xx, yy, zz)
 surrogate_function = GaussianFunction(
     n_features=experiment["n_features"],
     n_functions=experiment["n_functions"],
+    logger=logger,
     eig_range=experiment["eig_range"],
     mu_range=experiment["mu_range"],
     vector_range=experiment["vector_range"],
     seed=experiment["Seed"],
-    logger=logger
 )
-
-# Crea una instancia de la clase SSESM
-ssesm = SSESM(
-    n_samples=experiment["n_samples"],
-    n_features=experiment["n_features"],
-    n_functions=experiment["n_functions"],
-    eig_range=tuple(experiment["eig_range"]),
-    mu_range=tuple(experiment["mu_range"]),
-    vector_range=tuple(experiment["vector_range"]),
-    model_epochs=experiment["model_epochs"],
-    ista_epochs=experiment["ista_epochs"],
-    rho_epochs=experiment["rho_epochs"],
-    mu_epochs=experiment["mu_epochs"],
-    ista_alpha=experiment["ista_alpha"],
-    ista_lambd=experiment["ista_lambd"],
-    dictionary_alpha=experiment["dictionary_alpha"],
-    weight_decay=experiment["weight_decay"],
-    surrogate_function=surrogate_function,
-    permutation_times=experiment["permutation_times"],
-    dfngroup=1,
-    iter=0,
-    seed=experiment["Seed"],
-    T=experiment["T"],
-    logger=logger,
-    debug=True,
-    initial_bounds=experiment["initial_bounds"]
-)
-
-bsesm = BSESM(
-    n_samples=experiment["n_samples"],
-    n_features=experiment["n_features"],
-    l_functions=experiment["n_functions"],
-    eig_range=tuple(experiment["eig_range"]),
-    mu_range=tuple(experiment["mu_range"]),
-    vector_range=tuple(experiment["vector_range"]),
-    model_epochs=experiment["model_epochs"],
-    ista_epochs=experiment["ista_epochs"],
-    rho_epochs=experiment["rho_epochs"],
-    mu_epochs=experiment["mu_epochs"],
-    ista_alpha=experiment["ista_alpha"],
-    ista_lambd=experiment["ista_lambd"],
-    dictionary_alpha=experiment["dictionary_alpha"],
-    weight_decay=experiment["weight_decay"],
-    surrogate_function=surrogate_function,
-    dfngroup=1,
-    iter=0,
-    seed=experiment["Seed"],
-    logger=logger,
-    T=experiment["T"],
-    debug=True,
-    initial_bounds=experiment["initial_bounds"]
-)
-
-# for i in range(N_iter):
-#     ssesm_model.iter = i
-#     # Ejecuta el experimento
-#
-#     time, mse = run_experiment(X_train, y_train, X_test, y_test, experiment, sesms_model)
-#
-#     # Almacena los resultados
-#     data.append((i, time, mse))
-
-# save_results(data=data, fngroup=1)
 
 model = None
 if experiment["mode"] == "sequential":
-    model = ssesm
+    model = SSESM(
+        n_samples=experiment["n_samples"],
+        n_features=experiment["n_features"],
+        n_functions=experiment["n_functions"],
+        model_epochs=experiment["model_epochs"],
+        ista_epochs=experiment["ista_epochs"],
+        rho_epochs=experiment["rho_epochs"],
+        mu_epochs=experiment["mu_epochs"],
+        ista_alpha=experiment["ista_alpha"],
+        ista_lambd=experiment["ista_lambd"],
+        dictionary_alpha=experiment["dictionary_alpha"],
+        weight_decay=experiment["weight_decay"],
+        surrogate_function=surrogate_function,
+        permutation_times=experiment["permutation_times"],
+        dfngroup=1,
+        iter=0,
+        seed=experiment["Seed"],
+        T=experiment["T"],
+        logger=logger,
+        debug=True,
+        initial_bounds=experiment["initial_bounds"],
+        eig_range=tuple(experiment["eig_range"]),
+        mu_range=tuple(experiment["mu_range"]),
+        vector_range=tuple(experiment["vector_range"]),
+    )
 elif experiment["mode"] == "batch":
-    model = bsesm
+    model = BSESM(
+        n_samples=experiment["n_samples"],
+        n_features=experiment["n_features"],
+        n_functions=experiment["n_functions"],
+        eig_range=tuple(experiment["eig_range"]),
+        mu_range=tuple(experiment["mu_range"]),
+        vector_range=tuple(experiment["vector_range"]),
+        model_epochs=experiment["model_epochs"],
+        ista_epochs=experiment["ista_epochs"],
+        rho_epochs=experiment["rho_epochs"],
+        mu_epochs=experiment["mu_epochs"],
+        ista_alpha=experiment["ista_alpha"],
+        ista_lambd=experiment["ista_lambd"],
+        dictionary_alpha=experiment["dictionary_alpha"],
+        weight_decay=experiment["weight_decay"],
+        surrogate_function=surrogate_function,
+        dfngroup=1,
+        iter=0,
+        seed=experiment["Seed"],
+        logger=logger,
+        T=experiment["T"],
+        debug=True,
+        initial_bounds=experiment["initial_bounds"]
+    )
 else:
     raise ValueError("Invalid model mode, must be 'sequential' or 'batch'")
 

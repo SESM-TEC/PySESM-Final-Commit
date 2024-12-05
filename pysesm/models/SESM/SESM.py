@@ -1,4 +1,5 @@
 from pysesm.functions import SurrogateFunction
+from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.validation.sesm_validation import validate_sesm_partial_fit
@@ -7,6 +8,7 @@ import logging
 import torch
 import numpy as np
 import time
+from typing import Union, Callable
 
 
 class SESM(torch.nn.Module):
@@ -36,16 +38,21 @@ class SESM(torch.nn.Module):
         rho_epochs (int): Number of training epochs for the dictionary layer adjusting only the rho parameter.
         weight_decay (float): Penalty rate applied to the loss function to prevent overfitting.
     """
+    evaluation_func_registry: dict[EvaluationFuncEnum, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
+        EvaluationFuncEnum.BMM_MULT: lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten(),
+        EvaluationFuncEnum.TWOD_MULT: lambda dictionary, h: torch.matmul(dictionary, h),
+        EvaluationFuncEnum.DEFAULT: lambda dictionary, h: torch.matmul(dictionary, h)
+    }
 
-    def __init__(self, n_samples: int, psi: SurrogateFunction, seed: float, model_epochs: int,
+    def __init__(self, n_samples: int, n_features: int, n_functions:int, psi: Union[SurrogateFunction, SurrogateFunctionEnum], model_epochs: int,
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
-                 dictionary_alpha: float, weight_decay: float, h=None, calculate_y_pred=None):
+                 dictionary_alpha: float, weight_decay: float,  seed: int, logger:logging.Logger, debug: bool = False,  h=None, evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT, **kwargs):
         """
         Method that initializes the SESM.
 
         Args:
             n_samples (int): The number of samples taken from the original function.
-            psi (ApproximateSurrogateFunction): The function used for generating the model's dictionary.
+            psi (Union[SurrogateFunction, SurrogateFunction]): The function used for generating the model's dictionary.
             seed (float): Random seed to be used in the model.
             model_epochs (int): Number of training epochs for the model.
             ista_epochs (int): Number of training epochs for the ISTA layer.
@@ -59,20 +66,25 @@ class SESM(torch.nn.Module):
         super(SESM, self).__init__()
 
         self.n_samples = n_samples
-        self.n_features = psi.n_features
-        self.seed = seed
+        self.n_features = n_features
+        self.n_functions = n_functions
+        self.model_epochs = model_epochs
         self.ista_alpha = ista_alpha
         self.ista_epochs = ista_epochs
-        self.model_epochs = model_epochs
         self.ista_lambd = ista_lambd
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
         self.weight_decay = weight_decay
+        self.seed = seed
+        self.debug = debug
+        self.logger = logger
         self.losses_ISTA = []
         self.losses_Dictionary = []
         self.elapsed_time = 0
-        self.calculate_y_pred = calculate_y_pred or None
+        self.evaluation_func = self.evaluation_func_registry[evaluation_func]
+        print(evaluation_func)
+        print(self.evaluation_func_registry[evaluation_func])
 
         self.loss_stats = {
             "loss_mean": [],
@@ -83,20 +95,24 @@ class SESM(torch.nn.Module):
 
         # Instantiate model layers
         self.ista_layer = ISTALayer(
-            n_functions=self.n_features,
+            n_functions=self.n_functions,
             random_seed=self.seed,
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
             weight_decay=self.weight_decay,
-            h=h,
-            calculate_y_pred=self.calculate_y_pred
+            evaluation_func=self.evaluation_func,
+            h=h
         )
 
         self.dictionary_layer = DictLayer(
             n_samples=self.n_samples,
-            psi=psi,
+            n_features=self.n_features,
+            n_functions=self.n_functions,
             alpha=self.dictionary_alpha,
-            calculate_y_pred=self.calculate_y_pred
+            evaluation_func=self.evaluation_func,
+            logger=logger,
+            psi=psi,
+            **kwargs
         )
 
     @property
@@ -115,6 +131,7 @@ class SESM(torch.nn.Module):
         redefines the weight each time its called.
 
         Args:
+            h:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
         """
@@ -144,6 +161,8 @@ class SESM(torch.nn.Module):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
+            active_blocks_count:
+            max_points_in_block:
         """
 
         validate_sesm_partial_fit(self, X, y)
@@ -233,8 +252,7 @@ class SESM(torch.nn.Module):
         dictionary = self.dictionary_layer.dictionary.double()
         h = self.ista_layer.h.double()
 
-        return self.calculate_y_pred(dictionary, h)
-        # return torch.bmm(dictionary, h).squeeze(-1).flatten()
+        return self.evaluation_func(dictionary, h)
 
     def loss_analysis(self, dict_epochs: int) -> None:
         current_loss = self.dictionary_layer.losses[-dict_epochs:]

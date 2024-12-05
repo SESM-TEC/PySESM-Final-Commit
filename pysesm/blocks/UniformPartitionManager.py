@@ -1,13 +1,13 @@
-import logging
-from copy import deepcopy
-from typing import Union
-
-import numpy as np
-import torch
-
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
+
+import logging
+from copy import deepcopy
+from typing import Union, Callable
+import numpy as np
+import torch
+
 
 DEFAULT_BLOCKS_PER_DIM = 4
 
@@ -35,7 +35,7 @@ class UniformPartitionManager(BlockManager):
 
     """
 
-    def __init__(self, logger, T: torch.Tensor, n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
+    def __init__(self, logger: logging.Logger, T: torch.Tensor, n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
         """
 
         Args:
@@ -59,8 +59,9 @@ class UniformPartitionManager(BlockManager):
     def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
         # TODO: Find efficient way to find block (currently being worked on by Joshua)
         for index in np.ndindex(self.blocks.shape):
-            if self.blocks[index].is_point_in_block(X):
-                return self.blocks[index]
+            block: PartitionBlock = self.blocks[index]
+            if block.is_point_in_block(X):
+                return block
 
         logging.warning("Could not find a block for point {}", X)
         return None
@@ -103,7 +104,10 @@ class UniformPartitionManager(BlockManager):
                 block.amplitude = squeeze_factor(block.y)
                 if init_h:
                     block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
-                    block.h.data /= block.h.data.sum()
+                    # block.h.data /= block.h.data.sum()
+                    self.logger.debug(
+                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}")
+
                 block.target = [value * block.amplitude for value in block.y]
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
@@ -120,7 +124,7 @@ class UniformPartitionManager(BlockManager):
             if selected_block is not None:
                 selected_block.new_point(X[i], y[i], i)
 
-    def add_points(self, X: torch.Tensor, y: np.ndarray):
+    def add_points(self, X: torch.Tensor, y: torch.Tensor):
         self._update_block_arrangement(X)
 
         self._map_points(X, y)
@@ -128,7 +132,7 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks()
 
     def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
-                            calculate_y_pred=None):
+                            evaluation_func:Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
@@ -137,7 +141,7 @@ class UniformPartitionManager(BlockManager):
                 alpha=ista_alpha,
                 lambd=ista_lambd,
                 weight_decay=weight_decay,
-                calculate_y_pred=calculate_y_pred
+                evaluation_func=evaluation_func
             )
 
     def retrieve_active_blocks(self):
