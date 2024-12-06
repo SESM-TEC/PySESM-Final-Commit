@@ -16,10 +16,11 @@ def squeeze_factor(y: np.ndarray):
     Calculates a squeezing factor for a given set of values.
 
     Args:
-    - Y (iterable): An iterable containing numeric values.
+        y (np.ndarray): An array containing numeric values.
 
     Returns:
-    - float: The squeezing factor. If the maximum value in Y is greater than 1, returns the reciprocal of the maximum value. Otherwise, returns 1.0.
+        float: The squeezing factor. If the maximum value in y exceeds 1, returns 1 / max(y).
+        Otherwise, returns 1.0.
     """
     e_f = 0.0
     max_y = max(y)
@@ -32,16 +33,33 @@ def squeeze_factor(y: np.ndarray):
 
 class UniformPartitionManager(BlockManager):
     """
+    A class to manage a uniform partitioning of the input space into blocks.
 
+    The UniformPartitionManager divides the space into uniformly sized blocks, assigns points to these blocks,
+    and configures or adjusts local models within each block.
+
+    Args:
+        logger (logging.Logger): Logger instance for recording messages and warnings.
+        T (torch.Tensor): A tensor defining the number of blocks per dimension.
+        n_functions (int): Number of functions or features of interest in each block.
+        initial_bounds (np.ndarray, optional): Initial bounds for the partitioning, shaped as (2, n_features).
+            - The first row contains the lower bounds.
+            - The second row contains the upper bounds.
+            If not provided, it is automatically calculated from the input data.
+        threshold (float, optional): Threshold for determining block activity (default is 0).
     """
 
     def __init__(self, logger: logging.Logger, T: torch.Tensor, n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
         """
+        Initializes the UniformPartitionManager with the provided parameters.
 
         Args:
-            T(int):
-            initial_bounds:
-            threshold:
+            logger (logging.Logger): Logger instance for recording messages and warnings.
+            T (torch.Tensor): A tensor defining the number of blocks per dimension.
+            n_functions (int): Number of functions or features of interest in each block.
+            initial_bounds (np.ndarray, optional): Initial bounds for the partitioning.
+                If not provided, bounds are automatically derived from the data.
+            threshold (float, optional): Threshold for determining block activity.
         """
         super().__init__()
 
@@ -57,6 +75,15 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
     def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
+        """
+        Finds the block corresponding to a given point.
+
+        Args:
+            X (torch.Tensor): A point in the input space.
+
+        Returns:
+            PartitionBlock or None: The block containing the point, or None if not found.
+        """
         # TODO: Find efficient way to find block (currently being worked on by Joshua)
         for index in np.ndindex(self.blocks.shape):
             block: PartitionBlock = self.blocks[index]
@@ -67,6 +94,14 @@ class UniformPartitionManager(BlockManager):
         return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
+        """
+        Updates the arrangement of blocks based on the input data.
+
+        This method initializes or adjusts the block arrangement and sizes, ensuring coverage of the input space.
+
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+        """
         # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
@@ -96,7 +131,10 @@ class UniformPartitionManager(BlockManager):
 
     def _configure_blocks(self, init_h: bool = True):
         """
-        Configures the blocks with their expected squeeze factor
+        Configures each block with its expected squeeze factor and initializes sparse vectors if required.
+
+        Args:
+            init_h (bool, optional): Whether to initialize the sparse vector `h` for each block (default is True).
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
@@ -112,12 +150,11 @@ class UniformPartitionManager(BlockManager):
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
-        Locate points in their respective sub-blocks.
+        Maps input points to their respective sub-blocks.
 
         Args:
-        - x_n (np.ndarray): The normalized points between 0 and 1.
-        - t (np.ndarray): The integer part of the normalized points.
-        - y (np.ndarray) : The output values associated with the samples
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (np.ndarray): Target data corresponding to the input points.
         """
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
@@ -125,6 +162,13 @@ class UniformPartitionManager(BlockManager):
                 selected_block.new_point(X[i], y[i], i)
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
+        """
+        Adds points to the blocks, updating the partitioning and configuration as needed.
+
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor): Target data of shape (n_samples,).
+        """
         self._update_block_arrangement(X)
 
         self._map_points(X, y)
@@ -133,6 +177,17 @@ class UniformPartitionManager(BlockManager):
 
     def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
                             evaluation_func:Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
+        """
+        Initializes an ISTA layer for each block.
+
+        Args:
+            n_functions (int): Number of functions or features for the ISTA layer.
+            seed (int): Random seed for initialization.
+            ista_alpha (float): Learning rate for the ISTA layer.
+            ista_lambd (float): Regularization parameter for the ISTA layer.
+            weight_decay (float): Weight decay penalty for the ISTA layer.
+            evaluation_func (Callable): Function for evaluating the ISTA layer.
+        """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
@@ -145,9 +200,25 @@ class UniformPartitionManager(BlockManager):
             )
 
     def retrieve_active_blocks(self):
+        """
+        Retrieves all active blocks in the partition.
+
+        Returns:
+            List[PartitionBlock]: A list of active blocks.
+        """
         return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]
 
     def retrieve_test_active_blocks(self, X, y):
+        """
+        Retrieves active blocks for testing purposes.
+
+        Args:
+            X (torch.Tensor): Test input data of shape (n_samples, n_features).
+            y (torch.Tensor): Test target data of shape (n_samples,).
+
+        Returns:
+            List[PartitionBlock]: A list of active blocks corresponding to the test data.
+        """
         # Copy blocks without X and y
         test_blocks = deepcopy(self.blocks)
 

@@ -13,30 +13,37 @@ from typing import Union, Callable
 
 class SESM(torch.nn.Module):
     """
-    A custom PyTorch module for implementing a surrogate model that uses the SESM architecture.
+    A PyTorch module implementing a Surrogate Ensemble Sparse Model (SESM).
 
-    This layer is designed for use in surrogate modeling and function approximation tasks.
+    SESM combines sparse coding techniques with dictionary learning to approximate complex functions.
+    It uses two key layers:
+    - ISTA layer for learning sparse representations.
+    - Dictionary layer for constructing a dictionary of basis functions.
 
     Attributes:
-        n_samples (int): The number of samples taken from the original function.
-        n_features (int): The number of input features or dimensions.
-        seed (float): Random seed to be used in the model.
-        ista_layer (ISTALayer): Module layer that holds and adjusts the sparse vectors.
-        dictionary_layer (DictLayer): Module layer that holds and adjusts the dictionary parameters (ρ, μ).
-        loss_stats (dict): A dictionary containing the different types of loss history.
-            - 'loss_mean' (list): A history of the mean loss values.
-            - 'loss_std' (list): A history of the standard loss values.
-            - 'loss_max' (list): A history of the max loss values.
-            - 'loss_min' (list): A history of the min loss values.
-        elapsed_time (float): Time consumed by the SESM fit process.
-        model_epochs (int): Number of training epochs for the model.
+        n_samples (int): Number of samples in the input dataset.
+        n_features (int): Number of features or input dimensions.
+        n_functions (int): Number of basis functions for the dictionary.
+        model_epochs (int): Number of epochs for the overall model training.
         ista_epochs (int): Number of training epochs for the ISTA layer.
         ista_alpha (float): Learning rate for the ISTA layer.
         ista_lambd (float): Regularization parameter for the ISTA layer.
+        mu_epochs (int): Epochs for updating the `mu` parameter in the dictionary layer.
+        rho_epochs (int): Epochs for updating the `rho` parameter in the dictionary layer.
         dictionary_alpha (float): Learning rate for the dictionary layer.
-        mu_epochs (int): Number of training epochs for the dictionary layer adjusting only the mu parameter.
-        rho_epochs (int): Number of training epochs for the dictionary layer adjusting only the rho parameter.
-        weight_decay (float): Penalty rate applied to the loss function to prevent overfitting.
+        weight_decay (float): Weight decay penalty to reduce overfitting.
+        seed (int): Random seed for reproducibility.
+        debug (bool): If True, enables debug logging.
+        logger (logging.Logger): Logger instance for logging events.
+        evaluation_func (Callable): Function for evaluating predictions based on the dictionary and sparse vector.
+        ista_layer (ISTALayer): Module responsible for learning sparse vectors.
+        dictionary_layer (DictLayer): Module responsible for learning the dictionary.
+        loss_stats (dict): Statistics about dictionary losses during training, with keys:
+            - `loss_mean` (list): Mean loss values for each epoch.
+            - `loss_std` (list): Standard deviation of loss values for each epoch.
+            - `loss_max` (list): Maximum loss values for each epoch.
+            - `loss_min` (list): Minimum loss values for each epoch.
+        elapsed_time (float): Total time consumed during the model fitting process.
     """
     evaluation_func_registry: dict[EvaluationFuncEnum, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
         EvaluationFuncEnum.BMM_MULT: lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten(),
@@ -48,21 +55,31 @@ class SESM(torch.nn.Module):
                  ista_epochs: int, ista_alpha: float, ista_lambd: float, mu_epochs: int, rho_epochs: int,
                  dictionary_alpha: float, weight_decay: float,  seed: int, logger:logging.Logger, debug: bool = False,  h=None, evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT, **kwargs):
         """
-        Method that initializes the SESM.
+        Initialize the SESM model.
+
+        Sets up the ISTA and dictionary layers, along with evaluation functions and training parameters.
 
         Args:
-            n_samples (int): The number of samples taken from the original function.
-            psi (Union[SurrogateFunction, SurrogateFunction]): The function used for generating the model's dictionary.
-            seed (float): Random seed to be used in the model.
+            n_samples (int): Number of samples in the input dataset.
+            n_features (int): Number of input dimensions.
+            n_functions (int): Number of basis functions in the dictionary.
+            psi (Union[SurrogateFunction, SurrogateFunctionEnum]): Function for generating the dictionary.
             model_epochs (int): Number of training epochs for the model.
-            ista_epochs (int): Number of training epochs for the ISTA layer.
+            ista_epochs (int): Number of epochs for the ISTA layer.
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
-            mu_epochs (int): Number of training epochs for the dictionary layer adjusting only the mu parameter.
-            rho_epochs (int): Number of training epochs for the dictionary layer adjusting only the rho parameter.
+            mu_epochs (int): Epochs for updating the `mu` parameter in the dictionary layer.
+            rho_epochs (int): Epochs for updating the `rho` parameter in the dictionary layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            weight_decay (float): Penalty rate applied to the loss function to prevent overfitting.
+            weight_decay (float): Regularization term to prevent overfitting.
+            seed (int): Random seed for reproducibility.
+            logger (logging.Logger): Logger for logging events.
+            debug (bool, optional): If True, enables debug logging (default: False).
+            h (torch.Tensor, optional): Initial sparse vector for the ISTA layer (default: None).
+            evaluation_func (EvaluationFuncEnum, optional): Evaluation function for predictions (default: EvaluationFuncEnum.DEFAULT).
+            **kwargs: Additional parameters for the dictionary layer.
         """
+
         super(SESM, self).__init__()
 
         self.n_samples = n_samples
@@ -127,15 +144,19 @@ class SESM(torch.nn.Module):
 
     def fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor = None):
         """
-        Trains the model by learning a sparse vector and a dictionary that represent the original function, and it
-        redefines the weight each time its called.
+        Train the SESM model.
+
+        Trains both the ISTA and dictionary layers for a specified number of epochs, learning sparse representations
+        and a dictionary that approximates the input-to-output mapping.
 
         Args:
-            h:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
-            y (torch.Tensor): Target data of shape (n_samples,).
-        """
+            X (torch.Tensor): Input tensor of shape `(n_samples, n_features)`.
+            y (torch.Tensor): Target tensor of shape `(n_samples,)`.
+            h (torch.Tensor, optional): Initial sparse vector for the ISTA layer (default: None).
 
+        Returns:
+            None
+        """
         self.dictionary_layer.initialize_layer(X)
         self.ista_layer.initialize_h_vector(h)
 
@@ -156,14 +177,20 @@ class SESM(torch.nn.Module):
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
                     active_blocks_count: int = 0) -> None:
         """
-        Trains the model by learning a sparse vector and a dictionary that represent the original function without redefining the weight each time.
+        Perform partial training on the SESM model.
+
+        Updates the ISTA and dictionary layers without reinitializing their weights, enabling iterative refinement.
 
         Args:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
-            y (torch.Tensor): Target data of shape (n_samples,).
-            active_blocks_count:
-            max_points_in_block:
+            X (torch.Tensor): Input tensor of shape `(n_samples, n_features)`.
+            y (torch.Tensor): Target tensor of shape `(n_samples,)`.
+            max_points_in_block (int, optional): Maximum points per block for partitioning (default: 0).
+            active_blocks_count (int, optional): Number of active blocks for partitioning (default: 0).
+
+        Returns:
+            None
         """
+
 
         validate_sesm_partial_fit(self, X, y)
 
@@ -188,13 +215,20 @@ class SESM(torch.nn.Module):
     def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
                 active_blocks_count: int = 0) -> None:
         """
-        Computes the forward pass for the model.
+        Perform a forward pass through the SESM model.
+
+        Updates the dictionary and sparse vector using the ISTA and dictionary layers.
 
         Args:
-           block_size:
-           X (torch.Tensor): Input data of shape (n_samples, n_features).
-           y (torch.Tensor): Target data of shape (n_samples,).
+            X (torch.Tensor): Input tensor of shape `(n_samples, n_features)`.
+            y (torch.Tensor): Target tensor of shape `(n_samples,)`.
+            max_points_in_block (int, optional): Maximum points per block for partitioning (default: 0).
+            active_blocks_count (int, optional): Number of active blocks for partitioning (default: 0).
+
+        Returns:
+            None
         """
+
 
         self.dictionary_layer.partial_fit(
             X=X,
@@ -232,15 +266,20 @@ class SESM(torch.nn.Module):
     def predict(self, X: torch.Tensor, max_points_in_block: int = 0, active_blocks_count: int = 0,
                 custom_ista_layer: ISTALayer = None) -> torch.Tensor:
         """
-        Predicts the value of a function using the learned sparse vector and dictionary.
+        Predict outputs using the trained SESM model.
+
+        Generates predictions based on the learned dictionary and sparse vector.
+
         Args:
-            max_points_in_block:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
-            custom_ista_layer (ISTALayer): New ISTA Layer to be used in the prediction process
+            X (torch.Tensor): Input tensor of shape `(n_samples, n_features)`.
+            max_points_in_block (int, optional): Maximum points per block for partitioning (default: 0).
+            active_blocks_count (int, optional): Number of active blocks for partitioning (default: 0).
+            custom_ista_layer (ISTALayer, optional): A custom ISTA layer for prediction (default: None).
 
         Returns:
-            torch.Tensor: The predicted values for each sample of the objective function.
+            torch.Tensor: Predicted values of shape `(n_samples,)`.
         """
+
 
         if custom_ista_layer is not None:
             self.ista_layer = custom_ista_layer
@@ -255,6 +294,15 @@ class SESM(torch.nn.Module):
         return self.evaluation_func(dictionary, h)
 
     def loss_analysis(self, dict_epochs: int) -> None:
+        """
+        Analyze and record loss statistics for the dictionary layer.
+
+        Args:
+            dict_epochs (int): Number of epochs used for dictionary training.
+
+        Returns:
+            None
+        """
         current_loss = self.dictionary_layer.losses[-dict_epochs:]
         self.loss_stats["loss_mean"].append(np.mean(current_loss))
         self.loss_stats["loss_std"].append(np.std(current_loss))

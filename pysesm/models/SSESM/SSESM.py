@@ -14,8 +14,9 @@ from sklearn.metrics import mean_squared_error
 class SSESM(SESM):
     """
     A PyTorch module extending the SESM architecture to implement a surrogate model
-    using a sequential approach. This class is designed for function approximation
-    and surrogate modeling tasks by utilizing sub-block partitioning.
+    using a sequential and block-partitioned approach. This class is designed for
+    function approximation and surrogate modeling tasks with dynamic sub-block partitioning.
+
     """
 
     def __init__(self,
@@ -44,29 +45,38 @@ class SSESM(SESM):
                  debug=True,
                  **kwargs):
         """
-        Initialize the SSESM model with a sequential approach.
+        Initialize the SSESM model with a sequential, block-based approach.
+
+        This constructor sets up the surrogate model, initializes the partition manager for
+        sub-block operations, and configures hyperparameters for ISTA and dictionary layers.
 
         Args:
             n_samples (int): Number of samples in the dataset.
             n_features (int): Number of input features.
             n_functions (int): Number of latent functions used in the model.
+            eig_range: Eigenvalue range for the surrogate function's parameter initialization.
+            mu_range: Range for the mu parameter in dictionary learning.
+            vector_range: Range for initializing the dictionary vectors.
             model_epochs (int): Number of epochs for the overall model training.
-            ista_epochs (int): Number of epochs for the ISTA layer training.
-            rho_epochs (int): Number of epochs for adjusting the rho parameter in the dictionary layer.
-            mu_epochs (int): Number of epochs for adjusting the mu parameter in the dictionary layer.
+            ista_epochs (int): Number of epochs for training the ISTA layer.
+            rho_epochs (int): Number of epochs for adjusting the rho parameter.
+            mu_epochs (int): Number of epochs for adjusting the mu parameter.
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            weight_decay (float): Weight decay for regularization to prevent overfitting.
-            surrogate_function (ApproximateSurrogateFunction): The surrogate function used to create the dictionary.
+            weight_decay (float): Weight decay to prevent overfitting.
+            surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
-            dfngroup: Grouping information for the functions (implementation-specific).
-            iter (int): Iteration count of the experiment.
+            dfngroup: Grouping information for function blocks (specific to implementation).
+            iter (int, optional): Experiment iteration count (default: 1).
             seed (int): Random seed for reproducibility.
-            logger: Logger instance to capture runtime information.
-            T (int): The scaling factor for normalization.
-            debug (bool): Flag to enable or disable debug mode. Default is True.
+            logger (logging.Logger): Logger instance for runtime monitoring.
+            T (list[int]): Scaling factors for normalization.
+            initial_bounds (optional): Initial bounds for partitioning (default: None).
+            debug (bool, optional): Enables or disables debug mode (default: True).
+            **kwargs: Additional keyword arguments passed to the base class.
         """
+
         self.n_samples = n_samples
         self.n_features = n_features
         self.n_functions = n_functions
@@ -97,6 +107,21 @@ class SSESM(SESM):
         )
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
+        """
+        Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
+
+        The method permutes the dataset and processes each block sequentially to update the
+        ISTA layer. Active blocks are dynamically retrieved and used to compute the partial fit.
+
+        Args:
+            X (torch.Tensor): Input features for training.
+            y (torch.Tensor): Target values.
+            *_: Additional unused positional arguments.
+
+        Returns:
+            None
+        """
+
         self.partition_manager.add_points(X, y)
         self.partition_manager.init_ista_per_block(self.n_functions,
                                                    self.seed,
@@ -117,14 +142,22 @@ class SSESM(SESM):
 
     def predict(self, X, y, *_):
         """
-        Predict the output using the trained SESM model with sub-blocks.
+        Predict the output using the trained SSESM model with active sub-blocks.
+
+        The prediction process involves:
+        1. Retrieving active sub-blocks from the partition manager.
+        2. Making predictions for each sub-block using the associated ISTA layer.
+        3. Aggregating predictions to reconstruct the final output vector.
 
         Args:
-            X_test (torch.Tensor): Input features for prediction.
-            -
+            X (torch.Tensor): Input features for prediction.
+            y (torch.Tensor): Target values, used to identify active blocks.
+            *_: Additional unused positional arguments.
+
         Returns:
-            torch.Tensor: Predicted values for the test set.
+            torch.Tensor: Predicted values for the input dataset.
         """
+
         active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
 
         y_pred_per_block = [0 for _ in range(len(y))]
@@ -139,18 +172,22 @@ class SSESM(SESM):
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
-        Perform a forward pass for model evaluation with sub-blocks.
+        Evaluate the model's performance on a given dataset using active sub-blocks.
+
+        The method computes predictions, tracks the elapsed training time, and calculates
+        the Mean Squared Error (MSE) between the predictions and true values.
 
         Args:
             X (torch.Tensor): Input features for evaluation.
-            y (torch.Tensor): True target values for evaluation.
+            y (torch.Tensor): Target values.
 
         Returns:
             tuple: A tuple containing:
-                - Predicted values (torch.Tensor).
-                - Training time (float): Time taken for the training process (in minutes).
-                - Mean squared error (float): MSE between predicted and true target values.
+                - y_pred (torch.Tensor): Predicted values for the dataset.
+                - time (float): Total elapsed time for training (in minutes).
+                - mse (float): Mean Squared Error between predictions and true target values.
         """
+
         y_pred = self.predict(X, y)
         time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.clone().detach(), y)
