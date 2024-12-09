@@ -8,17 +8,17 @@ import torch
 
 class ISTALayer(Module):
     """
-    A custom PyTorch module for implementing a sparse vector layer with learnable parameters.
+    A custom PyTorch module implementing a sparse vector layer with learnable parameters.
 
-    This layer is designed for surrogate modeling and function approximation tasks, integrating
-    sparsity through shrinkage operations and custom regularization to control parameter values.
+    This layer is designed for tasks such as surrogate modeling and function approximation,
+    integrating sparsity through shrinkage operations and custom regularization techniques.
 
     Attributes:
         n_functions (int): Number of basis functions or components in the sparse vector.
-        random_seed (int): Random seed for reproducibility.
-        weight_decay (float): Weight decay coefficient for regularization.
+        random_seed (int): Random seed for reproducibility of initialization.
+        weight_decay (float): Coefficient for weight decay regularization.
         alpha (float): Learning rate for parameter updates.
-        lambd (float): Regularization parameter for shrinkage operations.
+        lambd (float): Regularization parameter controlling the strength of shrinkage operations.
         criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
         optimizer (torch.optim.Optimizer): Optimizer for updating the model parameters (default: SGD).
         h (torch.nn.Parameter): Sparse vector maintained and updated by the layer.
@@ -26,6 +26,19 @@ class ISTALayer(Module):
         evaluation_func (callable): Function to compute predictions from input and parameters.
         threshold (float): Threshold for custom regularization (default: 10.0).
         penalty_weight (float): Weight of the penalty term in custom regularization (default: 0.01).
+
+    Methods:
+        setup(h: torch.Tensor) -> None:
+            Initializes the sparse vector `h` as a learnable parameter.
+        get_custom_regularization() -> torch.Tensor:
+            Computes a custom regularization term for parameters exceeding the threshold.
+        shrinkage() -> torch.Tensor:
+            Applies the shrinkage operation (soft thresholding) to enforce sparsity in `h`.
+        partial_fit(y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+            Performs a partial fit over a specified number of epochs, updating `h`.
+        forward(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
+            Executes a forward pass, computes the total loss (including regularization),
+            and updates parameters using backpropagation.
     """
 
     def __init__(
@@ -88,8 +101,15 @@ class ISTALayer(Module):
         """
         Initializes the sparse vector `h` as a learnable parameter.
 
+        If an initial value for `h` is provided, it is used directly. Otherwise, `h` is randomly
+        initialized with values normalized to sum to one.
+
         Args:
-            h (torch.Tensor): Optional initial value for the sparse vector. If not provided, it is initialized randomly.
+            h (torch.Tensor): Optional initial value for the sparse vector. If not provided, 
+            a random vector of size `n_functions` is created.
+
+        Returns:
+            None
         """
         if h is not None:
             self.h = torch.nn.Parameter(h)
@@ -101,23 +121,28 @@ class ISTALayer(Module):
 
     def get_custom_regularization(self) -> float:
         """
-        Computes the custom regularization term for parameters exceeding the defined threshold.
+        Computes the custom regularization term to penalize parameters exceeding the defined threshold.
+
+        This term encourages sparsity and controls the magnitude of parameters by penalizing their
+        values when they exceed `self.threshold`.
 
         Returns:
             torch.Tensor: The computed regularization penalty.
         """
-        reg_loss = 0.0
-        for param in self.parameters():
-            penalty = torch.relu(torch.abs(param) - self.threshold)
-            reg_loss += torch.sum(penalty ** 2)
-        return self.penalty_weight * reg_loss
+        params = torch.cat([p.view(-1) for p in self.parameters()])
+        penalty = torch.relu(torch.abs(params) - self.threshold)
+        return self.penalty_weight * torch.sum(penalty ** 2)
 
     def shrinkage(self) -> torch.Tensor:
         """
-        Performs the shrinkage operation to enforce sparsity in the layer's parameters.
+        Applies the shrinkage operation (soft thresholding) to enforce sparsity in the parameter vector `h`.
+
+        The shrinkage operation reduces the magnitude of elements in `h` by subtracting a threshold 
+        determined by the learning rate (`alpha`) and the regularization parameter (`lambd`). Values 
+        that fall below the threshold are set to zero.
 
         Returns:
-            torch.Tensor: The updated sparse vector.
+            torch.Tensor: The updated sparse vector after applying the shrinkage operation.
         """
         return torch.sign(self.h) * torch.max(
             torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h)
@@ -125,13 +150,19 @@ class ISTALayer(Module):
 
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         """
-        Performs a partial fit, iteratively updating the sparse vector `h`.
+        Performs a partial fit, iteratively updating the sparse vector `h` over a specified number of epochs.
+
+        During training, the method logs the total loss, including both the prediction error
+        and the regularization penalty, for each epoch.
 
         Args:
             y (torch.Tensor): Ground truth or target vector.
             epochs (int): Number of epochs to train.
-            dictionary (torch.Tensor): Input dictionary for the forward pass.
-            log_losses (bool): Whether to log the computed losses (default: True).
+            dictionary (torch.Tensor): Input matrix or dictionary used to compute predictions.
+            log_losses (bool, optional): Whether to log the computed losses during training (default: True).
+
+        Returns:
+            None
         """
         for _ in range(epochs):
             new_h = self.forward(y, dictionary, log_losses)

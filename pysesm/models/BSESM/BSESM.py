@@ -11,6 +11,15 @@ from sklearn.metrics import mean_squared_error
 
 
 class BSESM(SESM):
+    """
+    A Batch-based Surrogate Model for Sequential Estimation of Sparse Models (BSESM).
+    
+    This class extends the SESM (Sequential Estimation of Sparse Models) model by incorporating
+    a batch processing approach, which organizes data into blocks for more efficient learning and
+    prediction. The model uses a surrogate function to generate a dictionary and iteratively adjusts 
+    the parameters during training.
+    
+    """
     def __init__(
         self,
         n_features: int,
@@ -32,29 +41,26 @@ class BSESM(SESM):
         **kwargs,
     ):
         """
-        Initialize the SSESM model with a sequential approach.
-
         Args:
             n_samples (int): Number of samples in the dataset.
             n_features (int): Number of input features.
             n_functions (int): Number of latent functions used in the model.
-            eig_range (tuple): Range for eigenvalues during dictionary creation.
-            mu_range (tuple): Range for mu parameter during dictionary creation.
-            vector_range (tuple): Range for vector parameter initialization.
             model_epochs (int): Number of epochs for the overall model training.
-            ista_epochs (int): Number of epochs for the ISTA layer training.
+            ista_epochs (int): Number of epochs for the ISTA (Iterative Shrinkage-Thresholding Algorithm) layer training.
             rho_epochs (int): Number of epochs for adjusting the rho parameter in the dictionary layer.
             mu_epochs (int): Number of epochs for adjusting the mu parameter in the dictionary layer.
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            weight_decay (float): Weight decay for regularization to prevent overfitting.
-            surrogate_function (SurrogateFunction): The surrogate function used to create the dictionary.
-            dfngroup: Grouping information for the functions (implementation-specific).
-            iter (int): Iteration count of the experiment.
+            weight_decay (float): Regularization term for preventing overfitting.
+            surrogate_function (Union[SurrogateFunction, SurrogateFunctionEnum]): The surrogate function used to create the dictionary.
+            dfngroup: Grouping information for the functions (specific to the implementation).
+            T (list[int]): A list of the number of elements in each block for partitioning.
             seed (int): Random seed for reproducibility.
-            logger: Logger instance to capture runtime information.
-            debug (bool): Flag to enable or disable debug mode. Default is True.
+            logger (logging.Logger): Logger instance to capture runtime information.
+            iter (int, optional): Iteration count of the experiment (default is 1).
+            initial_bounds (optional): Initial bounds for the dictionary (default is None).
+            debug (bool, optional): Flag to enable or disable debug mode (default is False).
         """
         self.dfngroup = dfngroup
         self.partition_manager = UniformPartitionManager(
@@ -84,9 +90,30 @@ class BSESM(SESM):
         )
 
     def _arrange_batch_h(self, blocks: list[PartitionBlock]):
+        """
+        Arrange and stack the 'h' vectors from each block in a batch.
+
+        Args:
+            blocks (list[PartitionBlock]): List of partition blocks containing sparse vectors.
+
+        Returns:
+            torch.Tensor: A tensor with stacked 'h' vectors from all blocks.
+        """
         return torch.stack([block.h for block in blocks]).unsqueeze(-1)
 
     def _fill_block_points(self, blocks: list[PartitionBlock]):
+        """
+        Fill missing points in the blocks with padding, ensuring consistent size across all blocks.
+
+        Args:
+            blocks (list[PartitionBlock]): List of partition blocks to process.
+
+        Returns:
+            tuple: A tuple containing:
+                - filled_active_blocks_X (torch.Tensor): Features for all blocks, padded where necessary.
+                - filled_active_blocks_y (torch.Tensor): Targets for all blocks, padded where necessary.
+                - max_points_in_block (int): Maximum number of points in any block.
+        """
         filled_active_blocks_X = []
         filled_active_blocks_y = []
         empty_X = [0 for _ in range(self.n_features)]
@@ -123,6 +150,13 @@ class BSESM(SESM):
         return filled_active_blocks_X, filled_active_blocks_y, max_points_in_block
 
     def partial_fit(self, X, y, *_):
+        """
+        Perform a partial fit on the model using the provided data, updating the dictionary and sparse representation.
+
+        Args:
+            X (torch.Tensor): Feature matrix.
+            y (torch.Tensor): Target vector.
+        """
         self.partition_manager.add_points(X, y)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
@@ -149,6 +183,7 @@ class BSESM(SESM):
                     f"Block at index {block.block_index}: Sparse vector 'h' learned: {trained_h[index]} (Tensor with shape {trained_h[index].shape})"
                 )
 
+
     def forward(
         self,
         X: torch.Tensor,
@@ -156,17 +191,27 @@ class BSESM(SESM):
         dictionary_shape: tuple
     ) -> None:
         super().forward(X, y, dictionary_shape)
+        """
+        Perform a forward pass for the model.
+
+        Args:
+            X (torch.Tensor): Feature matrix for the forward pass.
+            y (torch.Tensor): Target vector for the forward pass.
+            dictionary_shape (tuple, optional): Specifies the shape of the evaluated dictionary before
+                                            computing the loss. If not provided, the default shape is used.
+        """
+        super().forward(X, y,dictionary_shape)
 
     def predict(self, X, y) -> [torch.Tensor, torch.Tensor]:  # type: ignore
         """
-        Predict the output using the trained SESM model with sub-blocks.
+        Make predictions using the trained BSESM model.
 
         Args:
-            X_test (torch.Tensor): Input features for prediction.
-            list_sub_blocks (list): A list of sub-blocks used for the prediction process.
+            X (torch.Tensor): Input features for prediction.
+            y (torch.Tensor): Target values corresponding to the input features.
 
         Returns:
-            torch.Tensor: Predicted values for the test set.
+            torch.Tensor: Predicted values for the input data.
         """
 
         active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
@@ -194,17 +239,16 @@ class BSESM(SESM):
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
-        Perform a forward pass for model evaluation with sub-blocks.
+        Evaluate the model performance by making predictions and calculating the mean squared error.
 
         Args:
-            X (torch.Tensor): Input features for evaluation.
+            X (torch.Tensor): Feature matrix for evaluation.
             y (torch.Tensor): True target values for evaluation.
-            list_sub_blocks (list): A list of sub-blocks to be used for evaluation.
 
         Returns:
             tuple: A tuple containing:
                 - Predicted values (torch.Tensor).
-                - Training time (float): Time taken for the training process (in minutes).
+                - Training time (float): Time taken for training, in minutes.
                 - Mean squared error (float): MSE between predicted and true target values.
         """
         y_pred = self.predict(X, y)

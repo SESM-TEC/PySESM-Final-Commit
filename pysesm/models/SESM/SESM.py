@@ -13,6 +13,7 @@ from pysesm.models.ISTALayer import ISTALayer
 
 class SESM(torch.nn.Module):
     """
+<<<<<<< HEAD
     A custom PyTorch module for implementing a surrogate model using the SESM (Sparse-Encoded Surrogate Model) architecture.
 
     The SESM architecture is designed for surrogate modeling and function approximation tasks, leveraging sparse encoding
@@ -144,6 +145,7 @@ class SESM(torch.nn.Module):
             **kwargs
     ):
         """
+<<<<<<< HEAD
         Initializes the SESM model with the given parameters.
 
         Args:
@@ -208,6 +210,7 @@ class SESM(torch.nn.Module):
                       (if `psi` is a `SurrogateFunction` class). These kwargs can be used to specify configuration
                       parameters specific to the surrogate function being used.
         """
+
         super(SESM, self).__init__()
 
         self.n_features = n_features
@@ -310,7 +313,9 @@ class SESM(torch.nn.Module):
             dictionary_shape: tuple = None,
     ) -> None:
         """
-        Trains the model by learning a sparse vector and a dictionary that represent the original function without redefining the weight each time.
+        Perform partial training on the SESM model.
+
+        Updates the ISTA and dictionary layers without reinitializing their weights, enabling iterative refinement.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features), where `n_samples` is the number of
@@ -318,6 +323,9 @@ class SESM(torch.nn.Module):
             y (torch.Tensor): Target data of shape (n_samples,), representing the values corresponding to the input data.
             dictionary_shape (tuple, optional): Specifies the shape of the evaluated dictionary before
                                                 computing the loss. If not provided, the default shape is used.
+
+        Returns:
+            None
         """
 
         validate_sesm_partial_fit(self, X, y)
@@ -346,7 +354,9 @@ class SESM(torch.nn.Module):
             dictionary_shape: tuple = None,
     ):
         """
-        Computes the forward pass for the model.
+        Perform a forward pass through the SESM model.
+
+        Updates the dictionary and sparse vector using the ISTA and dictionary layers.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features), where `n_samples` is the number of
@@ -355,6 +365,7 @@ class SESM(torch.nn.Module):
             dictionary_shape (tuple, optional): Specifies the shape of the evaluated dictionary before
                                                 computing the loss. If not provided, the default shape is used.
         """
+
 
         self.dictionary_layer.partial_fit(
             X=X,
@@ -393,7 +404,10 @@ class SESM(torch.nn.Module):
             custom_h: torch.Tensor = None
     ) -> torch.Tensor:
         """
-        Predicts the value of a function using the learned sparse vector and dictionary.
+        Predict outputs using the trained SESM model.
+
+        Generates predictions based on the learned dictionary and sparse vector.
+
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features), where `n_samples` is the number of
                               samples and `n_features` is the number of features for each sample.
@@ -403,7 +417,7 @@ class SESM(torch.nn.Module):
                                          the model uses the current one.
 
         Returns:
-            torch.Tensor: The predicted values for each sample of the objective function.
+            torch.Tensor: Predicted values of shape `(n_samples,)`.
         """
 
         with torch.no_grad():
@@ -425,7 +439,6 @@ class SESM(torch.nn.Module):
         Returns:
             None: The method updates the `loss_stats` dictionary in place, adding the computed
                   mean, standard deviation, maximum, and minimum loss values.
-
         """
         current_loss = self.dictionary_layer.losses[-dict_epochs:]
         self.loss_stats["loss_mean"].append(np.mean(current_loss))
