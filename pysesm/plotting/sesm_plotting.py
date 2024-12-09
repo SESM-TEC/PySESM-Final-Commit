@@ -23,8 +23,14 @@ def plot_sesm(sesm_model, samples, savefig=False, filepath=None):
     fig = plt.figure(figsize=(8, 8))
 
     for i in range(n_plots):
-        ax = fig.add_subplot(2, 2, i + 1, projection='3d')
-        ax.scatter(X.numpy(), Y.numpy(), pdf_values.numpy(), c=pdf_values.numpy(), cmap='plasma')
+        ax = fig.add_subplot(2, 2, i + 1, projection="3d")
+        ax.scatter(
+            X.numpy(),
+            Y.numpy(),
+            pdf_values.numpy(),
+            c=pdf_values.numpy(),
+            cmap="plasma",
+        )
         ax.view_init(elev=plot_elevs[i], azim=plot_azims[i])
 
     plt.tight_layout()
@@ -39,8 +45,8 @@ def plot_sesm(sesm_model, samples, savefig=False, filepath=None):
 def plot_sesm_loss(sesm_model, ylim=0.1, savefig=False, filepath=None):
     plt.plot(sesm_model.losses)
 
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
 
     plt.ylim(0, ylim)
 

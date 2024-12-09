@@ -2,21 +2,27 @@ import numpy as np
 import torch
 
 from pysesm.functions.SurrogateFunction import SurrogateFunction
-from pysesm.utils.linalg import to_triu_matrix, generate_random_vectors, get_upper_triangle, gram_schmidt
+from pysesm.utils.linalg import (
+    to_triu_matrix,
+    generate_random_vectors,
+    get_upper_triangle,
+    gram_schmidt,
+)
 
 
 class GaussianFunction(SurrogateFunction):
     """
     TODO: I am not sure about the eig, mu and vector range
     """
-    
+
     eig_range: list[float]
     mu_range: list[float]
     vector_range: list[float]
-    seed: int
 
-    def __init__(self, n_features, n_functions, logger, **kwargs):
-        super().__init__(n_features=n_features, n_functions=n_functions, logger=logger, **kwargs)
+    def __init__(self, n_features, n_functions, seed, logger, **kwargs):
+        super().__init__(
+            n_features=n_features, n_functions=n_functions, seed=seed, logger=logger, **kwargs
+        )
         self.theta_size = int(n_features * (n_features + 3) / 2)
 
     def initialize(self) -> torch.nn.Parameter:
@@ -36,10 +42,19 @@ class GaussianFunction(SurrogateFunction):
         """
 
         Theta = torch.nn.Parameter(
-            torch.normal(mean=0, std=np.sqrt(1 / self.theta_size), size=(self.theta_size, self.n_functions),
-                         requires_grad=True))
+            torch.normal(
+                mean=0,
+                std=np.sqrt(1 / self.theta_size),
+                size=(self.theta_size, self.n_functions),
+                requires_grad=True,
+            )
+        )
 
-        mu = torch.rand(self.n_features, self.n_functions) * (self.mu_range[1] - self.mu_range[0]) + self.mu_range[0]
+        mu = (
+            torch.rand(self.n_features, self.n_functions)
+            * (self.mu_range[1] - self.mu_range[0])
+            + self.mu_range[0]
+        )
 
         Rho = torch.zeros(self.theta_size - self.n_features, self.n_functions)
 
@@ -55,9 +70,14 @@ class GaussianFunction(SurrogateFunction):
         self.logger.info(f"Shape of Mu: {mu.shape}")
 
         for i in range(self.n_functions):
-            Q = generate_random_vectors(self.n_features, self.vector_range[1], self.vector_range[0])
+            Q = generate_random_vectors(
+                self.n_features, self.vector_range[1], self.vector_range[0]
+            )
             Q = gram_schmidt(Q)
-            D = torch.diag(torch.rand(self.n_features) * (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0])
+            D = torch.diag(
+                torch.rand(self.n_features) * (self.eig_range[1] - self.eig_range[0])
+                + self.eig_range[0]
+            )
             Sigma = Q @ D @ Q.mT
             L = torch.linalg.cholesky(Sigma).mT
             rho = get_upper_triangle(L)
@@ -65,8 +85,8 @@ class GaussianFunction(SurrogateFunction):
                 Rho[j, i] = rho[j]
 
         with torch.no_grad():
-            Theta[:-self.n_features, :] = Rho
-            Theta[-self.n_features:, :] = mu
+            Theta[: -self.n_features, :] = Rho
+            Theta[-self.n_features :, :] = mu
 
         # Log the shape of the tensor
         self.logger.info(f"Shape of Rho: {Rho.shape}")
@@ -74,11 +94,17 @@ class GaussianFunction(SurrogateFunction):
 
         return Theta
 
-    def __call__(self, x, Theta: torch.nn.Parameter, rho_flag: bool = False, mu_flag: bool = False) -> torch.Tensor:
+    def __call__(
+        self,
+        x,
+        Theta: torch.nn.Parameter,
+        rho_flag: bool = False,
+        mu_flag: bool = False,
+    ) -> torch.Tensor:
         # Takes the RHO values from the theta vector
-        rho = Theta[:-self.n_features, :]
+        rho = Theta[: -self.n_features, :]
         # Takes the MU values from the theta vector
-        mu = Theta[-self.n_features:, :].mT.unsqueeze(2)
+        mu = Theta[-self.n_features :, :].mT.unsqueeze(2)
         # Detach the computational graph for the RHO parameters tensor
         if not rho_flag:
             rho = rho.detach()
@@ -86,10 +112,12 @@ class GaussianFunction(SurrogateFunction):
         elif not mu_flag:
             mu = mu.detach()
         # Takes the RHO values and represents it as a diagonal matrix of higher order
-        A = torch.stack([to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim=0)
+        A = torch.stack(
+            [to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim=0
+        )
         Sigma_inv = torch.matmul(A, A.mT)
         x_mu = x - mu
-        exponent = -0.5 * torch.einsum('bij,bik,bji->jb', x_mu, Sigma_inv, x_mu.mT)
+        exponent = -0.5 * torch.einsum("bij,bik,bji->jb", x_mu, Sigma_inv, x_mu.mT)
         result = torch.exp(exponent)
 
         return result

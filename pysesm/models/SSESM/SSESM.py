@@ -18,31 +18,28 @@ class SSESM(SESM):
     and surrogate modeling tasks by utilizing sub-block partitioning.
     """
 
-    def __init__(self,
-                 n_samples: int,
-                 n_features: int,
-                 n_functions: int,
-                 eig_range,
-                 mu_range,
-                 vector_range,
-                 model_epochs: int,
-                 ista_epochs: int,
-                 rho_epochs: int,
-                 mu_epochs: int,
-                 ista_alpha: float,
-                 ista_lambd: float,
-                 dictionary_alpha: float,
-                 weight_decay: float,
-                 surrogate_function: SurrogateFunction,
-                 permutation_times: int,
-                 dfngroup,
-                 seed: int,
-                 logger: logging.Logger,
-                 T: list[int],
-                 iter: int=1,
-                 initial_bounds=None,
-                 debug=True,
-                 **kwargs):
+    def __init__(
+        self,
+        n_features: int,
+        n_functions: int,
+        model_epochs: int,
+        ista_epochs: int,
+        rho_epochs: int,
+        mu_epochs: int,
+        ista_alpha: float,
+        ista_lambd: float,
+        dictionary_alpha: float,
+        weight_decay: float,
+        psi: SurrogateFunction,
+        permutation_times: int,
+        dfngroup,
+        seed: int,
+        logger: logging.Logger,
+        iter: int = 0,
+        initial_bounds=None,
+        debug=True,
+        **kwargs
+    ):
         """
         Initialize the SSESM model with a sequential approach.
 
@@ -67,21 +64,16 @@ class SSESM(SESM):
             T (int): The scaling factor for normalization.
             debug (bool): Flag to enable or disable debug mode. Default is True.
         """
-        self.n_samples = n_samples
-        self.n_features = n_features
-        self.n_functions = n_functions
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
-        self.iter = iter
-        self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger, self.T, n_functions=n_functions,
-                                                         initial_bounds=initial_bounds)
+        self.partition_manager = UniformPartitionManager(
+            logger, kwargs.get("T"), n_functions=n_functions, initial_bounds=initial_bounds
+        )
 
         super().__init__(
-            n_samples=n_samples,
             n_features=n_features,
             n_functions=n_functions,
-            psi=surrogate_function,
+            psi=psi,
             seed=seed,
             model_epochs=model_epochs,
             ista_epochs=ista_epochs,
@@ -92,18 +84,20 @@ class SSESM(SESM):
             rho_epochs=rho_epochs,
             weight_decay=weight_decay,
             logger=logger,
-            debug = debug,
+            debug=debug,
             **kwargs
         )
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
         self.partition_manager.add_points(X, y)
-        self.partition_manager.init_ista_per_block(self.n_functions,
-                                                   self.seed,
-                                                   self.ista_alpha,
-                                                   self.ista_alpha,
-                                                   self.weight_decay,
-                                                   self.evaluation_func)
+        self.partition_manager.init_ista_per_block(
+            self.n_functions,
+            self.seed,
+            self.ista_alpha,
+            self.ista_alpha,
+            self.weight_decay,
+            self.evaluation_func,
+        )
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         for _ in range(self.permutation_times):
@@ -129,9 +123,8 @@ class SSESM(SESM):
 
         y_pred_per_block = [0 for _ in range(len(y))]
         for block in active_blocks:
-            self.ista_layer = block.ista_layer
-            X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
-            block_pred = super().predict(X_torch)
+            X_torch = block.normalized_X.clone().detach()
+            block_pred = super().predict(X_torch, custom_h=block.ista_layer.h)
             for i, pos in enumerate(block.positions):
                 y_pred_per_block[pos] = block_pred[i]
 

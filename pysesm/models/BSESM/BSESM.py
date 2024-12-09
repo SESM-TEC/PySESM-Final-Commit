@@ -11,27 +11,26 @@ from sklearn.metrics import mean_squared_error
 
 
 class BSESM(SESM):
-    def __init__(self,
-                 n_samples: int,
-                 n_features: int,
-                 n_functions: int,
-                 model_epochs: int,
-                 ista_epochs: int,
-                 rho_epochs: int,
-                 mu_epochs: int,
-                 ista_alpha: float,
-                 ista_lambd: float,
-                 dictionary_alpha: float,
-                 weight_decay: float,
-                 surrogate_function: Union[SurrogateFunction, SurrogateFunctionEnum],
-                 dfngroup,
-                 T: list[int],
-                 seed: int,
-                 logger: logging.Logger,
-                 iter:int=1,
-                 initial_bounds=None,
-                 debug: bool=False,
-                 **kwargs):
+    def __init__(
+        self,
+        n_features: int,
+        n_functions: int,
+        model_epochs: int,
+        ista_epochs: int,
+        rho_epochs: int,
+        mu_epochs: int,
+        ista_alpha: float,
+        ista_lambd: float,
+        dictionary_alpha: float,
+        weight_decay: float,
+        psi: Union[SurrogateFunction, SurrogateFunctionEnum],
+        dfngroup,
+        seed: int,
+        logger: logging.Logger,
+        initial_bounds=None,
+        debug: bool = False,
+        **kwargs,
+    ):
         """
         Initialize the SSESM model with a sequential approach.
 
@@ -58,14 +57,17 @@ class BSESM(SESM):
             debug (bool): Flag to enable or disable debug mode. Default is True.
         """
         self.dfngroup = dfngroup
-        self.T = torch.tensor(T)
-        self.partition_manager = UniformPartitionManager(logger=logger, T=self.T, n_functions=n_functions, initial_bounds=initial_bounds)
+        self.partition_manager = UniformPartitionManager(
+            logger=logger,
+            T=kwargs.get("T"),
+            n_functions=n_functions,
+            initial_bounds=initial_bounds,
+        )
 
         super().__init__(
-            n_samples=n_samples,
             n_functions=n_functions,
             n_features=n_features,
-            psi=surrogate_function,
+            psi=psi,
             model_epochs=model_epochs,
             ista_epochs=ista_epochs,
             ista_alpha=ista_alpha,
@@ -78,7 +80,7 @@ class BSESM(SESM):
             logger=logger,
             debug=debug,
             evaluation_func=EvaluationFuncEnum.BMM_MULT,
-            **kwargs
+            **kwargs,
         )
 
     def _arrange_batch_h(self, blocks: list[PartitionBlock]):
@@ -88,22 +90,35 @@ class BSESM(SESM):
         filled_active_blocks_X = []
         filled_active_blocks_y = []
         empty_X = [0 for _ in range(self.n_features)]
-        max_points_in_block = len(max(blocks, key=lambda each_block: len(each_block.X)).X)
+        max_points_in_block = len(
+            max(blocks, key=lambda each_block: len(each_block.X)).X
+        )
 
         for block in blocks:
             filled_active_blocks_X.append(
-                torch.cat([
-                    block.normalized_X,
-                    torch.tensor(
-                        [empty_X for i
-                         in range(max_points_in_block - block.normalized_X.shape[0])]
-                        , dtype=torch.float32)
-                ])
+                torch.cat(
+                    [
+                        block.normalized_X,
+                        torch.tensor(
+                            [
+                                empty_X
+                                for i in range(
+                                    max_points_in_block - block.normalized_X.shape[0]
+                                )
+                            ],
+                            dtype=torch.float32,
+                        ),
+                    ]
+                )
             )
-            filled_active_blocks_y += block.target + [0 for _ in range(max_points_in_block - len(block.target))]
+            filled_active_blocks_y += block.target + [
+                0 for _ in range(max_points_in_block - len(block.target))
+            ]
 
         filled_active_blocks_X = torch.cat(filled_active_blocks_X)
-        filled_active_blocks_y = torch.tensor(filled_active_blocks_y, dtype=torch.float32)
+        filled_active_blocks_y = torch.tensor(
+            filled_active_blocks_y, dtype=torch.float32
+        )
 
         return filled_active_blocks_X, filled_active_blocks_y, max_points_in_block
 
@@ -113,14 +128,15 @@ class BSESM(SESM):
 
         long_h = self._arrange_batch_h(active_blocks)
 
-        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = self._fill_block_points(active_blocks)
+        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = (
+            self._fill_block_points(active_blocks)
+        )
 
         self.ista_layer.h.data = long_h.data
         super().partial_fit(
             filled_active_blocks_X,
             filled_active_blocks_y,
-            max_points_in_block,
-            len(active_blocks)
+            dictionary_shape=(len(active_blocks), max_points_in_block, self.n_functions)
         )
 
         trained_h = self.ista_layer.h.squeeze(-1)
@@ -130,11 +146,16 @@ class BSESM(SESM):
             if self.debug:
                 # Logging the complete tensor with its content
                 self.logger.debug(
-                    f"Block at index {block.block_index}: Sparse vector 'h' learned: {trained_h[index]} (Tensor with shape {trained_h[index].shape})")
+                    f"Block at index {block.block_index}: Sparse vector 'h' learned: {trained_h[index]} (Tensor with shape {trained_h[index].shape})"
+                )
 
-    def forward(self, X: torch.Tensor, y: torch.Tensor, max_points_in_block: int = 0,
-                active_blocks_count: int = 0) -> None:
-        super().forward(X, y, max_points_in_block, active_blocks_count)
+    def forward(
+        self,
+        X: torch.Tensor,
+        y: torch.Tensor,
+        dictionary_shape: tuple
+    ) -> None:
+        super().forward(X, y, dictionary_shape)
 
     def predict(self, X, y) -> [torch.Tensor, torch.Tensor]:  # type: ignore
         """
@@ -152,9 +173,14 @@ class BSESM(SESM):
         long_h = self._arrange_batch_h(active_blocks)
         self.ista_layer.h.data = long_h.data
 
-        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = self._fill_block_points(active_blocks)
+        filled_active_blocks_X, filled_active_blocks_y, max_points_in_block = (
+            self._fill_block_points(active_blocks)
+        )
 
-        y_pred = super().predict(filled_active_blocks_X, max_points_in_block, len(active_blocks))
+        y_pred = super().predict(
+            filled_active_blocks_X, dictionary_shape=(len(active_blocks), max_points_in_block, self.n_functions)
+        )
+
         y_pred_per_block = [0 for _ in range(len(y))]
         i = 0
 

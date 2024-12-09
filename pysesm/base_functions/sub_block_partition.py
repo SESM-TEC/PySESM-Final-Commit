@@ -85,7 +85,10 @@ def locate_samples_in_sub_blocks(x_n, y, t, T):
 
     return sub_blocks
 
-def generate_list_of_subblock(sub_blocks, l_functions, SEED, weight_decay, alpha, lambd):
+
+def generate_list_of_subblock(
+    sub_blocks, l_functions, SEED, weight_decay, alpha, lambd
+):
     """
     Generate a list for all the sub-blocks with their expected squeeze factor.
 
@@ -111,7 +114,9 @@ def generate_list_of_subblock(sub_blocks, l_functions, SEED, weight_decay, alpha
                 alpha=alpha,
                 lambd=lambd,
             )
-            block.output_values = [value * block.amplitude for value in block.output_values]
+            block.output_values = [
+                value * block.amplitude for value in block.output_values
+            ]
 
             list_sub_blocks.append(block)
 
@@ -153,8 +158,9 @@ def predict_on_test_set(X_test, model, T, train_sb):
     """
     t_test, x_n_test = data_mapping(X_test, T)
 
-    sorted_predictions = torch.zeros(len(X_test),
-                                     dtype=torch.float32)  # Tensor para almacenar las predicciones ordenadas
+    sorted_predictions = torch.zeros(
+        len(X_test), dtype=torch.float32
+    )  # Tensor para almacenar las predicciones ordenadas
 
     for row in range(T):
         for col in range(T):
@@ -166,15 +172,22 @@ def predict_on_test_set(X_test, model, T, train_sb):
 
                 try:
                     current_train_block = train_sb[row * T + col]
-                    predictions_sub_block = model.predict(X_sub_block, current_train_block.ista_layer)
-                    print("CURRENT ISTA on sub block ", current_train_block.ista_layer.h)
+                    predictions_sub_block = model.predict(
+                        X_sub_block, current_train_block.ista_layer
+                    )
+                    print(
+                        "CURRENT ISTA on sub block ", current_train_block.ista_layer.h
+                    )
                     print("SUM VALUES H ", current_train_block.ista_layer.h.data.sum())
-                    sorted_predictions[indices] = predictions_sub_block.float() / current_train_block.amplitude
+                    sorted_predictions[indices] = (
+                        predictions_sub_block.float() / current_train_block.amplitude
+                    )
                 except IndexError:
                     # No se hace nada para los bloques dummy
                     pass
 
     return sorted_predictions
+
 
 def predict_on_test_set_bsesm(X_test, model, T, train_sb):
     """
@@ -191,8 +204,9 @@ def predict_on_test_set_bsesm(X_test, model, T, train_sb):
     """
     t_test, x_n_test = data_mapping(X_test, T)
 
-    sorted_predictions = torch.zeros(len(X_test),
-                                     dtype=torch.float32)  # Tensor para almacenar las predicciones ordenadas
+    sorted_predictions = torch.zeros(
+        len(X_test), dtype=torch.float32
+    )  # Tensor para almacenar las predicciones ordenadas
 
     for row in range(T):
         for col in range(T):
@@ -204,10 +218,16 @@ def predict_on_test_set_bsesm(X_test, model, T, train_sb):
 
                 try:
                     current_train_block = train_sb[row * T + col]
-                    predictions_sub_block = model.predict(X_sub_block, current_train_block.ista_layer)
-                    print("CURRENT ISTA on sub block ", current_train_block.ista_layer.h)
+                    predictions_sub_block = model.predict(
+                        X_sub_block, current_train_block.ista_layer
+                    )
+                    print(
+                        "CURRENT ISTA on sub block ", current_train_block.ista_layer.h
+                    )
                     print("SUM VALUES H ", current_train_block.ista_layer.h.data.sum())
-                    sorted_predictions[indices] = predictions_sub_block.float() / current_train_block.amplitude
+                    sorted_predictions[indices] = (
+                        predictions_sub_block.float() / current_train_block.amplitude
+                    )
                 except IndexError:
                     # No se hace nada para los bloques dummy
                     pass

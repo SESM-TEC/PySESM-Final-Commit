@@ -4,6 +4,7 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from pysesm.utils.gaussian_covariance_density import *
 
+
 def test_generate_sigma_tensors():
     """
     Test the generate_sigma_tensors function for correct output.
@@ -33,6 +34,7 @@ def test_generate_sigma_tensors():
     assert is_positive_definite(sigma2), "sigma2 is not positive definite"
     assert is_positive_definite(sigma3), "sigma3 is not positive definite"
 
+
 def test_generate_z():
     """
     Test the generate_z function for correct density calculation.
@@ -61,6 +63,7 @@ def test_generate_z():
     expected_z = expected_z1 + expected_z2 + expected_z3
 
     assert np.allclose(z.numpy(), expected_z, atol=1e-5), "Density values are incorrect"
+
 
 def test_generate_mesh():
     """
@@ -94,7 +97,9 @@ def test_generate_mesh():
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
     zz_expected = generate_z(X, sigma, mu).reshape(xx.shape)
 
-    assert torch.allclose(zz, zz_expected, atol=1e-5), "Density values on mesh are incorrect"
+    assert torch.allclose(
+        zz, zz_expected, atol=1e-5
+    ), "Density values on mesh are incorrect"
 
     # Test edge cases
     xx_small, yy_small, zz_small = generate_mesh(10, -1.0, 1.0, sigma, mu)
@@ -107,5 +112,6 @@ def test_generate_mesh():
     assert xx_large.shape == (1000, 1000), "Large mesh xx shape is incorrect"
     assert yy_large.shape == (1000, 1000), "Large mesh yy shape is incorrect"
     assert zz_large.shape == (1000, 1000), "Large mesh zz shape is incorrect"
+
 
 print("Todo bien")

@@ -1,3 +1,5 @@
+import logging
+
 from torch import Tensor
 from torch.nn import Module
 from typing import Callable
@@ -24,25 +26,21 @@ class ISTALayer(Module):
         evaluation_func (callable): Function to compute predictions from input and parameters.
         threshold (float): Threshold for custom regularization (default: 10.0).
         penalty_weight (float): Weight of the penalty term in custom regularization (default: 0.01).
-
-    Methods:
-        initialize_h_vector(h: torch.Tensor):
-            Initializes the sparse vector `h` as a learnable parameter.
-        get_custom_regularization() -> torch.Tensor:
-            Computes the custom regularization term based on the threshold and penalty weight.
-        shrinkage() -> torch.Tensor:
-            Applies the shrinkage operation to enforce sparsity in `h`.
-        partial_fit(y, epochs, dictionary, log_losses=True) -> None:
-            Performs a partial fit for a given number of epochs, updating `h`.
-        forward(y, dictionary, log_losses=True):
-            Performs a forward pass, computes the total loss (including custom regularization),
-            and updates parameters using backpropagation.
-
     """
 
-    def __init__(self, n_functions: int, random_seed: int, weight_decay: float, alpha: float, lambd: float,
-                 criterion=None, optimizer=None, h: Tensor = None,
-                 evaluation_func: Callable[[Tensor, Tensor], Tensor] = None):
+    def __init__(
+            self,
+            n_functions: int,
+            random_seed: int,
+            weight_decay: float,
+            alpha: float,
+            lambd: float,
+            evaluation_func: Callable[[Tensor, Tensor], Tensor],
+            logger: logging.Logger,
+            debug: bool = False,
+            criterion=None,
+            optimizer=None,
+    ):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
@@ -67,7 +65,7 @@ class ISTALayer(Module):
         self.evaluation_func = evaluation_func
         self.losses = []
         torch.manual_seed(random_seed)
-        self.initialize_h_vector(h)
+        self.setup()
 
         if criterion is None:
             self.criterion = torch.nn.MSELoss()
@@ -75,14 +73,18 @@ class ISTALayer(Module):
             self.criterion = criterion
 
         if optimizer is None:
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=weight_decay)
+            self.optimizer = torch.optim.SGD(
+                self.parameters(), lr=alpha, weight_decay=weight_decay
+            )
         else:
-            self.optimizer = optimizer(parameters=self.parameters(), lr=alpha, weight_decay=weight_decay)
+            self.optimizer = optimizer(
+                parameters=self.parameters(), lr=alpha, weight_decay=weight_decay
+            )
 
         self.threshold = 11
         self.penalty_weight = 0.05
 
-    def initialize_h_vector(self, h: torch.Tensor) -> None:
+    def setup(self, h: torch.Tensor = None) -> None:
         """
         Initializes the sparse vector `h` as a learnable parameter.
 
@@ -92,10 +94,12 @@ class ISTALayer(Module):
         if h is not None:
             self.h = torch.nn.Parameter(h)
         else:
-            self.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
+            self.h = torch.nn.Parameter(
+                torch.rand(self.n_functions), requires_grad=True
+            )
             self.h.data /= self.h.data.sum()
 
-    def get_custom_regularization(self) -> torch.Tensor:
+    def get_custom_regularization(self) -> float:
         """
         Computes the custom regularization term for parameters exceeding the defined threshold.
 
@@ -115,7 +119,9 @@ class ISTALayer(Module):
         Returns:
             torch.Tensor: The updated sparse vector.
         """
-        return torch.sign(self.h) * torch.max(torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h))
+        return torch.sign(self.h) * torch.max(
+            torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h)
+        )
 
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
         """
@@ -129,7 +135,8 @@ class ISTALayer(Module):
         """
         for _ in range(epochs):
             new_h = self.forward(y, dictionary, log_losses)
-            if new_h is not None: self.h.data = new_h
+            if new_h is not None:
+                self.h.data = new_h
 
     def forward(self, y, dictionary, log_losses=True):
         """

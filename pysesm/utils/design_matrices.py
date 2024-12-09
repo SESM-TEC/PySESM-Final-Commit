@@ -1,6 +1,7 @@
 import torch
 from pysesm.utils.sampling_data import generate_uniform_sampling, sample_data
 
+
 def unstack_design_matrix(X_test):
     """
     Unstacks the design matrix into its individual components.
@@ -14,6 +15,7 @@ def unstack_design_matrix(X_test):
     """
     x_tensor, y_tensor = torch.unbind(X_test, dim=1)
     return x_tensor, y_tensor
+
 
 def create_design_matrix_train(xx, yy, zz, hyperparams):
     """
@@ -39,10 +41,13 @@ def create_design_matrix_train(xx, yy, zz, hyperparams):
 
     total_points = len(x_values)
 
-    sampled_indices = generate_uniform_sampling(total_points, hyperparams["Seed"], n_samples=n_samples)
+    sampled_indices = generate_uniform_sampling(
+        total_points, hyperparams["Seed"], n_samples=n_samples
+    )
     X, y = sample_data(x_values, y_values, z_values, sampled_indices)
 
     return X, y
+
 
 def create_design_matrix_test(xx, yy, zz):
     """
@@ -63,6 +68,6 @@ def create_design_matrix_test(xx, yy, zz):
 
     x_tensor = torch.tensor(x_values)
     y_tensor = torch.tensor(y_values)
-    X_test   =  torch.stack((x_tensor, y_tensor), dim=1)
+    X_test = torch.stack((x_tensor, y_tensor), dim=1)
 
     return X_test, z_values

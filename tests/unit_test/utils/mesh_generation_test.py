@@ -4,6 +4,7 @@ import numpy as np
 from pysesm.utils.gaussian_covariance_density import generate_z
 from pysesm.utils.mesh_generation import *
 
+
 def test_generate_mesh():
     """
     Test the generate_mesh function for correct mesh generation and density evaluation.
@@ -39,7 +40,9 @@ def test_generate_mesh():
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
     zz_expected = generate_z(X, sigma, mu).reshape(xx.shape)
 
-    assert torch.allclose(zz, zz_expected, atol=1e-5), "Density values on mesh are incorrect"
+    assert torch.allclose(
+        zz, zz_expected, atol=1e-5
+    ), "Density values on mesh are incorrect"
 
     # Test edge cases with small and large grid sizes
     xx_small, yy_small, zz_small = generate_mesh(10, -1.0, 1.0, sigma, mu)
@@ -51,6 +54,7 @@ def test_generate_mesh():
     assert xx_large.shape == (1000, 1000), "Large mesh xx shape is incorrect"
     assert yy_large.shape == (1000, 1000), "Large mesh yy shape is incorrect"
     assert zz_large.shape == (1000, 1000), "Large mesh zz shape is incorrect"
+
 
 def test_generate_random_samples():
     """
@@ -87,14 +91,20 @@ def test_generate_random_samples():
     expected_xx = np.random.uniform(xl, xr, n_points)
     expected_yy = np.random.uniform(xl, xr, n_points)
 
-    assert np.allclose(xx, expected_xx, atol=1e-5), "Random samples xx are not reproducible"
-    assert np.allclose(yy, expected_yy, atol=1e-5), "Random samples yy are not reproducible"
+    assert np.allclose(
+        xx, expected_xx, atol=1e-5
+    ), "Random samples xx are not reproducible"
+    assert np.allclose(
+        yy, expected_yy, atol=1e-5
+    ), "Random samples yy are not reproducible"
 
     # Check specific density values
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
     zz_expected = generate_z(X, sigma, mu)
 
-    assert torch.allclose(zz, zz_expected, atol=1e-5), "Density values for random samples are incorrect"
+    assert torch.allclose(
+        zz, zz_expected, atol=1e-5
+    ), "Density values for random samples are incorrect"
 
     # Test edge cases with different seeds
     xx1, yy1, zz1 = generate_random_samples(n_points, xl, xr, sigma, mu, SEED + 1)
@@ -103,6 +113,9 @@ def test_generate_random_samples():
     # Check if different seeds produce different samples
     assert not np.allclose(xx1, xx2), "Different seeds produce identical xx samples"
     assert not np.allclose(yy1, yy2), "Different seeds produce identical yy samples"
-    assert not torch.allclose(zz1, zz2), "Different seeds produce identical zz density values"
+    assert not torch.allclose(
+        zz1, zz2
+    ), "Different seeds produce identical zz density values"
+
 
 print("Todo bien")

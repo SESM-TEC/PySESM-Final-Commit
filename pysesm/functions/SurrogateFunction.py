@@ -34,7 +34,7 @@ class SurrogateFunction(ABC):
     """
 
     @abstractmethod
-    def __init__(self, n_features: int, n_functions: int, logger: Logger, **kwargs):
+    def __init__(self, n_features: int, n_functions: int, seed: int, logger: Logger, **kwargs):
         """
         Function that initializes the approximate surrogate function with the given parameters
 
@@ -46,8 +46,8 @@ class SurrogateFunction(ABC):
 
             n_functions (int):
                 The number of individual functions available in the internal dictionary.
-                These functions can be
-                combined linearly as part of the SESM framework to approximate complex surrogate behaviors.
+                These functions can be combined linearly as part of the SESM framework to approximate complex
+                surrogate behaviors.
 
             logger (logging.Logger):
                 A custom logger instance used to record runtime information during the execution of the surrogate
@@ -56,16 +56,35 @@ class SurrogateFunction(ABC):
         """
         self.n_features = n_features
         self.n_functions = n_functions
+        self.seed = seed
         self.logger = logger
 
         for attr, attr_type in self.__annotations__.items():
             if attr not in kwargs.keys():
-                logger.error("When initializing the surrogate function {} the attribute {} was not found. Kwargs = {}"
-                             ", Required attributes = {}".format(self.__class__.__name__, attr, kwargs, self.__annotations__.items()))
-                raise ValueError(f"To initialize the class {self.__class__.__name__} the attribute {attr} is required")
+                logger.error(
+                    "When initializing the surrogate function {} the attribute {} was not found. Kwargs = {}"
+                    ", Required attributes = {}".format(
+                        self.__class__.__name__,
+                        attr,
+                        kwargs,
+                        self.__annotations__.items(),
+                    )
+                )
+                raise AttributeError(
+                    f"To initialize the class {self.__class__.__name__} the attribute {attr} is required"
+                )
             elif attr_type is not type(kwargs[attr]):
-                logger.warning("When initializing the surrogate function {} the attribute {} had a different type"
-                               "than expected, expected ({}), actual ({}). Kwargs = {}, Required attributes = {}".format(self.__class__.__name__, attr, attr_type, type(kwargs[attr]), kwargs, self.__annotations__.items()))
+                logger.warning(
+                    "When initializing the surrogate function {} the attribute {} had a different type"
+                    "than expected, expected ({}), actual ({}). Kwargs = {}, Required attributes = {}".format(
+                        self.__class__.__name__,
+                        attr,
+                        attr_type,
+                        type(kwargs[attr]),
+                        kwargs,
+                        self.__annotations__.items(),
+                    )
+                )
             setattr(self, attr, kwargs[attr])
 
     @abstractmethod
@@ -103,8 +122,7 @@ class SurrogateFunction(ABC):
         Args:
             *args:
                 Positional arguments required for evaluating the surrogate function.
-                Typically, this
-                includes the input tensor `X` of shape `(n_samples, n_features)`, where `n_samples`
+                Typically, this includes the input tensor `X` of shape `(n_samples, n_features)`, where `n_samples`
                 is the number of input points and `n_features` is the dimensionality of each point.
             **kwargs:
                 Additional keyword arguments that provide flexibility for passing optional parameters

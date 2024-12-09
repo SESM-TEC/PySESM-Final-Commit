@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 
-#Problemas de parametros goblales SEED
+
+# Problemas de parametros goblales SEED
 def generate_uniform_sampling(total_points, SEED, n_samples=500, min_separation=1):
     """
     Generate uniform sampling indices with a minimum separation criterion.
@@ -23,6 +24,7 @@ def generate_uniform_sampling(total_points, SEED, n_samples=500, min_separation=
     np.random.seed(SEED)
     selected_indexes = np.random.permutation(total_points)[:n_samples]
     return selected_indexes
+
 
 def sample_data(x_values, y_values, z_values, sampled_indices):
     """

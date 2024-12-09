@@ -3,6 +3,7 @@ import torch
 import pytest
 from pysesm.utils.design_matrices import *
 
+
 def test_unstack_design_matrix():
     """
     Test the unstack_design_matrix function to ensure correct separation of columns.
@@ -22,8 +23,13 @@ def test_unstack_design_matrix():
     expected_y_empty = torch.tensor([], dtype=torch.float32)
 
     x_tensor_empty, y_tensor_empty = unstack_design_matrix(X_test_empty)
-    assert torch.equal(x_tensor_empty, expected_x_empty), "Unstacking empty matrix x-component failed"
-    assert torch.equal(y_tensor_empty, expected_y_empty), "Unstacking empty matrix y-component failed"
+    assert torch.equal(
+        x_tensor_empty, expected_x_empty
+    ), "Unstacking empty matrix x-component failed"
+    assert torch.equal(
+        y_tensor_empty, expected_y_empty
+    ), "Unstacking empty matrix y-component failed"
+
 
 def test_create_design_matrix_train():
     """
@@ -34,10 +40,7 @@ def test_create_design_matrix_train():
     yy = np.array([[7, 8, 9], [10, 11, 12]])
     zz = np.array([[13, 14, 15], [16, 17, 18]])
 
-    hyperparams = {
-        "n_samples": 4,
-        "T": 1
-    }
+    hyperparams = {"n_samples": 4, "T": 1}
 
     # Generate design matrix
     X, y = create_design_matrix_train(xx, yy, zz, hyperparams)
@@ -58,6 +61,7 @@ def test_create_design_matrix_train():
     assert X.shape == (6, 2), "Design matrix X has incorrect shape for edge case"
     assert y.shape == (6,), "Target variable y has incorrect shape for edge case"
 
+
 def test_create_design_matrix_test():
     """
     Test the create_design_matrix_test function to ensure correct creation of the test design matrix.
@@ -75,11 +79,15 @@ def test_create_design_matrix_test():
     assert z_values.shape == (4,), "Target values z_values has incorrect shape"
 
     # Ensure all values are correctly flattened and paired
-    expected_X_test = torch.tensor([[1, 5], [2, 6], [3, 7], [4, 8]], dtype=torch.float32)
+    expected_X_test = torch.tensor(
+        [[1, 5], [2, 6], [3, 7], [4, 8]], dtype=torch.float32
+    )
     expected_z_values = np.array([9, 10, 11, 12])
 
     assert torch.equal(X_test, expected_X_test), "Test design matrix X_test incorrect"
-    assert np.array_equal(z_values, expected_z_values), "Target values z_values incorrect"
+    assert np.array_equal(
+        z_values, expected_z_values
+    ), "Target values z_values incorrect"
 
 
 print("Todo bien")

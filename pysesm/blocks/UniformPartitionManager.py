@@ -8,8 +8,8 @@ from typing import Union, Callable
 import numpy as np
 import torch
 
-
 DEFAULT_BLOCKS_PER_DIM = 4
+
 
 def squeeze_factor(y: np.ndarray):
     """
@@ -31,11 +31,16 @@ def squeeze_factor(y: np.ndarray):
 
 
 class UniformPartitionManager(BlockManager):
-    """
+    """ """
 
-    """
-
-    def __init__(self, logger: logging.Logger, T: torch.Tensor, n_functions, initial_bounds: np.ndarray = None, threshold: float = 0):
+    def __init__(
+        self,
+        logger: logging.Logger,
+        T: Union[torch.Tensor, int, None],
+        n_functions,
+        initial_bounds: np.ndarray = None,
+        threshold: float = 0,
+    ):
         """
 
         Args:
@@ -56,31 +61,35 @@ class UniformPartitionManager(BlockManager):
         self.y = None
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
-    def _find_block(self, X: torch.Tensor) -> Union[PartitionBlock, None]:
+    def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         # TODO: Find efficient way to find block (currently being worked on by Joshua)
         for index in np.ndindex(self.blocks.shape):
             block: PartitionBlock = self.blocks[index]
-            if block.is_point_in_block(X):
+            if block.is_point_in_block(x):
                 return block
 
-        logging.warning("Could not find a block for point {}", X)
+        logging.warning("Could not find a block for point {}", x)
         return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
+        elif type(self.T) is int:
+            self.T = torch.tensor([self.T for _ in range(X.dim())])
 
         # When no points and no blocks have been created
         if self.blocks is None:
             # Check for user given initial bounds
             if self.initial_bounds is None:
                 self.initial_bounds = torch.vstack(
-                    [torch.min(X, dim=0).values,
-                     torch.max(X, dim=0).values])  # Calculates the range covered by the X vector
-                logging.warning('[UniformPartitionManager] No initial bounds provided, using calculated one {}'.format(
-                    self.initial_bounds
-                ))
+                    [torch.min(X, dim=0).values, torch.max(X, dim=0).values]
+                )  # Calculates the range covered by the X vector
+                logging.warning(
+                    "[UniformPartitionManager] No initial bounds provided, using calculated one {}".format(
+                        self.initial_bounds
+                    )
+                )
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
@@ -89,7 +98,9 @@ class UniformPartitionManager(BlockManager):
             self.blocks = np.empty(self.T.numpy(), dtype=PartitionBlock)
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(self.initial_bounds[0], index, self.block_size)
+                self.blocks[index] = PartitionBlock(
+                    self.initial_bounds[0], index, self.block_size
+                )
         else:
             new_max_x = torch.max(X)
             new_min_x = torch.min(X)
@@ -103,22 +114,18 @@ class UniformPartitionManager(BlockManager):
             if len(block.y) != 0:
                 block.amplitude = squeeze_factor(block.y)
                 if init_h:
-                    block.h = torch.nn.Parameter(torch.rand(self.n_functions), requires_grad=True)
-                    # block.h.data /= block.h.data.sum()
+                    block.h = torch.nn.Parameter(
+                        torch.rand(self.n_functions), requires_grad=True
+                    )
+                    block.h.data /= block.h.data.sum()
+
                     self.logger.debug(
-                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}")
+                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                    )
 
                 block.target = [value * block.amplitude for value in block.y]
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
-        """
-        Locate points in their respective sub-blocks.
-
-        Args:
-        - x_n (np.ndarray): The normalized points between 0 and 1.
-        - t (np.ndarray): The integer part of the normalized points.
-        - y (np.ndarray) : The output values associated with the samples
-        """
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
@@ -131,8 +138,15 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization(self.blocks)
         self._configure_blocks()
 
-    def init_ista_per_block(self, n_functions: int, seed: int, ista_alpha: float, ista_lambd: float, weight_decay: float,
-                            evaluation_func:Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
+    def init_ista_per_block(
+        self,
+        n_functions: int,
+        seed: int,
+        ista_alpha: float,
+        ista_lambd: float,
+        weight_decay: float,
+        evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    ):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
@@ -141,11 +155,16 @@ class UniformPartitionManager(BlockManager):
                 alpha=ista_alpha,
                 lambd=ista_lambd,
                 weight_decay=weight_decay,
-                evaluation_func=evaluation_func
+                evaluation_func=evaluation_func,
+                logger=self.logger
             )
 
     def retrieve_active_blocks(self):
-        return [self.blocks[index] for index in np.ndindex(self.blocks.shape) if self.blocks[index].is_active]
+        return [
+            self.blocks[index]
+            for index in np.ndindex(self.blocks.shape)
+            if self.blocks[index].is_active
+        ]
 
     def retrieve_test_active_blocks(self, X, y):
         # Copy blocks without X and y

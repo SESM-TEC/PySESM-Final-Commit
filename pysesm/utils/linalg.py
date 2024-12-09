@@ -2,8 +2,9 @@ import numpy as np
 import torch
 import math
 
+
 def to_triu_matrix(non_zeros):
-    """ Fill an upper triangular matrix with the content of the column
+    """Fill an upper triangular matrix with the content of the column
     vector non_zeros.  If the matrix has dimensions n x n, then the
     provided vector must have n(n+1)/2 elements.
     non_zeros must be a torch tensor of floats, as a column vector
@@ -17,7 +18,7 @@ def to_triu_matrix(non_zeros):
     # Find the dimension of the matrix.  If N is the dimension of the
     # given vector, the solution of n²+n-2N = 0 is the size of the matrix,
     # which is given by (sqrt(1+8N)-1)/2, and we round it up.
-    matrix_n = math.ceil(0.5*(math.sqrt(8*non_zeros.size()[0] + 1) - 1))
+    matrix_n = math.ceil(0.5 * (math.sqrt(8 * non_zeros.size()[0] + 1) - 1))
 
     matrix = torch.zeros((matrix_n, matrix_n))
 
@@ -26,6 +27,7 @@ def to_triu_matrix(non_zeros):
     matrix[matrix_triu_indices[0], matrix_triu_indices[1]] = non_zeros
 
     return matrix
+
 
 def gram_schmidt(Q):
     """Gram-Schmidt procedure to find a set of orthogonal vectors
@@ -38,12 +40,14 @@ def gram_schmidt(Q):
         Q[:, i] /= torch.norm(Q[:, i])
     return Q
 
+
 def generate_random_vectors(features, max_val, min_val):
     """
     Generates a random vector with the given number of features, with
     values uniformly distributed between max_val and min_val
     """
     return torch.rand(features, features) * (max_val - min_val) + min_val
+
 
 def get_upper_triangle(A):
     """
@@ -55,6 +59,7 @@ def get_upper_triangle(A):
     indices = torch.triu_indices(n, n, offset=0)
     upper_triangle = A[indices[0], indices[1]]
     return upper_triangle
+
 
 def reshape_upper_triangle(upper_triangle, n):
     # Calculate the number of rows needed
