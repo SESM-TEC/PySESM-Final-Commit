@@ -3,7 +3,7 @@ from pysesm.utils.gaussian_covariance_density import *
 from pysesm.utils.mesh_generation import *
 
 
-def generate_gaussian_dataset(experiemnt_data: dict):
+def generate_gaussian_dataset(experiment_data: dict):
     # Definicion de covarianzas no diagnonales
     sigma1, sigma2, sigma3 = generate_sigma_tensors()
 
@@ -24,7 +24,7 @@ def generate_gaussian_dataset(experiemnt_data: dict):
     xx, yy, zz = generate_mesh(50, -2, 2, sigma_list, mu_list)
 
     xx_r, yy_r, zz_r = generate_random_samples(
-        500, -2, 2, sigma_list, mu_list, experiemnt_data["Seed"]
+        500, -2, 2, sigma_list, mu_list, experiment_data["seed"]
     )
 
     # Dataset
@@ -32,7 +32,7 @@ def generate_gaussian_dataset(experiemnt_data: dict):
     trainDataset = {"X": xx_r.ravel(), "Y": yy_r.ravel(), "Z": zz_r.ravel()}
     testDataset = {"X": xx.ravel(), "Y": yy.ravel(), "Z": zz.ravel()}
     # Crear la matriz de diseño
-    X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, experiemnt_data)
+    X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, experiment_data)
     # Crear la matriz de diseño
     X_test, y_test = create_design_matrix_test(xx, yy, zz)
 
