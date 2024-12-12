@@ -46,5 +46,5 @@ def sample_data(x_values, y_values, z_values, sampled_indices):
     sampled_x = torch.tensor(x_values[sampled_indices], dtype=torch.float32)
     sampled_y = torch.tensor(y_values[sampled_indices], dtype=torch.float32)
     X = torch.stack((sampled_x, sampled_y), dim=1)
-    y = torch.tensor(z_values[sampled_indices], dtype=torch.float32)
+    y = z_values[sampled_indices].clone().detach().to(dtype=torch.float32)    
     return X, y
