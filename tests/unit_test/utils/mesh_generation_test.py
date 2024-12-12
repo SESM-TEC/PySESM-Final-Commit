@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from pysesm.utils.gaussian_covariance_density import generate_z
+from pysesm.utils.gaussian_covariance_density import generate_gmm_z
 from pysesm.utils.mesh_generation import *
 
 
@@ -38,7 +38,7 @@ def test_generate_mesh():
 
     # Check some specific density values
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz_expected = generate_z(X, sigma, mu).reshape(xx.shape)
+    zz_expected = generate_gmm_z(X, sigma, mu).reshape(xx.shape)
 
     assert torch.allclose(
         zz, zz_expected, atol=1e-5
@@ -100,7 +100,7 @@ def test_generate_random_samples():
 
     # Check specific density values
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz_expected = generate_z(X, sigma, mu)
+    zz_expected = generate_gmm_z(X, sigma, mu)
 
     assert torch.allclose(
         zz, zz_expected, atol=1e-5

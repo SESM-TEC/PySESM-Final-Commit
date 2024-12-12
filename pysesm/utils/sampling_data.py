@@ -1,26 +1,25 @@
 import torch
 import numpy as np
 
-
-# Problemas de parametros goblales SEED
-def generate_uniform_sampling(total_points, SEED, n_samples=500, min_separation=1):
+def generate_uniform_sampling(total_points, SEED, n_samples=500):
     """
-    Generate uniform sampling indices with a minimum separation criterion.
+    Generate uniform sampling indices
 
     Args:
         total_points (int): Total number of data points.
         n_samples (int): Number of samples to generate (default is 500).
-        min_separation (int): Minimum separation between selected indices (default is 1).
 
     Returns:
         list: List of selected indices.
 
     Example:
-        sampled_indices = generate_uniform_sampling(1000, n_samples=200, min_separation=2)
-        TODO> HACER ARRAY DE 1 A TOTAL POINTS, HACER RANDOM PERMUTE Y SACAR PRIMEROS 500
-        random.permutation
-
+        sampled_indices = generate_uniform_sampling(1000, n_samples=200)
     """
+
+    # Assuming total_points is a tensor with shape (N, M)
+    if n_samples > total_points:
+        raise ValueError(f"Cannot sample {n_samples} points from tensor with only {total_points} rows")
+
     np.random.seed(SEED)
     selected_indexes = np.random.permutation(total_points)[:n_samples]
     return selected_indexes

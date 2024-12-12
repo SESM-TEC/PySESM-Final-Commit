@@ -50,7 +50,7 @@ def test_generate_z():
     sigma = [sigma1, sigma2, sigma3]
     mu = [mu1, mu2, mu3]
 
-    z = generate_z(X, sigma, mu)
+    z = generate_gmm_z(X, sigma, mu)
 
     # Check the shape of the result
     assert z.shape == (3,), "Output shape is incorrect"
@@ -95,7 +95,7 @@ def test_generate_mesh():
 
     # Check some specific density values
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz_expected = generate_z(X, sigma, mu).reshape(xx.shape)
+    zz_expected = generate_gmm_z(X, sigma, mu).reshape(xx.shape)
 
     assert torch.allclose(
         zz, zz_expected, atol=1e-5

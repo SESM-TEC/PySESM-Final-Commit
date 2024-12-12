@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-from pysesm.utils.gaussian_covariance_density import generate_z
+from pysesm.utils.gaussian_covariance_density import generate_gmm_z
 
 
-def generate_mesh(n_points, xl, xr, sigma, mu):
+def generate_mesh(n_points, xl, xr, sigma, mu, weights):
     """
     Generates a 2D mesh grid and evaluates a combined density of three multivariate normal distributions on it.
 
@@ -13,6 +13,7 @@ def generate_mesh(n_points, xl, xr, sigma, mu):
     - xr (float): The upper bound of the grid.
     - sigma (list of torch.Tensor): A list of covariance matrices for the distributions.
     - mu (list of torch.Tensor): A list of mean vectors for the distributions.
+    - weights  for each gaussian
 
     Returns:
     - xx (np.ndarray): The x-coordinates of the mesh grid.
@@ -22,12 +23,12 @@ def generate_mesh(n_points, xl, xr, sigma, mu):
     x = np.linspace(xl, xr, n_points)
     xx, yy = np.meshgrid(x, x)
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz = generate_z(X, sigma, mu)
+    zz = generate_gmm_z(X, sigma, mu, weights)
     zz = zz.reshape(xx.shape)
     return xx, yy, zz
 
 
-def generate_random_samples(n_points, xl, xr, sigma, mu, SEED):
+def generate_random_samples(n_points, xl, xr, sigma, mu, weights, SEED):
     """
     Generates random samples within a specified range and evaluates a combined density of three multivariate normal distributions on them.
 
@@ -49,7 +50,7 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, SEED):
     yy = np.random.uniform(xl, xr, n_points)
 
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz = generate_z(X, sigma, mu)
+    zz = generate_gmm_z(X, sigma, mu, weights)
 
     return xx, yy, zz
 

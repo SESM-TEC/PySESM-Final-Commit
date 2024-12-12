@@ -58,13 +58,14 @@ class GaussianFunction(SurrogateFunction):
 
         Rho = torch.zeros(self.theta_size - self.n_features, self.n_functions)
 
-        if self.eig_range[1] > 1e1 or self.vector_range[1] > 1e1:
-            # Log the warning
-            self.logger.warning("Recommended eig range is between 0 and 10")
+        # Following range changes will be eliminated:  they depend on the data set!
+        # if self.eig_range[1] > 1e1 or self.vector_range[1] > 1e1:
+        #    # Log the warning
+        #    self.logger.warning("Recommended eig range is between 0 and 10")
 
-        if self.mu_range[1] > 2 or self.mu_range[0] != -2:
-            # Log the warning
-            self.logger.warning("Recommended mu range is between [-1, -2] and [1, 2]")
+        #if self.mu_range[1] > 2 or self.mu_range[0] != -2:
+        #    # Log the warning
+        #    self.logger.warning("Recommended mu range is between [-1, -2] and [1, 2]")
 
         # Log the shape of the tensor
         self.logger.info(f"Shape of Mu: {mu.shape}")
