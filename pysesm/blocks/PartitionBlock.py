@@ -58,7 +58,9 @@ class PartitionBlock:
 
     def normalize(self):
         tensor_X = torch.stack(self.X)
-        self.normalized_X = (tensor_X - self.block_scope[0]) / self.block_size
+        min_vals = self.block_scope[0].to(tensor_X.device)
+        sizes = self.block_size.to(tensor_X.device)
+        self.normalized_X = (tensor_X - min_vals) / sizes
 
     def clone_test(self):
         cloned_block = PartitionBlock.__new__(PartitionBlock)

@@ -110,9 +110,9 @@ class GaussianFunction(SurrogateFunction):
         if not rho_flag:
             rho = rho.detach()
         # Detach the computational graph for the MU parameters tensor
-        elif not mu_flag:
+        if not mu_flag:
             mu = mu.detach()
-        # Takes the RHO values and represents it as a diagonal matrix of higher order
+        # Takes the RHO values and packs them as a diagonal matrix of higher order
         A = torch.stack(
             [to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim=0
         )

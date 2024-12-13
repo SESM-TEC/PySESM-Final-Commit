@@ -25,7 +25,7 @@ experiment = {
     "dictionary_alpha": 0.07007,
     "rho_epochs": 5,
     "mu_epochs": 5,
-    "model_epochs": 5,
+    "model_epochs": 50,
     "dict_epochs": 5,
     "ista_epochs": 5,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -39,24 +39,29 @@ experiment = {
     "debug": True,
 }
 
+def show_data(X,y,c,marker,label,ax=None):
+    if ax is None:
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+    
+
+    # Plot training data
+    ax.scatter(X[:, 0], X[:, 1], y, 
+               c=c, marker=marker, label=label)
+    
+    ax.set_xlabel('x_1')
+    ax.set_ylabel('x_2')
+    ax.set_zlabel('y')
+    ax.legend()
+
+    plt.show(block=False)
+    return ax
+
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
 
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
-
-# Plot training data
-ax.scatter(X_train[:, 0], X_train[:, 1], y_train, 
-          c='r', marker='x', label='Training')
-
-# Optionally plot test data too
-ax.scatter(X_test[:, 0], X_test[:, 1], y_test, 
-          c='0.4', marker='.', label='Test')
-
-ax.set_xlabel('x_1')
-ax.set_ylabel('x_2')
-ax.set_zlabel('y')
-ax.legend()
+ax = show_data(X_train,y_train,'r','x','Training')
+show_data(X_test,y_test,'0.4','.','Test',ax)
 
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
@@ -66,19 +71,22 @@ logger = setup_logger()
 
 # INSTANTIATE THE MODELS
 ssesm_model = SSESM(**experiment,logger=logger)
+#bsesm_model = BSESM(**experiment,logger=logger)
 
-bsesm_model = BSESM(**experiment,logger=logger)
+try:
+    # TRAIN AND TEST THE ALL MODELS
+    for model in [ssesm_model]: # bsesm_model
+        logging.info("Training model {}".format(model.__class__.__name__))
+        model_folder = f"{folder_name}_{model.__class__.__name__}"
+        model.partial_fit(X_train, y_train)
+        Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
 
+        logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-# TRAIN AND TEST THE ALL MODELS
-for model in [bsesm_model, ssesm_model]:
-    logging.info("Training model {}".format(model.__class__.__name__))
-    model_folder = f"{folder_name}_{model.__class__.__name__}"
-    model.partial_fit(X_train, y_train)
-    Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
+        plot_surface(testDataset, X_train, y_train, Z_predict, model_folder, model, experiment["hyp_set"])
 
-    logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
-
-    plot_surface(testDataset, X_train, y_train, Z_predict, model_folder, model, experiment["hyp_set"])
-
-plt.show()
+    plt.show(block=True)
+except KeyboardInterrupt:
+    print("\nShutting down...")
+    plt.close('all')
+    exit(0)

@@ -27,7 +27,7 @@ def create_design_matrix_train(xx, yy, zz, hyperparams):
     - zz (numpy.ndarray): The z-values (target values) of the grid.
     - hyperparams (dict): A dictionary containing hyperparameters, including:
         - "n_samples" (int): The number of samples to generate.
-        - "T" (int): The scaling factor for normalization.
+        - "seed" (int): The random number generation seed.
 
     Returns:
     - X (numpy.ndarray): A 2D array containing the sampled x and y coordinates as the design matrix.

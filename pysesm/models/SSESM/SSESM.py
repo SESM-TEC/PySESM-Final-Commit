@@ -129,8 +129,8 @@ class SSESM(SESM):
             permuted_list_sub_blocks = [active_blocks[i] for i in selected_indexes]
             for block in permuted_list_sub_blocks:
                 self.ista_layer = block.ista_layer
-                X_torch = torch.tensor(block.normalized_X, dtype=torch.float32)
-                y_torch = torch.tensor(block.target, dtype=torch.float32)
+                X_torch = block.normalized_X.clone().detach().requires_grad_(False)
+                y_torch = torch.tensor(block.target, dtype=torch.float32).requires_grad_(False)
                 super().partial_fit(X_torch, y_torch)
 
     def predict(self, X, y, *_):
