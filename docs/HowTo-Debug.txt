@@ -10,6 +10,7 @@ examples/one_block_example.py
 
    With the conda/mamba python environment ready, just run
 
-     python one_block_example.py
+     > cd PySESM/examples
+     > python one_block_example.py
 
-   or use your favorite debugger
+   or use your favorite debugger.

@@ -1,3 +1,5 @@
+
+
 import logging
 import torch
 
@@ -83,7 +85,7 @@ try:
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-        plot_surface(testDataset, X_train, y_train, Z_predict, model_folder, model, experiment["hyp_set"])
+        plot_surface(testDataset, X_train, y_train, Z_predict, model, experiment["hyp_set"])
 
     plt.show(block=True)
 except KeyboardInterrupt:

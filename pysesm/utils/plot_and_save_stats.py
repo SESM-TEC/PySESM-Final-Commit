@@ -8,8 +8,7 @@ import os
 
 from pysesm.models.SESM.SESM import SESM
 
-
-def plot_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hypset):
+def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
@@ -19,16 +18,10 @@ def plot_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
     - X_train (torch.Tensor): The input data points for training.
     - y_train (torch.Tensor): The target values for training.
     - Z (torch.Tensor): The predicted values (surface) from the surrogate model.
-    - folder_name (str): The hyperparameter set identifier.
-    - fngroup (str): The function group identifier.
-    - iteration (int): The iteration number of the experiment.
-    - losses_ISTA (list): List of ISTA losses over epochs.
-    - losses_Dictionary (list): List of Dictionary losses over epochs.
+    - model(SESM): trained model
+    - hypset(int): The hyperparameter set identifier.
     """
-    # Asegurarse de que el directorio exista
-    os.makedirs(f"{folder_name}/plots", exist_ok=True)
-    os.makedirs(f"{folder_name}/stats", exist_ok=True)
-
+    
     # Matplotlib subplots (no interactivas)
     fig = plt.figure(figsize=(15, 10))
 
@@ -79,6 +72,29 @@ def plot_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
     ax2.set_title(f"Surrogate Model - {hypset}/{model.dfngroup}")
 
     plt.tight_layout()
+    return fig
+
+def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hypset):
+    """
+    Saves the plot results as subplots including loss curves, sampled data, original function, and surrogate model surface.
+
+    Args:
+    - train_dataset (dict): A dictionary containing the training dataset.
+    - test_dataset (dict): A dictionary containing the test dataset.
+    - X_train (torch.Tensor): The input data points for training.
+    - y_train (torch.Tensor): The target values for training.
+    - Z (torch.Tensor): The predicted values (surface) from the surrogate model.
+    - model(SESM): trained model
+    - folder_name (str): Destination of created files
+    - hypset(int): The hyperparameter set identifier.
+    """
+    # Asegurarse de que el directorio exista
+    os.makedirs(f"{folder_name}/plots", exist_ok=True)
+    os.makedirs(f"{folder_name}/stats", exist_ok=True)
+
+    # Matplotlib subplots (no interactivas)
+    fig = plot_surface(test_dataset,X_train,y_train,Z,model,hypset)
+
     plt.savefig(f"{folder_name}/plots/{model.dfngroup}.{1}_static.png")
     plt.close(fig)
 
