@@ -128,7 +128,8 @@ class SurrogateFunction(ABC):
             - The initialized parameters are designed to integrate seamlessly with PyTorch's
               optimization framework.
         """
-
+        pass
+    
     @abstractmethod
     def __call__(self, *args, **kwargs) -> torch.Tensor:
         """

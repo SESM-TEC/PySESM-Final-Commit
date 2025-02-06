@@ -13,7 +13,6 @@ from pysesm.models.ISTALayer import ISTALayer
 
 class SESM(torch.nn.Module):
     """
-<<<<<<< HEAD
     A custom PyTorch module for implementing a surrogate model using the SESM (Sparse-Encoded Surrogate Model) architecture.
 
     The SESM architecture is designed for surrogate modeling and function approximation tasks, leveraging sparse encoding
@@ -145,7 +144,6 @@ class SESM(torch.nn.Module):
             **kwargs
     ):
         """
-<<<<<<< HEAD
         Initializes the SESM model with the given parameters.
 
         Args:

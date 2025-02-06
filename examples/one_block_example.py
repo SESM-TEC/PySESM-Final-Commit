@@ -27,7 +27,7 @@ experiment = {
     "dictionary_alpha": 0.07007,
     "rho_epochs": 5,
     "mu_epochs": 5,
-    "model_epochs": 50,
+    "model_epochs": 110,
     "dict_epochs": 5,
     "ista_epochs": 5,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
