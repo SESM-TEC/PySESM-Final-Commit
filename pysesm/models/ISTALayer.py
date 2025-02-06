@@ -165,9 +165,14 @@ class ISTALayer(Module):
             None
         """
         for _ in range(epochs):
-            new_h = self.forward(y, dictionary, log_losses)
-            if new_h is not None:
-                self.h.data = new_h
+            total_loss = self.forward(y, dictionary, log_losses)
+
+            self.optimizer.zero_grad()
+            total_loss.backward(retain_graph=True)
+            self.optimizer.step()
+
+            with torch.no_grad():
+                self.h.data = self.shrinkage()
 
     def forward(self, y, dictionary, log_losses=True):
         """
@@ -179,7 +184,7 @@ class ISTALayer(Module):
             log_losses (bool): Whether to log the computed losses (default: True).
 
         Returns:
-            torch.Tensor: Updated sparse vector after applying shrinkage.
+            torch.Tensor: Estimated loss after forward step
         """
         y_pred = self.evaluation_func(dictionary, self.h)
         loss = self.criterion(y_pred, y)
@@ -187,12 +192,7 @@ class ISTALayer(Module):
         reg_loss = self.get_custom_regularization()
         total_loss = loss + reg_loss
 
-        self.optimizer.zero_grad()
-        total_loss.backward(retain_graph=True)
-        self.optimizer.step()
-
         if log_losses:
             self.losses.append(total_loss.item())
 
-        with torch.no_grad():
-            return self.shrinkage()
+        return total_loss
