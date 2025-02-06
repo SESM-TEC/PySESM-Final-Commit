@@ -43,7 +43,7 @@ def generate_gaussian_dataset(experiment_config: dict):
     # sigmas and mu finally used
     sigma_list = [sigma1_d, sigma2_d, sigma3_d]
     mu_list = [mu1, mu2, mu3]
-    weights_list = [1,0.5,0.75]
+    weights_list = [1.25,0.5,0.75]
     
     low_lim = -2
     high_lim = 2
