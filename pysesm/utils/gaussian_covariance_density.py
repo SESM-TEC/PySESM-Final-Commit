@@ -61,7 +61,7 @@ def generate_gmm_z(X, sigma, mu, weights=None):
     X_np = X.numpy()
     
     # Initialize result with first gaussian to avoid one addition
-    max_val = multivariate_normal.pdf(mu[0].numpy(), mu[0].numpy(), sigma[0].numpy())
+    max_val = multivariate_normal.pdf(mu[0].numpy(), mean=mu[0].numpy(), cov=sigma[0].numpy())
     result = torch.tensor(      
         multivariate_normal.pdf(X_np, mu[0].numpy(), sigma[0].numpy()),
         dtype=torch.float32
@@ -69,11 +69,11 @@ def generate_gmm_z(X, sigma, mu, weights=None):
     
     # Add remaining gaussians
     for i, (mean, cov) in enumerate(zip(mu[1:], sigma[1:]),start=1):
-        max_val = multivariate_normal.pdf(mean.numpy(), mean.numpy(), cov.numpy())                        
+        max_val = multivariate_normal.pdf(mean.numpy(), mean=mean.numpy(), cov=cov.numpy())                        
         result.add_(torch.tensor(
-            multivariate_normal.pdf(X_np, mean.numpy(), cov.numpy()),
+            multivariate_normal.pdf(X_np, mean=mean.numpy(), cov=cov.numpy()),
             dtype=torch.float32
-        )*(weights[1]/max_val))
+        )*(weights[i]/max_val))
     
     return result
 
