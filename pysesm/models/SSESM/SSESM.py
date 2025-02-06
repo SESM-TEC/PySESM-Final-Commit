@@ -118,7 +118,7 @@ class SSESM(SESM):
             self.n_functions,
             self.seed,
             self.ista_alpha,
-            self.ista_alpha,
+            self.ista_lambd,
             self.weight_decay,
             self.evaluation_func,
         )

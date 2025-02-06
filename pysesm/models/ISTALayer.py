@@ -94,8 +94,10 @@ class ISTALayer(Module):
                 parameters=self.parameters(), lr=alpha, weight_decay=weight_decay
             )
 
+
+        # TODO: add this in the arguments too.  These are used in the custom regularization
         self.threshold = 11
-        self.penalty_weight = 0.05
+        self.penalty_weight = 0 # 0.05  # Deactivated for now
 
     def setup(self, h: torch.Tensor = None) -> None:
         """

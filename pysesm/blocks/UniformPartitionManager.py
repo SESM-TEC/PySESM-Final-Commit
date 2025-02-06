@@ -23,7 +23,7 @@ def squeeze_factor(y: np.ndarray):
         Otherwise, returns 1.0.
     """
     e_f = 0.0
-    max_y = max(y)
+    max_y = torch.stack(y).abs().max()
     if max_y > 1:
         e_f = 1 / max_y
     else:
@@ -145,6 +145,7 @@ class UniformPartitionManager(BlockManager):
     def _configure_blocks(self, init_h: bool = True):
         """
         Configures each block with its expected squeeze factor and initializes sparse vectors if required.
+        Internally, the .y attribute will hold the raw original y data, and .target the normalized version.
 
         Args:
             init_h (bool, optional): Whether to initialize the sparse vector `h` for each block (default is True).
@@ -188,9 +189,9 @@ class UniformPartitionManager(BlockManager):
         """
         self._update_block_arrangement(X)
 
-        self._map_points(X, y)
-        self._vectorized_normalization(self.blocks)
-        self._configure_blocks()
+        self._map_points(X, y) # Sends points to their respective blocks
+        self._vectorized_normalization(self.blocks) # Normalize X coords in each block
+        self._configure_blocks() # Normalize y value and initialize h in each block
 
 
     def init_ista_per_block(
