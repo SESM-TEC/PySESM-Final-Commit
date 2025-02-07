@@ -150,31 +150,6 @@ class ISTALayer(Module):
             torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h)
         )
 
-    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
-        """
-        Performs a partial fit, iteratively updating the sparse vector `h` over a specified number of epochs.
-
-        During training, the method logs the total loss, including both the prediction error
-        and the regularization penalty, for each epoch.
-
-        Args:
-            y (torch.Tensor): Ground truth or target vector.
-            epochs (int): Number of epochs to train.
-            dictionary (torch.Tensor): Input matrix or dictionary used to compute predictions.
-            log_losses (bool, optional): Whether to log the computed losses during training (default: True).
-
-        Returns:
-            None
-        """
-        for _ in range(epochs):
-            total_loss = self.forward(y, dictionary, log_losses)
-
-            self.optimizer.zero_grad()
-            total_loss.backward(retain_graph=True)
-            self.optimizer.step()
-
-            with torch.no_grad():
-                self.h.data = self.shrinkage()
 
     def forward(self, y, dictionary, log_losses=True):
         """
@@ -198,3 +173,36 @@ class ISTALayer(Module):
             self.losses.append(total_loss.item())
 
         return total_loss
+
+    def train_step(self, y, dictionary, log_losses=True):
+        """
+        Performs a single training step: forward, backward, and optimization.
+        """
+        self.optimizer.zero_grad()
+        loss = self.forward(y, dictionary, log_losses)
+        loss.backward()
+        self.optimizer.step()
+        
+        with torch.no_grad():
+            self.h.data = self.shrinkage()
+        
+        return loss
+    
+    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
+        """
+        Performs a partial fit, iteratively updating the sparse vector `h` over a specified number of epochs.
+
+        During training, the method logs the total loss, including both the prediction error
+        and the regularization penalty, for each epoch.
+
+        Args:
+            y (torch.Tensor): Ground truth or target vector.
+            epochs (int): Number of epochs to train.
+            dictionary (torch.Tensor): Input matrix or dictionary used to compute predictions.
+            log_losses (bool, optional): Whether to log the computed losses during training (default: True).
+
+        Returns:
+            None
+        """
+        for _ in range(epochs):
+            self.train_step(y, dictionary, log_losses)

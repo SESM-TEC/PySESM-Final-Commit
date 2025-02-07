@@ -158,7 +158,7 @@ class DictLayer(torch.nn.Module):
 
             loss = self.criterion(y_pred, y)
             self.optimizer.zero_grad()
-            loss.backward(retain_graph=True)
+            loss.backward(retain_graph=False)
             self.optimizer.step()
 
             if log_losses:

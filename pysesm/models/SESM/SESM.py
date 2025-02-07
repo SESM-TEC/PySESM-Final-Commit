@@ -387,8 +387,12 @@ class SESM(torch.nn.Module):
 
         self.loss_analysis(self.rho_epochs)
 
+         # Detach dictionary before passing to ISTA layer
+        dictionary_for_ista = self.dictionary_layer.dictionary.detach()
+    
+
         self.ista_layer.partial_fit(
-            y=y, epochs=self.ista_epochs, dictionary=self.dictionary_layer.dictionary
+            y=y, epochs=self.ista_epochs, dictionary=dictionary_for_ista
         )
 
         # TODO: Check if we can just use the losses within each layer rather than copying their values each epoch

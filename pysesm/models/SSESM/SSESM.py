@@ -125,10 +125,14 @@ class SSESM(SESM):
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         for _ in range(self.permutation_times):
-            selected_indexes = np.random.permutation(len(active_blocks))
-            permuted_list_sub_blocks = [active_blocks[i] for i in selected_indexes]
+            selected_indices = np.random.permutation(len(active_blocks))
+            permuted_list_sub_blocks = [active_blocks[i] for i in selected_indices]
             for block in permuted_list_sub_blocks:
                 self.ista_layer = block.ista_layer
+
+                # DEBUG: Checking state of optimizer here
+                # print("Optimizer state:", [p.shape for p in self.ista_layer.optimizer.param_groups[0]['params']])
+
                 X_torch = block.normalized_X.clone().detach().requires_grad_(False)
                 y_torch = torch.tensor(block.target, dtype=torch.float32).requires_grad_(False)
                 super().partial_fit(X_torch, y_torch)
