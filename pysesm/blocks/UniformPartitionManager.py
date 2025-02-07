@@ -153,8 +153,11 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             if len(block.y) != 0:
-                block.amplitude = squeeze_factor(block.y)
+                
                 if init_h:
+                    # Squeeze should be computed only with training data
+                    block.amplitude = squeeze_factor(block.y)
+
                     block.h = torch.nn.Parameter(
                         torch.rand(self.n_functions), requires_grad=True
                     )
@@ -251,8 +254,8 @@ class UniformPartitionManager(BlockManager):
         Returns:
             List[PartitionBlock]: A list of active blocks corresponding to the test data.
         """
-        # Copy blocks without X and y
-        test_blocks = deepcopy(self.blocks)
+        # Copy blocks without X and y, nor their normalized versions, positions, etc.
+        test_blocks = deepcopy(self.blocks) # "deepcopy" is not that deep...
 
         # Save temporarily current blocks
         temp_current_blocks = self.blocks
@@ -260,7 +263,11 @@ class UniformPartitionManager(BlockManager):
 
         # Map and normalize points into test blocks
         self._map_points(X, y)
+
+        # This works because it just adjust coordinates to the block relative position
         self._vectorized_normalization(self.blocks)
+
+        # This only applies the already computed squeeze factor.
         self._configure_blocks(init_h=False)
 
         # Retrieved mapped test blocks and return to usual blocks

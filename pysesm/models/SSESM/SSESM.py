@@ -160,7 +160,8 @@ class SSESM(SESM):
         y_pred_per_block = [0 for _ in range(len(y))]
         for block in active_blocks:
             X_torch = block.normalized_X.clone().detach()
-            block_pred = super().predict(X_torch, custom_h=block.ista_layer.h)
+            # super().predict does linear combination of dict and h.  anti-squeeze needed.
+            block_pred = super().predict(X_torch, custom_h=block.ista_layer.h)/block.amplitude
             for i, pos in enumerate(block.positions):
                 y_pred_per_block[pos] = block_pred[i]
 
