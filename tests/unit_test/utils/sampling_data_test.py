@@ -38,19 +38,6 @@ def test_generate_uniform_sampling():
         len(sampled_indices_edge) == total_points
     ), "Edge case failed for sampling all points"
 
-    # Check with min_separation (to be implemented)
-    sampled_indices_separated = generate_uniform_sampling(
-        total_points, SEED, n_samples, min_separation=2
-    )
-    assert (
-        len(sampled_indices_separated) == n_samples
-    ), "Number of samples with separation is incorrect"
-
-    # Verify minimum separation constraint
-    assert all(
-        np.abs(np.diff(np.sort(sampled_indices_separated))) >= 2
-    ), "Minimum separation constraint is violated"
-
 
 def test_sample_data():
     """

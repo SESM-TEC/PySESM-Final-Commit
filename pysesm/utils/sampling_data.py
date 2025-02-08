@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-def generate_uniform_sampling(total_points, seed, n_samples=500):
+def generate_uniform_sampling(total_points, seed = None, n_samples=500):
     """
     Generate uniform sampling indices
 
