@@ -42,26 +42,31 @@ def test_generate_z():
     """
     Test the generate_z function for correct density calculation.
     """
-    sigma1, sigma2, sigma3 = generate_sigma_tensors()
+    sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
 
     # Define mean vectors
     mu1 = torch.tensor([0.0, 0.0], dtype=torch.float32)
     mu2 = torch.tensor([1.0, 1.0], dtype=torch.float32)
     mu3 = torch.tensor([-1.0, -1.0], dtype=torch.float32)
 
-    X = torch.tensor([[0.0, 0.0], [1.0, 1.0], [-1.0, -1.0]], dtype=torch.float32)
+    N = 100
+    X = 2*torch.rand(N,2,dtype=torch.float32) - 1
+    
     sigma = [sigma1, sigma2, sigma3]
     mu = [mu1, mu2, mu3]
 
     z = generate_gmm_z(X, sigma, mu)
 
     # Check the shape of the result
-    assert z.shape == (3,), "Output shape is incorrect"
+    assert z.shape == (N,), "Output shape is incorrect"
 
     # Manually calculate expected density
-    expected_z1 = multivariate_normal.pdf(X.numpy(), mu1.numpy(), sigma1.numpy())
-    expected_z2 = multivariate_normal.pdf(X.numpy(), mu2.numpy(), sigma2.numpy())
-    expected_z3 = multivariate_normal.pdf(X.numpy(), mu3.numpy(), sigma3.numpy())
+    expected_z1 = ( multivariate_normal.pdf(X.numpy(), mu1.numpy(), sigma1.numpy()) /
+                    multivariate_normal.pdf(mu1.numpy(), mu1.numpy(), sigma1.numpy()) )
+    expected_z2 = ( multivariate_normal.pdf(X.numpy(), mu2.numpy(), sigma2.numpy()) /
+                    multivariate_normal.pdf(mu2.numpy(), mu2.numpy(), sigma2.numpy()) )
+    expected_z3 = ( multivariate_normal.pdf(X.numpy(), mu3.numpy(), sigma3.numpy()) /
+                    multivariate_normal.pdf(mu3.numpy(), mu3.numpy(), sigma3.numpy()) )
 
     expected_z = expected_z1 + expected_z2 + expected_z3
 
@@ -74,7 +79,7 @@ def test_generate_mesh():
     """
     n_points = 100
     xl, xr = -3.0, 3.0
-    sigma1, sigma2, sigma3 = generate_sigma_tensors()
+    sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
 
     mu1 = torch.tensor([0.0, 0.0], dtype=torch.float32)
     mu2 = torch.tensor([1.0, 1.0], dtype=torch.float32)
