@@ -3,7 +3,7 @@ import torch
 from pysesm.utils.gaussian_covariance_density import generate_gmm_z
 
 
-def generate_mesh_samples(n_points, xl, xr, sigma, mu, weights,dtype=torch.float32):
+def generate_mesh_samples(n_points, xl, xr, sigma, mu, weights=None, dtype=torch.float32):
     """
     Generates a 2D mesh grid and evaluates a combined density of
     multivariate normal distributions on it.
@@ -30,7 +30,7 @@ def generate_mesh_samples(n_points, xl, xr, sigma, mu, weights,dtype=torch.float
     return xx, yy, zz
 
 
-def generate_random_samples(n_points, xl, xr, sigma, mu, weights, seed=None,dtype=torch.float32):
+def generate_random_samples(n_points, xl, xr, sigma, mu, weights=None, seed=None,dtype=torch.float32):
     """
     Generates random samples within a specified range and evaluates a
     combined density of several multivariate normal distributions on
@@ -46,9 +46,13 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, weights, seed=None,dtyp
     - sigma (list of torch.Tensor): A list of covariance matrices for
       the distributions.
     - mu (list of torch.Tensor): A list of mean vectors for the
-    - distributions.
+      distributions.
+    - weights (tensor or None): weights for each distribution
     - seed (int, optional): Seed for random number
     - generation to ensure reproducibility. Default is None (random).
+
+    If no weights are provided, then all distribution samples are just
+    added (as if all weights were 1).
 
     Returns:
     - xx (np.ndarray): The x-coordinates of the random samples.
@@ -63,7 +67,7 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, weights, seed=None,dtyp
     yy = np.random.uniform(xl, xr, n_points)
 
     X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=dtype)
-    zz = generate_gmm_z(X, sigma, mu, weights,dtype=dtype)
+    zz = generate_gmm_z(X, sigma, mu, weights, dtype=dtype)
 
     return xx, yy, zz
 
