@@ -12,7 +12,16 @@ from pysesm.utils.linalg import (
 
 class GaussianFunction(SurrogateFunction):
     """
-    TODO: I am not sure about the eig, mu and vector range
+    This is a mixture of gaussian functions.
+
+    Theta holds all parameters for all words in a dictionary.
+    It holds two sets of parameters:
+    mu: mean value of each gaussian
+    rho: elements of a triangular matrix.
+    
+    The inverse of the convariance matrix is computed as A*A' where 
+    A is a triangular matrix with the elements in rho.
+    
     """
 
     eig_range: list[float]
@@ -26,76 +35,119 @@ class GaussianFunction(SurrogateFunction):
         self.theta_size = int(n_features * (n_features + 3) / 2)
 
     def initialize(self) -> torch.nn.Parameter:
+        """
+        Initialize the parameter vector Theta maintaining specific
+        statistical properties:
+        - Means (mu) uniformly distributed in mu_range
+        - Covariance matrices with controlled eigenvalue distribution
+        """
         torch.manual_seed(self.seed)
 
-        """
-        Here comes the initialization
-        In every interface there comes an initialization
-        for i in n_functions:
-            generate_random_vectors
-            gram_schmidt
-            Sigma_inv
-            A
-            For each gaussian, Rho: 3
-            For each gaussian, Myu: 2
-            Min will be a vector and max will be a vector
-        """
 
-        Theta = torch.nn.Parameter(
-            torch.normal(
-                mean=0,
-                std=np.sqrt(1 / self.theta_size),
-                size=(self.theta_size, self.n_functions),
-                requires_grad=True,
-            )
-        )
+        # Initialize means (n_features, n_functions)
+        mu = torch.rand(self.n_features, self.n_functions) * \
+            (self.mu_range[1] - self.mu_range[0]) + self.mu_range[0]
 
-        mu = (
-            torch.rand(self.n_features, self.n_functions)
-            * (self.mu_range[1] - self.mu_range[0])
-            + self.mu_range[0]
-        )
+        # Generate all Q matrices at once (n_functions, n_features, n_features)
+        Q_all = torch.rand(self.n_functions, self.n_features, self.n_features) * \
+                (self.vector_range[1] - self.vector_range[0]) + self.vector_range[0]
+        
+        # Use QR decomposition for orthogonalization (more stable than Gram-Schmidt)
+        Q_all, _ = torch.linalg.qr(Q_all)
 
-        Rho = torch.zeros(self.theta_size - self.n_features, self.n_functions)
+        # Generate all eigenvalues and create diagonal matrices
+        D_all = torch.rand(self.n_functions, self.n_features) * \
+                (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0]
+        D_all = torch.diag_embed(D_all)
 
-        # Following range changes will be eliminated:  they depend on the data set!
-        # if self.eig_range[1] > 1e1 or self.vector_range[1] > 1e1:
-        #    # Log the warning
-        #    self.logger.warning("Recommended eig range is between 0 and 10")
+        # Batch compute all covariance matrices
+        Sigma_all = torch.bmm(torch.bmm(Q_all, D_all), Q_all.transpose(1, 2))
+        
+        # Batch Cholesky decomposition
+        L_all = torch.linalg.cholesky(Sigma_all).transpose(1, 2)
 
-        #if self.mu_range[1] > 2 or self.mu_range[0] != -2:
-        #    # Log the warning
-        #    self.logger.warning("Recommended mu range is between [-1, -2] and [1, 2]")
+        # Extract upper triangular elements from all matrices at once
+        n = L_all.shape[1]
+        indices = torch.triu_indices(n, n, offset=0)
+        Rho = L_all[:, indices[0], indices[1]].T  # Shape: (n_upper_elements, n_functions)
 
-        # Log the shape of the tensor
+        # Log debug information
         self.logger.info(f"Shape of Mu: {mu.shape}")
-
-        for i in range(self.n_functions):
-            Q = generate_random_vectors(
-                self.n_features, self.vector_range[1], self.vector_range[0]
-            )
-            Q = gram_schmidt(Q)
-            D = torch.diag(
-                torch.rand(self.n_features) * (self.eig_range[1] - self.eig_range[0])
-                + self.eig_range[0]
-            )
-            Sigma = Q @ D @ Q.mT
-            L = torch.linalg.cholesky(Sigma).mT
-            rho = get_upper_triangle(L)
-            for j in range(self.theta_size - self.n_features):
-                Rho[j, i] = rho[j]
-
-        with torch.no_grad():
-            Theta[: -self.n_features, :] = Rho
-            Theta[-self.n_features :, :] = mu
-
-        # Log the shape of the tensor
         self.logger.info(f"Shape of Rho: {Rho.shape}")
+        
+        # Create final Theta parameter
+        Theta = torch.nn.Parameter(torch.cat([Rho, mu], dim=0))
+        
         self.logger.info(f"Shape of Theta: {Theta.shape}")
+        
+        # Additional debug statistics
+        with torch.no_grad():
+            self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
+            self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
+            eigvals = torch.linalg.eigvals(Sigma_all)  # Get all eigenvalues at once
+            self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta
 
-    def __call__(
+    def __call__(self, x, Theta, rho_flag=False, mu_flag=False):
+        """
+        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points and all functions.
+        
+        Args:
+            x: Input tensor (n_features, n_samples)
+            Theta: Parameter tensor containing rho and mu
+            rho_flag: Whether rho parameters are being optimized
+            mu_flag: Whether mu parameters are being optimized
+        
+        Returns:
+            Tensor of shape (n_samples, n_functions) containing the evaluated gaussians
+        """
+        # Split parameters
+        rho = Theta[:-self.n_features, :]  # (n_rho_params, n_functions)
+        mu = Theta[-self.n_features:, :].mT.unsqueeze(2)  # (n_functions, n_features, 1)
+        
+        # Handle gradient flow control
+        if not rho_flag:
+            rho = rho.detach()
+        if not mu_flag:
+            mu = mu.detach()
+
+        # Debug statistics
+        #with torch.no_grad():
+        #    self.logger.debug(f"Rho stats - min: {rho.min():.4f}, max: {rho.max():.4f}, mean: {rho.mean():.4f}")
+        #    self.logger.debug(f"Mu stats - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
+        
+        # Convert x to shape (n_functions, n_features, n_samples) by repeating
+        x_expanded = x.unsqueeze(0).expand(self.n_functions, -1, -1)  # (n_functions, n_features, n_samples)
+        
+        # Compute x-µ for all functions at once
+        x_mu = x_expanded - mu  # (n_functions, n_features, n_samples)
+        
+        # Create batch of triangular matrices A directly
+        n = self.n_features
+        A = torch.zeros(self.n_functions, n, n, device=Theta.device)
+        indices = torch.triu_indices(n, n, offset=0)
+        A[:, indices[0], indices[1]] = rho.T  # Use rho.T to match batch dimension
+        
+        # Compute A'*(x-µ) for all functions and samples at once
+        A_t_x_mu = torch.bmm(A.transpose(1, 2), x_mu)
+        
+        # Compute squared L2 norm: ||A'*(x-µ)||_2^2
+        squared_norms = torch.sum(A_t_x_mu ** 2, dim=1)  # (n_functions, n_samples)
+        
+        # Compute final exponential
+        result = torch.exp(-0.5 * squared_norms).T
+        
+        # Debug statistics
+        #with torch.no_grad():
+        #    self.logger.debug(f"Squared norms - min: {squared_norms.min():.4f}, max: {squared_norms.max():.4f}")
+        #    self.logger.debug(f"Result - min: {result.min():.4f}, max: {result.max():.4f}")
+        
+        return result
+
+
+    # Deprecated function
+    def __old_call__(
         self,
         x,
         Theta: torch.nn.Parameter,
@@ -122,3 +174,4 @@ class GaussianFunction(SurrogateFunction):
         result = torch.exp(exponent)
 
         return result
+

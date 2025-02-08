@@ -25,7 +25,7 @@ def generate_uniform_sampling(total_points, SEED, n_samples=500):
     return selected_indexes
 
 
-def sample_data(x_values, y_values, z_values, sampled_indices):
+def sample_data(x_values, y_values, z_values, sampled_indices,dtype=torch.float32):
     """
     Sample data based on selected indices.
 
@@ -42,8 +42,8 @@ def sample_data(x_values, y_values, z_values, sampled_indices):
         X, y = sample_data(x_values, y_values, z_values, sampled_indices)
     """
 
-    sampled_x = torch.tensor(x_values[sampled_indices], dtype=torch.float32)
-    sampled_y = torch.tensor(y_values[sampled_indices], dtype=torch.float32)
+    sampled_x = torch.tensor(x_values[sampled_indices], dtype=dtype)
+    sampled_y = torch.tensor(y_values[sampled_indices], dtype=dtype)
     X = torch.stack((sampled_x, sampled_y), dim=1)
-    y = z_values[sampled_indices].clone().detach().to(dtype=torch.float32)    
+    y = z_values[sampled_indices].clone().detach().to(dtype=dtype)    
     return X, y

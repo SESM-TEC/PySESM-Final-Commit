@@ -425,8 +425,8 @@ class SESM(torch.nn.Module):
         with torch.no_grad():
             self.dictionary_layer.dictionary = self.dictionary_layer.forward(X, dictionary_shape)
 
-        dictionary = self.dictionary_layer.dictionary.double()
-        h = custom_h.double() if custom_h is not None else self.ista_layer.h.double()
+        dictionary = self.dictionary_layer.dictionary
+        h = custom_h if custom_h is not None else self.ista_layer.h
 
         return self.evaluation_func(dictionary, h)
 

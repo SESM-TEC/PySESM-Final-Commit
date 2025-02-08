@@ -17,7 +17,7 @@ def unstack_design_matrix(X_test):
     return x_tensor, y_tensor
 
 
-def create_design_matrix_train(xx, yy, zz, hyperparams):
+def create_design_matrix_train(xx, yy, zz, hyperparams,dtype=torch.float32):
     """
     Creates a design matrix for training by sampling data points.
 
@@ -44,12 +44,12 @@ def create_design_matrix_train(xx, yy, zz, hyperparams):
     sampled_indices = generate_uniform_sampling(
         total_points, hyperparams["seed"], n_samples=n_samples
     )
-    X, y = sample_data(x_values, y_values, z_values, sampled_indices)
+    X, y = sample_data(x_values, y_values, z_values, sampled_indices,dtype=dtype)
 
     return X, y
 
 
-def create_design_matrix_test(xx, yy, zz):
+def create_design_matrix_test(xx, yy, zz,dtype=torch.float32):
     """
     Creates a design matrix for testing from given grid coordinates and target values.
 
@@ -66,8 +66,8 @@ def create_design_matrix_test(xx, yy, zz):
     y_values = yy.ravel()
     z_values = zz.ravel()
 
-    x_tensor = torch.tensor(x_values)
-    y_tensor = torch.tensor(y_values)
+    x_tensor = torch.tensor(x_values,dtype=dtype)
+    y_tensor = torch.tensor(y_values,dtype=dtype)
     X_test = torch.stack((x_tensor, y_tensor), dim=1)
 
     return X_test, z_values
