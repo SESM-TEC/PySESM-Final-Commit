@@ -6,7 +6,8 @@ from pysesm.utils.linalg import *
 
 def test_to_triu_matrix():
     """
-    Test the to_triu_matrix function to ensure correct transformation into an upper triangular matrix.
+    Test the to_triu_matrix function to ensure correct
+    transformation into an upper triangular matrix.
     """
     # Test case: Vector of length 6 for a 3x3 matrix
     non_zeros = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float32)

@@ -55,8 +55,8 @@ def get_upper_triangle(A):
     matrix and return them in a vector.  The upper triangular matrix
     is extracted row-wise.
     """
-    n = A.shape[0]
-    indices = torch.triu_indices(n, n, offset=0)
+    rows, cols = A.size()    
+    indices = torch.triu_indices(rows, cols, offset=0)
     upper_triangle = A[indices[0], indices[1]]
     return upper_triangle
 
