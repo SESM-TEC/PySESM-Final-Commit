@@ -5,11 +5,11 @@ from scipy.stats import multivariate_normal
 from pysesm.utils.gaussian_covariance_density import *
 
 
-def test_generate_sigma_tensors():
+def test_generate_nondiag_covariance_matrices():
     """
-    Test the generate_sigma_tensors function for correct output.
+    Test the generate_nondiag_covariance_matrices.
     """
-    sigma1, sigma2, sigma3 = generate_sigma_tensors()
+    sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
 
     # Check that three tensors are returned
     assert isinstance(sigma1, torch.Tensor), "sigma1 is not a tensor"
@@ -28,7 +28,10 @@ def test_generate_sigma_tensors():
 
     # Check if matrices are positive definite
     def is_positive_definite(matrix):
-        return torch.all(torch.eig(matrix)[0][:, 0] > 0)
+        # Get eigenvalues using the modern API
+        eigenvalues = torch.linalg.eigvalsh(matrix)
+        # Check real parts are all positive
+        return torch.all(eigenvalues.real > 0)
 
     assert is_positive_definite(sigma1), "sigma1 is not positive definite"
     assert is_positive_definite(sigma2), "sigma2 is not positive definite"
@@ -113,5 +116,6 @@ def test_generate_mesh():
     assert yy_large.shape == (1000, 1000), "Large mesh yy shape is incorrect"
     assert zz_large.shape == (1000, 1000), "Large mesh zz shape is incorrect"
 
-
-print("Todo bien")
+if __name__ == "__main__":
+    from pytest_helper import print_pytest_instructions
+    print_pytest_instructions()

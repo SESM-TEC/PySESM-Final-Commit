@@ -118,4 +118,6 @@ def test_generate_random_samples():
     ), "Different seeds produce identical zz density values"
 
 
-print("Todo bien")
+if __name__ == "__main__":
+    from pytest_helper import print_pytest_instructions
+    print_pytest_instructions()

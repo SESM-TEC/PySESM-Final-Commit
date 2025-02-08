@@ -19,7 +19,7 @@ def unstack_design_matrix(X_test):
 
 def create_design_matrix_train(xx, yy, zz, hyperparams,dtype=torch.float32):
     """
-    Creates a design matrix for training by sampling data points.
+    Creates a design matrix for training by randomly sampling data points.
 
     Args:
     - xx (numpy.ndarray): The x-coordinates of the grid.
@@ -41,9 +41,11 @@ def create_design_matrix_train(xx, yy, zz, hyperparams,dtype=torch.float32):
 
     total_points = len(x_values)
 
-    sampled_indices = generate_uniform_sampling(
-        total_points, hyperparams["seed"], n_samples=n_samples
-    )
+    # Take a permutation of the indices 
+    sampled_indices = generate_uniform_sampling(total_points=total_points,
+                                                seed=hyperparams["seed"],
+                                                n_samples=n_samples)
+    
     X, y = sample_data(x_values, y_values, z_values, sampled_indices,dtype=dtype)
 
     return X, y

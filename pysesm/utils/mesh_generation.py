@@ -3,9 +3,10 @@ import torch
 from pysesm.utils.gaussian_covariance_density import generate_gmm_z
 
 
-def generate_mesh(n_points, xl, xr, sigma, mu, weights):
+def generate_mesh_samples(n_points, xl, xr, sigma, mu, weights,dtype=torch.float32):
     """
-    Generates a 2D mesh grid and evaluates a combined density of three multivariate normal distributions on it.
+    Generates a 2D mesh grid and evaluates a combined density of
+    multivariate normal distributions on it.
 
     Args:
     - n_points (int): Number of points in each dimension of the grid.
@@ -19,43 +20,55 @@ def generate_mesh(n_points, xl, xr, sigma, mu, weights):
     - xx (np.ndarray): The x-coordinates of the mesh grid.
     - yy (np.ndarray): The y-coordinates of the mesh grid.
     - zz (torch.Tensor): The combined density values of the three distributions on the mesh grid.
+
     """
     x = np.linspace(xl, xr, n_points)
     xx, yy = np.meshgrid(x, x)
-    X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz = generate_gmm_z(X, sigma, mu, weights)
+    X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=dtype)
+    zz = generate_gmm_z(X, sigma, mu, weights,dtype=dtype)
     zz = zz.reshape(xx.shape)
     return xx, yy, zz
 
 
-def generate_random_samples(n_points, xl, xr, sigma, mu, weights, SEED):
+def generate_random_samples(n_points, xl, xr, sigma, mu, weights, seed=None,dtype=torch.float32):
     """
-    Generates random samples within a specified range and evaluates a combined density of three multivariate normal distributions on them.
+    Generates random samples within a specified range and evaluates a
+    combined density of several multivariate normal distributions on
+    them.
 
     Args:
+
     - n_points (int): Number of random points to generate.
-    - xl (float): The lower bound of the range for generating random points.
-    - xr (float): The upper bound of the range for generating random points.
-    - sigma (list of torch.Tensor): A list of covariance matrices for the distributions.
-    - mu (list of torch.Tensor): A list of mean vectors for the distributions.
-    - SEED (int, optional): Seed for random number generation to ensure reproducibility. Default is 42.
+    - xl (float): The lower bound of the range for generating random
+      points.
+    - xr (float): The upper bound of the range for generating random
+      points.
+    - sigma (list of torch.Tensor): A list of covariance matrices for
+      the distributions.
+    - mu (list of torch.Tensor): A list of mean vectors for the
+    - distributions.
+    - seed (int, optional): Seed for random number
+    - generation to ensure reproducibility. Default is None (random).
 
     Returns:
     - xx (np.ndarray): The x-coordinates of the random samples.
     - yy (np.ndarray): The y-coordinates of the random samples.
-    - zz (torch.Tensor): The combined density values of the three distributions at the random sample points.
+    - zz (torch.Tensor): The combined density values of the three
+      distributions at the random sample points.
     """
-    np.random.seed(SEED)
+    if seed is not None:
+        np.random.seed(seed)
+        
     xx = np.random.uniform(xl, xr, n_points)
     yy = np.random.uniform(xl, xr, n_points)
 
-    X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=torch.float32)
-    zz = generate_gmm_z(X, sigma, mu, weights)
+    X = torch.tensor(np.column_stack([xx.ravel(), yy.ravel()]), dtype=dtype)
+    zz = generate_gmm_z(X, sigma, mu, weights,dtype=dtype)
 
     return xx, yy, zz
 
 
-def generate_mu(x_center, y_center):
+def generate_mu(x_center, y_center,dtype=torch.float32):
     """
     Generates a mean vector for a multivariate normal distribution.
 
@@ -66,4 +79,4 @@ def generate_mu(x_center, y_center):
     Returns:
     - torch.Tensor: A tensor containing the mean vector [x_center, y_center].
     """
-    return torch.tensor([x_center, y_center], dtype=torch.float32)
+    return torch.tensor([x_center, y_center], dtype=dtype)

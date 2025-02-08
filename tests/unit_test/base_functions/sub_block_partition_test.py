@@ -155,5 +155,17 @@ class MockISTALayer:
     def __init__(self):
         self.h = torch.tensor([1.0])
 
+if __name__ == "__main__":
+    print("This is a test file meant to be run with pytest, "
+          "not directly with Python.")
+    print("To run the tests, use one of these commands:")
+    print("\npytest gaussian_covariance_density_test.py  "
+          "# Run all tests in this file")
+    print("pytest gaussian_covariance_density_test.py::"
+          "test_generate_sigma_tensors  # Run a specific test")
+    print("pytest  # Run all tests in the current directory")
+    exit(1)  # Exit with error code 1 to indicate incorrect usage
 
-print("Todo salio bien")
+if __name__ == "__main__":
+    from pytest_helper import print_pytest_instructions
+    print_pytest_instructions()

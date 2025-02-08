@@ -7,7 +7,7 @@ def generate_gaussian_dataset(experiment_config: dict):
     """
     Create a dataset from a weighted mixture of gaussians.
     It is fixed.  The means are fixed at (1,1), (1,-1) and (-1,-1),
-    and the covariances are fixed to diagonal matrices with variances 0.1, 0.2 and 0.3.
+    and the covariances are fixed to diagonal matrices with variances 0.15, 0.2 and 0.3.
 
     Args:
         experiment_data (dict): Configuration dictionary containing experiment parameters.
@@ -48,8 +48,8 @@ def generate_gaussian_dataset(experiment_config: dict):
     low_lim = -2
     high_lim = 2
 
-    # Regular cartesian grid with 50 division per dimension used for prediction
-    xx, yy, zz = generate_mesh(50, low_lim, high_lim, sigma_list, mu_list, weights_list)
+    # Regular 2D cartesian grid with 50 division per dimension used for prediction
+    xx, yy, zz = generate_mesh_samples(50, low_lim, high_lim, sigma_list, mu_list, weights_list)
 
     # Random samples used for training
     xx_r, yy_r, zz_r = generate_random_samples(

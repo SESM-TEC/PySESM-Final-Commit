@@ -20,7 +20,8 @@ dependencies = [
     "logger",
     "scikit-learn",
     "plotly",
-    "pandas"
+    "pandas",
+    "pytest"
 ]
 
 [tool.setuptools]
