@@ -12,16 +12,23 @@ from pysesm.utils.linalg import (
 
 class GaussianFunction(SurrogateFunction):
     """
-    This is a mixture of gaussian functions.
+    Compute the unnormalized Gaussians for a given set of points.
+    Each Gaussian corresponds to a dictionary word, and is equivalent
+    to:
 
-    Theta holds all parameters for all words in a dictionary.
-    It has two subsets of parameters:
-    mu: mean values for each gaussian
-    rho: elements of the triangular matrices.
-    
-    The inverse of the convariance matrix is computed as A*A' where 
-    A is a triangular matrix with the elements in rho.
-    
+    exp(-0.5 (x-µ)' G (x-µ)
+
+    where G stands for the inverse of the covariance matrix, also
+    called the precision matrix.
+
+    Since G is symmetric and positive definite, it can be split with a
+    Cholesky decompomposition into G=A'A, where A is an upper
+    triangular matrix (the usual notation is G=LL', with L a lower
+    triangular matrix, but its equivalent).  This way, the parameters
+    required for each Gaussian are µ and rho, where rho are the upper
+    triangular elements of A (i.e. without the zeros).   
+
+    Theta holds the parameters for all words in a dictionary.
     """
 
     eig_range: list[float]
@@ -104,7 +111,15 @@ class GaussianFunction(SurrogateFunction):
 
     def __call__(self, x, Theta, rho_flag=False, mu_flag=False):
         """
-        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points and all functions.
+        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
+        and all functions; this is minus one half of the square of the
+        L2 norm of the triangular matrix A transposed times x minus
+        the mean value.
+
+        Th
+        
+        This is equivalent to the traditional Mahalanobis distance but
+        much more efficient to compute.
         
         Args:
             x: Input tensor (n_features, n_samples)
@@ -114,6 +129,7 @@ class GaussianFunction(SurrogateFunction):
         
         Returns:
             Tensor of shape (n_samples, n_functions) containing the evaluated gaussians
+
         """
         # Split parameters
         rho = Theta[:-self.n_features, :]  # (n_rho_params, n_functions)
@@ -124,11 +140,6 @@ class GaussianFunction(SurrogateFunction):
             rho = rho.detach()
         if not mu_flag:
             mu = mu.detach()
-
-        # Debug statistics
-        #with torch.no_grad():
-        #    self.logger.debug(f"Rho stats - min: {rho.min():.4f}, max: {rho.max():.4f}, mean: {rho.mean():.4f}")
-        #    self.logger.debug(f"Mu stats - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
         
         # Convert x to shape (n_functions, n_features, n_samples) by repeating
         x_expanded = x.unsqueeze(0).expand(self.n_functions, -1, -1)  # (n_functions, n_features, n_samples)
@@ -143,7 +154,7 @@ class GaussianFunction(SurrogateFunction):
         A[:, indices[0], indices[1]] = rho.T  # Use rho.T to match batch dimension
         
         # Compute A'*(x-µ) for all functions and samples at once
-        A_t_x_mu = torch.bmm(A.transpose(1, 2), x_mu)
+        A_t_x_mu = torch.bmm(A, x_mu)
         
         # Compute squared L2 norm: ||A'*(x-µ)||_2^2
         squared_norms = torch.sum(A_t_x_mu ** 2, dim=1)  # (n_functions, n_samples)
