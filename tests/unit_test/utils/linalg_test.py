@@ -131,5 +131,5 @@ def test_reshape_upper_triangle():
     ), "Reshape upper triangle with zero elements failed"
 
 if __name__ == "__main__":
-    from pytest_helper import print_pytest_instructions
+    from ..pytest_helper import print_pytest_instructions
     print_pytest_instructions()    

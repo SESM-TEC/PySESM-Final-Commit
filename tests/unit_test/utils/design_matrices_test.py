@@ -87,5 +87,5 @@ def test_create_design_matrix_test():
     assert np.array_equal(z_values, expected_z_values), "Target values z_values incorrect"
 
 if __name__ == "__main__":
-    from pytest_helper import print_pytest_instructions
+    from ..pytest_helper import print_pytest_instructions
     print_pytest_instructions()    

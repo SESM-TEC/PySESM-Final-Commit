@@ -122,5 +122,5 @@ def test_generate_mesh():
     assert zz_large.shape == (1000, 1000), "Large mesh zz shape is incorrect"
 
 if __name__ == "__main__":
-    from pytest_helper import print_pytest_instructions
+    from ..pytest_helper import print_pytest_instructions
     print_pytest_instructions()

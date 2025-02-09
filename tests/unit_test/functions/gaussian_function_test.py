@@ -225,3 +225,7 @@ def test_two_gaussians():
     rho_grads = theta.grad[:-n_features, :]
     assert not torch.all(mu_grads == 0), "Mu gradients should be non-zero when both flags are True"
     assert not torch.all(rho_grads == 0), "Rho gradients should be non-zero when both flags are True"
+
+if __name__ == "__main__":
+    from pytest_helper import print_pytest_instructions
+    print_pytest_instructions()    
