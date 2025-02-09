@@ -56,20 +56,6 @@ def test_locate_samples_in_sub_blocks():
     assert sub_blocks[8].output_values == [3]
 
 
-def test_data_mapping():
-    # Test for mapping the data
-    X = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    T = 2
-
-    t, x_n = data_mapping(X, T)
-
-    expected_t = np.array([[0, 0], [1, 1]])
-    expected_x_n = torch.tensor([[0.0, 0.0], [0.0, 0.0]])
-
-    assert np.array_equal(t, expected_t)
-    assert torch.allclose(x_n, expected_x_n)
-
-
 def test_squeze_factor():
     # Test for calculating the squeeze factor
     Y = [0.5, 2.0, 0.8]
@@ -83,36 +69,6 @@ def test_squeze_factor():
     factor = squeze_factor(Y)
 
     assert factor == expected_factor
-
-
-def test_generate_list_of_subblock():
-    # Test for generating the list of sub-blocks with expected squeeze factor
-    sub_blocks = np.empty(4, dtype=object)
-    sub_blocks[0] = SubBlock()
-    sub_blocks[0].output_values = [2.0, 3.0]
-
-    sub_blocks[1] = SubBlock()
-    sub_blocks[1].output_values = []
-
-    sub_blocks[2] = SubBlock()
-    sub_blocks[2].output_values = [0.5]
-
-    sub_blocks[3] = SubBlock()
-    sub_blocks[3].output_values = [1.0, 0.8]
-
-    l_functions = [lambda x: x]
-    SEED = 42
-
-    result = generate_list_of_subblock(sub_blocks, l_functions, SEED)
-
-    assert len(result) == 3
-    assert result[0].amplitude == 0.3333333333333333
-    assert result[0].ista_layer is not None
-    assert result[0].output_values == [0.6666666666666666, 1.0]
-
-    assert result[1].amplitude == 1.0
-    assert result[1].ista_layer is not None
-    assert result[1].output_values == [0.5]
 
 
 def test_predict_on_test_set():

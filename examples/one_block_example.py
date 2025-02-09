@@ -21,7 +21,6 @@ experiment = {
     "n_functions": 25,
     "eig_range": [1.0e0, 1.0e1],
     "mu_range": [0.0, 1.0],
-    "vector_range": [1e0, 1e1],
     "ista_alpha": 0.1,
     "ista_lambd": 0.01,
     "dictionary_alpha": 0.1,

@@ -17,7 +17,6 @@ experiment = {
     "n_functions": 25,
     "eig_range": [1e0, 1e1],
     "mu_range": [0, 1],
-    "vector_range": [1e0, 1e1],
     "ista_alpha": 0.07,
     "ista_lambd": 0.01007,
     "dictionary_alpha": 0.07007,
@@ -53,7 +52,6 @@ surrogate_function = GaussianFunction(
     logger=logger,
     eig_range=experiment["eig_range"],
     mu_range=experiment["mu_range"],
-    vector_range=experiment["vector_range"],
     seed=experiment["Seed"],
 )
 
@@ -82,7 +80,6 @@ if experiment["mode"] == "sequential":
         initial_bounds=experiment["initial_bounds"],
         eig_range=tuple(experiment["eig_range"]),
         mu_range=tuple(experiment["mu_range"]),
-        vector_range=tuple(experiment["vector_range"]),
     )
 elif experiment["mode"] == "batch":
     model = BSESM(
@@ -90,7 +87,6 @@ elif experiment["mode"] == "batch":
         n_functions=experiment["n_functions"],
         eig_range=tuple(experiment["eig_range"]),
         mu_range=tuple(experiment["mu_range"]),
-        vector_range=tuple(experiment["vector_range"]),
         model_epochs=experiment["model_epochs"],
         ista_epochs=experiment["ista_epochs"],
         rho_epochs=experiment["rho_epochs"],

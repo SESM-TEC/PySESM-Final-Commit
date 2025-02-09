@@ -53,7 +53,6 @@ class SSESM(SESM):
             n_functions (int): Number of latent functions used in the model.
             eig_range: Eigenvalue range for the surrogate function's parameter initialization.
             mu_range: Range for the mu parameter in dictionary learning.
-            vector_range: Range for initializing the dictionary vectors.
             model_epochs (int): Number of epochs for the overall model training.
             ista_epochs (int): Number of epochs for training the ISTA layer.
             rho_epochs (int): Number of epochs for adjusting the rho parameter.

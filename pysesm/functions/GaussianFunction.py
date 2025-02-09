@@ -15,9 +15,9 @@ class GaussianFunction(SurrogateFunction):
     This is a mixture of gaussian functions.
 
     Theta holds all parameters for all words in a dictionary.
-    It holds two sets of parameters:
-    mu: mean value of each gaussian
-    rho: elements of a triangular matrix.
+    It has two subsets of parameters:
+    mu: mean values for each gaussian
+    rho: elements of the triangular matrices.
     
     The inverse of the convariance matrix is computed as A*A' where 
     A is a triangular matrix with the elements in rho.
@@ -26,7 +26,6 @@ class GaussianFunction(SurrogateFunction):
 
     eig_range: list[float]
     mu_range: list[float]
-    vector_range: list[float]
 
     def __init__(self, n_features, n_functions, seed, logger, **kwargs):
         super().__init__(
@@ -41,21 +40,35 @@ class GaussianFunction(SurrogateFunction):
         - Means (mu) uniformly distributed in mu_range
         - Covariance matrices with controlled eigenvalue distribution
         """
-        torch.manual_seed(self.seed)
+        if self.seed is not None:
+            torch.manual_seed(self.seed)
 
-
-        # Initialize means (n_features, n_functions)
-        mu = torch.rand(self.n_features, self.n_functions) * \
-            (self.mu_range[1] - self.mu_range[0]) + self.mu_range[0]
-
-        # Generate all Q matrices at once (n_functions, n_features, n_features)
-        Q_all = torch.rand(self.n_functions, self.n_features, self.n_features) * \
-                (self.vector_range[1] - self.vector_range[0]) + self.vector_range[0]
+        # Validate and process mu_range
+        mu_range = torch.tensor(self.mu_range)
+        if mu_range.ndim == 1:
+            if len(mu_range) != 2:
+                raise ValueError(
+                    f"If providing a single range, mu_range must be [from, to], got {mu_range}"
+                )
+            # Expand single range to all dimensions
+            mu_range = mu_range.expand(self.n_features, 2)
+        elif mu_range.shape != (self.n_features, 2):
+            raise ValueError(
+                f"mu_range must be either [from, to] or have shape ({self.n_features}, 2) "
+                f"for per-dimension ranges, got shape {mu_range.shape}"
+            )
         
-        # Use QR decomposition for orthogonalization (more stable than Gram-Schmidt)
+        # Initialize means using per-dimension ranges
+        mu = torch.zeros(self.n_features, self.n_functions)
+        for i in range(self.n_features):
+            mu[i] = torch.rand(self.n_functions) * \
+                    (mu_range[i, 1] - mu_range[i, 0]) + mu_range[i, 0]
+
+        # Generate completely random matrices and orthogonalize them
+        Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
         Q_all, _ = torch.linalg.qr(Q_all)
 
-        # Generate all eigenvalues and create diagonal matrices
+        # Generate eigenvalues in specified range
         D_all = torch.rand(self.n_functions, self.n_features) * \
                 (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0]
         D_all = torch.diag_embed(D_all)
@@ -84,7 +97,7 @@ class GaussianFunction(SurrogateFunction):
         with torch.no_grad():
             self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
             self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
-            eigvals = torch.linalg.eigvals(Sigma_all)  # Get all eigenvalues at once
+            eigvals = torch.linalg.eigvalsh(Sigma_all)  # Get all eigenvalues at once
             self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta
