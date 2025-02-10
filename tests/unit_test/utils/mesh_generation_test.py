@@ -99,6 +99,7 @@ def test_generate_random_samples():
 
     assert np.allclose(
         xx, expected_xx, atol=1e-5
+        
     ), "Random samples xx are not reproducible"
     assert np.allclose(
         yy, expected_yy, atol=1e-5

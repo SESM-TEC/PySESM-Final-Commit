@@ -18,7 +18,7 @@ experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 25,
+    "n_functions": 1,
     "eig_range": [1.0e0, 1.0e1],
     "mu_range": [-2.0, 2.0],
     "ista_alpha": 0.2,
