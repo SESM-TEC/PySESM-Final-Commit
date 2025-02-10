@@ -15,10 +15,9 @@ class SurrogateFunctionFactory:
         kind: SurrogateFunctionEnum,
         n_features: int,
         n_functions: int,
-        seed: int,
         logger: Logger,
         **kwargs
     ) -> SurrogateFunction:
         return function_map[kind](
-            n_features=n_features, n_functions=n_functions, seed=seed, logger=logger, **kwargs
+            n_features=n_features, n_functions=n_functions, logger=logger, **kwargs
         )

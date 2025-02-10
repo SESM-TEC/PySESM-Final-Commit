@@ -12,7 +12,6 @@ def generate_gaussian_dataset(experiment_config: dict):
     Args:
         experiment_data (dict): Configuration dictionary containing experiment parameters.
             Required keys:
-                seed (int): Random seed for reproducibility
                 n_samples (int): Number of samples to generate
     
     Returns:
@@ -56,7 +55,6 @@ def generate_gaussian_dataset(experiment_config: dict):
       experiment_config["n_samples"],
       low_lim, high_lim, 
       sigma_list, mu_list, weights_list, 
-      experiment_config["seed"]
     )
 
     # Dataset

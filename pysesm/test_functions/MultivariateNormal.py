@@ -125,8 +125,6 @@ class MultivariateNormal:
         plt.show()
 
     def pca(self, X, n_components=2):
-        torch.manual_seed(1024)
-
         mean = torch.mean(X, dim=0)
         std = torch.std(X, dim=0)
 

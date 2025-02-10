@@ -27,7 +27,6 @@ def create_design_matrix_train(xx, yy, zz, hyperparams,dtype=torch.float32):
     - zz (numpy.ndarray): The z-values (target values) of the grid.
     - hyperparams (dict): A dictionary containing hyperparameters, including:
         - "n_samples" (int): The number of samples to generate.
-        - "seed" (int): The random number generation seed.
 
     Returns:
     - X (numpy.ndarray): A 2D array containing the sampled x and y coordinates as the design matrix.
@@ -43,15 +42,14 @@ def create_design_matrix_train(xx, yy, zz, hyperparams,dtype=torch.float32):
 
     # Take a permutation of the indices 
     sampled_indices = generate_uniform_sampling(total_points=total_points,
-                                                seed=hyperparams["seed"],
                                                 n_samples=n_samples)
     
-    X, y = sample_data(x_values, y_values, z_values, sampled_indices,dtype=dtype)
+    X, y = sample_data(x_values, y_values, z_values, sampled_indices, dtype=dtype)
 
     return X, y
 
 
-def create_design_matrix_test(xx, yy, zz,dtype=torch.float32):
+def create_design_matrix_test(xx, yy, zz, dtype=torch.float32):
     """
     Creates a design matrix for testing from given grid coordinates and target values.
 

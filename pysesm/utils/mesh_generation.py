@@ -30,7 +30,7 @@ def generate_mesh_samples(n_points, xl, xr, sigma, mu, weights=None, dtype=torch
     return xx, yy, zz
 
 
-def generate_random_samples(n_points, xl, xr, sigma, mu, weights=None, seed=None,dtype=torch.float32):
+def generate_random_samples(n_points, xl, xr, sigma, mu, weights=None, dtype=torch.float32):
     """
     Generates random samples within a specified range and evaluates a
     combined density of several multivariate normal distributions on
@@ -48,7 +48,6 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, weights=None, seed=None
     - mu (list of torch.Tensor): A list of mean vectors for the
       distributions.
     - weights (tensor or None): weights for each distribution
-    - seed (int, optional): Seed for random number
     - generation to ensure reproducibility. Default is None (random).
 
     If no weights are provided, then all distribution samples are just
@@ -59,10 +58,7 @@ def generate_random_samples(n_points, xl, xr, sigma, mu, weights=None, seed=None
     - yy (np.ndarray): The y-coordinates of the random samples.
     - zz (torch.Tensor): The combined density values of the three
       distributions at the random sample points.
-    """
-    if seed is not None:
-        np.random.seed(seed)
-        
+    """       
     xx = np.random.uniform(xl, xr, n_points)
     yy = np.random.uniform(xl, xr, n_points)
 

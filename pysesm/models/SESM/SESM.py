@@ -87,11 +87,9 @@ class SESM(torch.nn.Module):
             how well the dictionary represents the data.
     """
 
-    # Layers
+    # Type hints for instance attributes: (not class attributes)
     ista_layer: ISTALayer
     dictionary_layer: DictLayer
-
-    # Configuration attributes
     n_features: int
     model_epochs: int
     ista_epochs: int
@@ -102,14 +100,16 @@ class SESM(torch.nn.Module):
     seed: int
     debug: bool
     logger: logging.Logger
-    evaluation_fun: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
-
-    # Stat attributes
+    evaluation_fun: Callable
     loss_stats: dict
     elapsed_time: float
     partial_fit_count: int
+    evaluation_func_registry: dict
+    mu_epochs: int
+    rho_epochs: int
 
-    # Constant attributes
+
+    # Constant class attributes
     evaluation_func_registry: dict[
         EvaluationFuncEnum, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
     ] = {
@@ -119,10 +119,6 @@ class SESM(torch.nn.Module):
         EvaluationFuncEnum.TWOD_MULT: lambda dictionary, h: torch.matmul(dictionary, h),
         EvaluationFuncEnum.DEFAULT: lambda dictionary, h: torch.matmul(dictionary, h),
     }
-
-    # Gaussian specific attributes (TODO: This must be abstracted when added new surrogate functions)
-    mu_epochs: int
-    rho_epochs: int
 
     def __init__(
             self,
@@ -226,6 +222,9 @@ class SESM(torch.nn.Module):
         self.logger = logger
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
 
+        if self.seed is not None and self.seed != "None":
+            torch.manual_seed(self.seed)
+
         self.losses_ISTA = []
         self.losses_Dictionary = []
         self.elapsed_time = 0
@@ -240,7 +239,6 @@ class SESM(torch.nn.Module):
         # Instantiate ISTA Layer
         self.ista_layer = ISTALayer(
             n_functions=n_features,
-            random_seed=self.seed,
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
             weight_decay=self.weight_decay,
@@ -254,7 +252,6 @@ class SESM(torch.nn.Module):
             n_functions=n_functions,
             alpha=self.dictionary_alpha,
             evaluation_func=self.evaluation_func,
-            seed=seed,
             logger=logger,
             psi=psi,
             **kwargs

@@ -12,7 +12,8 @@ def test_generate_uniform_sampling():
     n_samples = 500
     SEED = 42
 
-    sampled_indices = generate_uniform_sampling(total_points, SEED, n_samples)
+    np.random.seed(SEED)
+    sampled_indices = generate_uniform_sampling(total_points,n_samples)
 
     # Check the number of samples
     assert len(sampled_indices) == n_samples, "Number of samples is incorrect"
@@ -33,7 +34,7 @@ def test_generate_uniform_sampling():
     ), "Sampled indices are out of range"
 
     # Test edge cases
-    sampled_indices_edge = generate_uniform_sampling(total_points, SEED, total_points)
+    sampled_indices_edge = generate_uniform_sampling(total_points, total_points)
     assert (
         len(sampled_indices_edge) == total_points
     ), "Edge case failed for sampling all points"

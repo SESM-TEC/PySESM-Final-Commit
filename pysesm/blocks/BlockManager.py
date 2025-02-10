@@ -135,7 +135,6 @@ class BlockManager(ABC):
     def init_ista_per_block(
         self,
         n_functions: int,
-        seed: int,
         ista_alpha: float,
         ista_lambd: float,
         weight_decay: float,

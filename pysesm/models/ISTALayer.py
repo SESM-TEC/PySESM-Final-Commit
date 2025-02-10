@@ -15,7 +15,6 @@ class ISTALayer(Module):
 
     Attributes:
         n_functions (int): Number of basis functions or components in the sparse vector.
-        random_seed (int): Random seed for reproducibility of initialization.
         weight_decay (float): Coefficient for weight decay regularization.
         alpha (float): Learning rate for parameter updates.
         lambd (float): Regularization parameter controlling the strength of shrinkage operations.
@@ -44,7 +43,6 @@ class ISTALayer(Module):
     def __init__(
             self,
             n_functions: int,
-            random_seed: int,
             weight_decay: float,
             alpha: float,
             lambd: float,
@@ -59,7 +57,6 @@ class ISTALayer(Module):
 
         Args:
             n_functions (int): Number of basis functions or components in the sparse vector.
-            random_seed (int): Random seed for reproducibility.
             weight_decay (float): Weight decay coefficient for regularization.
             alpha (float): Learning rate for parameter updates.
             lambd (float): Regularization parameter for shrinkage operations.
@@ -71,13 +68,12 @@ class ISTALayer(Module):
         super(ISTALayer, self).__init__()
         self.h = None
         self.n_functions = n_functions
-        self.random_seed = random_seed
         self.weight_decay = weight_decay
         self.alpha = alpha
         self.lambd = lambd
         self.evaluation_func = evaluation_func
         self.losses = []
-        torch.manual_seed(random_seed)
+
         self.setup()
 
         if criterion is None:
@@ -93,7 +89,6 @@ class ISTALayer(Module):
             self.optimizer = optimizer(
                 parameters=self.parameters(), lr=alpha, weight_decay=weight_decay
             )
-
 
         # TODO: add this in the arguments too.  These are used in the custom regularization
         self.threshold = 11

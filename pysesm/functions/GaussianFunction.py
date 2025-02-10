@@ -34,11 +34,12 @@ class GaussianFunction(SurrogateFunction):
     eig_range: list[float]
     mu_range: list[float]
 
-    def __init__(self, n_features, n_functions, seed, logger, **kwargs):
+    def __init__(self, n_features, n_functions, logger, **kwargs):
         super().__init__(
-            n_features=n_features, n_functions=n_functions, seed=seed, logger=logger, **kwargs
+            n_features=n_features, n_functions=n_functions, logger=logger, **kwargs
         )
         self.theta_size = int(n_features * (n_features + 3) / 2)
+
 
     def initialize(self) -> torch.nn.Parameter:
         """
@@ -47,8 +48,6 @@ class GaussianFunction(SurrogateFunction):
         - Means (mu) uniformly distributed in mu_range
         - Covariance matrices with controlled eigenvalue distribution
         """
-        if self.seed is not None:
-            torch.manual_seed(self.seed)
 
         # Validate and process mu_range
         mu_range = torch.tensor(self.mu_range)

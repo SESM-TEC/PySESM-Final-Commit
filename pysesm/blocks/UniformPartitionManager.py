@@ -200,7 +200,6 @@ class UniformPartitionManager(BlockManager):
     def init_ista_per_block(
         self,
         n_functions: int,
-        seed: int,
         ista_alpha: float,
         ista_lambd: float,
         weight_decay: float,
@@ -212,7 +211,6 @@ class UniformPartitionManager(BlockManager):
 
         Args:
             n_functions (int): Number of functions or features for the ISTA layer.
-            seed (int): Random seed for initialization.
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             weight_decay (float): Weight decay penalty for the ISTA layer.
@@ -222,7 +220,6 @@ class UniformPartitionManager(BlockManager):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
                 n_functions=n_functions,
-                random_seed=seed,
                 alpha=ista_alpha,
                 lambd=ista_lambd,
                 weight_decay=weight_decay,

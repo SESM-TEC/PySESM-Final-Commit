@@ -115,7 +115,6 @@ class SSESM(SESM):
         self.partition_manager.add_points(X, y)
         self.partition_manager.init_ista_per_block(
             self.n_functions,
-            self.seed,
             self.ista_alpha,
             self.ista_lambd,
             self.weight_decay,
@@ -133,7 +132,7 @@ class SSESM(SESM):
                 # print("Optimizer state:", [p.shape for p in self.ista_layer.optimizer.param_groups[0]['params']])
 
                 X_torch = block.normalized_X.clone().detach().requires_grad_(False)
-                y_torch = torch.tensor(block.target, dtype=torch.float32).requires_grad_(False)
+                y_torch = torch.tensor(block.target, dtype=X.dtype).requires_grad_(False)
                 super().partial_fit(X_torch, y_torch)
 
     def predict(self, X, y, *_):
@@ -164,7 +163,7 @@ class SSESM(SESM):
             for i, pos in enumerate(block.positions):
                 y_pred_per_block[pos] = block_pred[i]
 
-        return torch.tensor(y_pred_per_block, dtype=torch.float32)
+        return torch.tensor(y_pred_per_block, dtype=X.dtype)
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """

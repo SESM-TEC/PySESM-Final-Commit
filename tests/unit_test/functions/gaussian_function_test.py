@@ -14,7 +14,6 @@ def test_single_gaussian_identity():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 1.0],  # Force eigenvalue of 1
         mu_range=[[0.0, 0.0],[0.0, 0.0]],   # Force mean at zero
@@ -92,7 +91,6 @@ def test_single_gaussian_gradient():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 1.0],
         mu_range=[[0.0, 0.0], [0.0, 0.0]],
@@ -162,7 +160,6 @@ def test_two_gaussians():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 2.0],
         mu_range=[[-1.0, 1.0], [-1.0, 1.0]],
@@ -237,7 +234,6 @@ def test_gaussian_exponent():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 1.0],  # Force eigenvalue of 1
         mu_range=[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]  # Force mean at zero
@@ -270,7 +266,6 @@ def test_gaussian_exponent_non_diagonal():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 1.0],
         mu_range=[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
@@ -328,7 +323,6 @@ def test_complex_3d_gaussian():
     gaussian = GaussianFunction(
         n_features=n_features,
         n_functions=n_functions,
-        seed=42,
         logger=logger,
         eig_range=[1.0, 2.0],  # Allow some variation in eigenvalues
         mu_range=[[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0]]  # 3D means

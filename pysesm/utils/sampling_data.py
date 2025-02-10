@@ -1,13 +1,12 @@
 import torch
 import numpy as np
 
-def generate_uniform_sampling(total_points, seed=None, n_samples=500):
+def generate_uniform_sampling(total_points, n_samples=500):
     """
     Generate uniform sampling indices
 
     Args:
         total_points (int): Total number of data points.
-        seed (int or None): reset random seed to this value if not none.
         n_samples (int): Number of samples to generate (default is 500).
 
     n_samples must be less or equal to total_points.
@@ -23,9 +22,6 @@ def generate_uniform_sampling(total_points, seed=None, n_samples=500):
     if n_samples > total_points:
         raise ValueError(f"Cannot sample {n_samples} points from tensor with only {total_points} rows")
 
-    if seed is not None:
-        np.random.seed(seed)
-    
     selected_indexes = np.random.permutation(total_points)[:n_samples]
     return selected_indexes
 

@@ -58,8 +58,6 @@ def plot_sesm_loss(sesm_model, ylim=0.1, savefig=False, filepath=None):
 
 # TODO: Cant figure out what does this function do
 def pca_sesm(X: torch.Tensor, n_components: int = 2):
-    torch.manual_seed(1024)
-
     mean = torch.mean(X, dim=0)
     std = torch.std(X, dim=0)
 

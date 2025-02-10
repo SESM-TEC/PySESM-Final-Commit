@@ -26,6 +26,7 @@ class DictLayer(torch.nn.Module):
         optimizer (torch.optim.Optimizer): Optimizer used to train the layer (default: SGD with learning rate `alpha`).
     """
 
+    # These are type hints (not class attributes) for instance attributes:
     psi: SurrogateFunction
     theta_parameter_vector: torch.nn.Parameter
     dictionary: torch.Tensor = None
@@ -35,7 +36,6 @@ class DictLayer(torch.nn.Module):
     criterion: Callable
     optimizer: torch.optim.Optimizer
 
-
     def __init__(
         self,
         n_features: int,
@@ -43,7 +43,6 @@ class DictLayer(torch.nn.Module):
         psi: Union[SurrogateFunction, SurrogateFunctionEnum],
         alpha: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        seed: int,
         logger: logging.Logger,
         criterion: Union[Callable] = None,
         optimizer: torch.optim.Optimizer = None,
@@ -82,7 +81,6 @@ class DictLayer(torch.nn.Module):
                 psi,
                 n_functions=n_functions,
                 n_features=n_features,
-                seed=seed,
                 logger=logger,
                 **kwargs
             )
@@ -91,15 +89,12 @@ class DictLayer(torch.nn.Module):
         self.losses = []
         self.theta_parameter_vector = self.psi.initialize()
 
-        if criterion is None:
-            self.criterion = torch.nn.MSELoss()
-        else:
-            self.criterion = criterion
+        self.dictionary = None
 
-        if optimizer is None:
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha)
-        else:
-            self.optimizer = optimizer
+        self.criterion = torch.nn.MSELoss() if criterion is None else criterion
+
+        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha) 
+                         if optimizer is None else optimizer)
 
     def setup(self, X: torch.Tensor) -> None:
         """

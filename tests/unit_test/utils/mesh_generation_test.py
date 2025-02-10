@@ -65,7 +65,6 @@ def test_generate_random_samples():
     """
     n_points = 100
     xl, xr = -3.0, 3.0
-    SEED = 42
 
     # Mock covariance matrices and mean vectors
     sigma1 = torch.tensor([[0.5, 0.2], [0.2, 0.5]], dtype=torch.float32)
@@ -78,7 +77,11 @@ def test_generate_random_samples():
     mu3 = torch.tensor([-1.0, -1.0], dtype=torch.float32)
     mu = [mu1, mu2, mu3]
 
-    xx, yy, zz = generate_random_samples(n_points, xl, xr, sigma, mu, seed=SEED)
+    SEED=42
+
+    # Ensure reproducibility with the seed
+    np.random.seed(SEED)
+    xx, yy, zz = generate_random_samples(n_points, xl, xr, sigma, mu)
 
     # Check the length of random samples
     assert len(xx) == n_points, "xx length is incorrect"
@@ -87,7 +90,7 @@ def test_generate_random_samples():
 
     # Check random sample bounds
     assert xx.min() >= xl and xx.max() <= xr, "xx is out of bounds"
-    assert yy.min() >= xl and yy.max() <= xr, "yy is out of bounds"
+    assert yy.min() >= xl and yy.max() <= xr, "yy is out of bounds"    
 
     # Ensure reproducibility with the seed
     np.random.seed(SEED)
@@ -110,15 +113,15 @@ def test_generate_random_samples():
     ), "Density values for random samples are incorrect"
 
     # Test edge cases with different seeds
-    xx1, yy1, zz1 = generate_random_samples(n_points, xl, xr, sigma, mu, seed=SEED + 1)
-    xx2, yy2, zz2 = generate_random_samples(n_points, xl, xr, sigma, mu, seed=SEED + 2)
+    np.random.seed(SEED+1)
+    xx1, yy1, zz1 = generate_random_samples(n_points, xl, xr, sigma, mu)
+    np.random.seed(SEED+2)
+    xx2, yy2, zz2 = generate_random_samples(n_points, xl, xr, sigma, mu)
 
     # Check if different seeds produce different samples
     assert not np.allclose(xx1, xx2), "Different seeds produce identical xx samples"
     assert not np.allclose(yy1, yy2), "Different seeds produce identical yy samples"
-    assert not torch.allclose(
-        zz1, zz2
-    ), "Different seeds produce identical zz density values"
+    assert not torch.allclose(zz1, zz2), "Different seeds produce identical zz density values"
 
 
 if __name__ == "__main__":

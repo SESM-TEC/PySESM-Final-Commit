@@ -34,7 +34,7 @@ class SurrogateFunction(ABC):
     """
 
     @abstractmethod
-    def __init__(self, n_features: int, n_functions: int, seed: int, logger: Logger, **kwargs):
+    def __init__(self, n_features: int, n_functions: int, logger: Logger, **kwargs):
         """
         Function that initializes the approximate surrogate function with the given parameters
 
@@ -56,7 +56,6 @@ class SurrogateFunction(ABC):
         """
         self.n_features = n_features
         self.n_functions = n_functions
-        self.seed = seed
         self.logger = logger
 
         for attr, attr_type in self.__annotations__.items():
