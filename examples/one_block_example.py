@@ -6,7 +6,7 @@ import torch
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
 from pysesm.utils.loggers import setup_logger
-from pysesm.utils.generate_dataset import generate_gaussian_dataset
+from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 
 import matplotlib.pyplot as plt
@@ -21,14 +21,14 @@ experiment = {
     "n_functions": 25,
     "eig_range": [1.0e0, 1.0e1],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.1,
+    "ista_alpha": 0.2,
     "ista_lambd": 0.01,
-    "dictionary_alpha": 0.1,
+    "dictionary_alpha": 0.2,
     "rho_epochs": 50,
     "mu_epochs": 5,
-    "model_epochs": 500,
-    "dict_epochs": 10,
-    "ista_epochs": 5,
+    "model_epochs": 200,
+    "dict_epochs": 20,
+    "ista_epochs": 20,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
@@ -59,7 +59,7 @@ def show_data(X,y,c,marker,label,ax=None):
     return ax
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_one_gaussian_dataset(experiment)
 
 ax = show_data(X_train,y_train,'r','x','Training')
 show_data(X_test,y_test,'0.4','.','Test',ax)
