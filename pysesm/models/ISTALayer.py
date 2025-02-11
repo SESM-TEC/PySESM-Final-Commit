@@ -109,10 +109,14 @@ class ISTALayer(Module):
             None
         """
         if h is not None:
+            # Ensure h is 2D
+            if h.dim() != 2:
+                h = h.reshape(-1, 1)  # Default to column vector if reshaping needed
             self.h = torch.nn.Parameter(h)
         else:
+            # Initialize h as 2D
             self.h = torch.nn.Parameter(
-                torch.rand(self.n_functions), requires_grad=True
+                torch.rand(self.n_functions,1), requires_grad=True
             )
             self.h.data /= self.h.data.sum()
 
@@ -132,19 +136,14 @@ class ISTALayer(Module):
 
     def shrinkage(self) -> torch.Tensor:
         """
-        Applies the shrinkage operation (soft thresholding) to enforce sparsity in the parameter vector `h`.
-
-        The shrinkage operation reduces the magnitude of elements in `h` by subtracting a threshold 
-        determined by the learning rate (`alpha`) and the regularization parameter (`lambd`). Values 
-        that fall below the threshold are set to zero.
-
-        Returns:
-            torch.Tensor: The updated sparse vector after applying the shrinkage operation.
+        Applies soft thresholding: zeros out elements below lambda threshold,
+        leaves other elements unchanged
         """
-        return torch.sign(self.h) * torch.max(
-            torch.abs(self.h) - self.alpha * self.lambd, torch.zeros_like(self.h)
-        )
-
+        return torch.where(
+            torch.abs(self.h) < self.lambd,
+            torch.zeros_like(self.h),
+            self.h
+    )
 
     def forward(self, y, dictionary, log_losses=True):
         """
@@ -177,10 +176,10 @@ class ISTALayer(Module):
         loss = self.forward(y, dictionary, log_losses)
         loss.backward()
         self.optimizer.step()
-        
+
         with torch.no_grad():
             self.h.data = self.shrinkage()
-        
+
         return loss
     
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
@@ -201,3 +200,5 @@ class ISTALayer(Module):
         """
         for _ in range(epochs):
             self.train_step(y, dictionary, log_losses)
+
+

@@ -327,6 +327,12 @@ class SESM(torch.nn.Module):
 
         self.dictionary_layer.setup(X)
 
+        # Add shape validation here before the training loop
+        assert self.ista_layer.h.dim() == 2, \
+            f"ISTA layer h parameter must be 2D tensor, got {self.ista_layer.h.shape}"
+
+
+
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 

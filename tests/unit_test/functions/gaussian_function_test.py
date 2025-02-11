@@ -2,6 +2,7 @@ from pysesm.functions.GaussianFunction import GaussianFunction
 import torch
 import logging
 import numpy as np
+import pytest
 from scipy.stats import multivariate_normal
 
 def test_single_gaussian_identity():
