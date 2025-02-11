@@ -101,8 +101,8 @@ def test_ista_sparse_selection():
     # Initialize ISTA layer with Adam optimizer
     ista = ISTALayer(
         n_functions=n_functions,
-        alpha=0.1,  # Learning rate for Adam
-        lambd=0.05,  # Lambda for sparsity
+        alpha=0.2,  # Learning rate for Adam
+        lambd=0.2,  # Lambda for sparsity
         weight_decay=0.0,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
@@ -112,7 +112,7 @@ def test_ista_sparse_selection():
     ista.h.data = torch.rand(n_functions, 1) * 0.5
     
     # Run optimization
-    for _ in range(500):
+    for _ in range(5000):
         ista.train_step(y, dictionary)
     
     # Verify results
