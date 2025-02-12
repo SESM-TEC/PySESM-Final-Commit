@@ -323,6 +323,10 @@ class SESM(torch.nn.Module):
             None
         """
 
+        # Ensure y is 2D
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)
+
         validate_sesm_partial_fit(self, X, y)
 
         self.dictionary_layer.setup(X)
