@@ -63,56 +63,50 @@ def test_ista_sparse_selection():
     """Test ISTA's ability to select correct unnormalized Gaussian when data clearly comes from it"""
     logger = logging.getLogger('test')
     
-    # Create synthetic data from a specific 2D Gaussian (similar to one_block_example)
+     # Create random uniform points in [-2, 2] x [-2, 2]
     n_samples = 100
-    mean_target = np.array([0.5, -0.3])
-    cov_target = np.array([[0.1, 0.03], [0.03, 0.3]])
+    X = torch.rand(n_samples, 2) * 4 - 2  # This scales [0,1] to [-2,2]
     
-    # Generate actual data points from this Gaussian
-    X = np.random.multivariate_normal(mean_target, cov_target, n_samples)
-    X_torch = torch.tensor(X, dtype=torch.float32)
+    # Define three different Gaussians
+    mean1 = np.array([0.5, -0.3])    # Target Gaussian
+    mean2 = np.array([-1.5, 1.0])    # Distractor 1
+    mean3 = np.array([1.5, 1.0])     # Distractor 2
     
-    # Create dictionary with three elements where first one matches our data
-    n_functions = 3
-    dictionary = torch.zeros((n_samples, n_functions), dtype=torch.float32)
+    cov1 = np.array([[0.1, 0.03], [0.03, 0.3]])
+    cov2 = np.array([[0.1, -0.01], [-0.01, 0.1]])
+    cov3 = np.array([[0.1, 0.0], [0.0, 0.1]])
     
-    # First column: the Gaussian that matches our data
-    gaussian_values = multivariate_normal.pdf(X, mean=mean_target, cov=cov_target)
-    peak_value = multivariate_normal.pdf(mean_target, mean=mean_target, cov=cov_target)
-    unnormalized_gaussian = gaussian_values / peak_value
-    dictionary[:, 0] = torch.tensor(unnormalized_gaussian, dtype=torch.float32)
+    means = [mean1, mean2, mean3]
+    covs = [cov1, cov2, cov3]
+    n_functions = len(means)
+
+    # Create dictionary with three Gaussian components
+    dictionary = torch.zeros((n_samples, 3), dtype=torch.float32)
     
-    # Other columns: clearly different Gaussians
-    other_means = [np.array([-1.5, 1.0]), np.array([1.5, 1.0])]
-    other_covs = [
-        np.array([[0.1, -0.01], [-0.01, 0.1]]),  # Tighter covariance
-        np.array([[0.1, 0.0], [0.0, 0.1]])      # Wider covariance
-    ]
-    
-    for i in range(2):
-        gaussian_values = multivariate_normal.pdf(X, mean=other_means[i], cov=other_covs[i])
-        peak_value = multivariate_normal.pdf(other_means[i], mean=other_means[i], cov=other_covs[i])
-        unnormalized_gaussian = gaussian_values / peak_value
-        dictionary[:, i+1] = torch.tensor(unnormalized_gaussian, dtype=torch.float32)
+    # Evaluate each Gaussian at all points
+    for i, (mean, cov) in enumerate(zip(means, covs)):
+        values = multivariate_normal.pdf(X.numpy(), mean=mean, cov=cov)
+        peak = multivariate_normal.pdf(mean, mean=mean, cov=cov)
+        dictionary[:, i] = torch.tensor(values / peak, dtype=torch.float32)
     
     # Target y should match first Gaussian only
-    y = dictionary[:, 0].clone().detach()
+    y = dictionary[:, 0].clone().unsqueeze(-1)
     
-    # Initialize ISTA layer with Adam optimizer
+    # Initialize ISTA layer
     ista = ISTALayer(
         n_functions=n_functions,
-        alpha=0.2,  # Learning rate for Adam
-        lambd=0.2,  # Lambda for sparsity
+        alpha=0.15,
+        lambd=0.05,
         weight_decay=0.0,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )
     
     # Initialize h with random values as a column vector
-    ista.h.data = torch.rand(n_functions, 1) * 0.5
+    ista.h.data = torch.ones(n_functions, 1) / n_functions
     
     # Run optimization
-    for _ in range(5000):
+    for _ in range(100):
         ista.train_step(y, dictionary)
     
     # Verify results
@@ -144,7 +138,7 @@ def test_ista_gradient_flow():
     )
     
     # Test gradient computation
-    ista.h.data = torch.tensor([0.5])
+    ista.h.data = torch.tensor([[0.5]])
     ista.h.grad = None
     loss = ista.forward(y, dictionary)
     loss.backward()

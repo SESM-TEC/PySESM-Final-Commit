@@ -77,7 +77,7 @@ class ISTALayer(Module):
         self.setup()
 
         if criterion is None:
-            self.criterion = torch.nn.MSELoss()
+            self.criterion = torch.nn.L1Loss()
         else:
             self.criterion = criterion
 
@@ -158,7 +158,10 @@ class ISTALayer(Module):
             torch.Tensor: Estimated loss after forward step
         """
         y_pred = self.evaluation_func(dictionary, self.h)
-        loss = self.criterion(y_pred, y)
+
+        assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
+
+        loss = self.criterion(y, y_pred)
 
         reg_loss = self.get_custom_regularization()
         total_loss = loss + reg_loss
