@@ -112,6 +112,10 @@ class SSESM(SESM):
             None
         """
 
+        # Ensure y is 2D
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)
+
         self.partition_manager.add_points(X, y)
         self.partition_manager.init_ista_per_block(
             self.n_functions,
