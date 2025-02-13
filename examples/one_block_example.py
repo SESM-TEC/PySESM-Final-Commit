@@ -1,5 +1,3 @@
-
-
 import logging
 import torch
 
@@ -21,18 +19,18 @@ experiment = {
     "n_functions": 1,
     "eig_range": [1.0e0, 1.0e1],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.05,
+    "ista_alpha": 0.1,
     "ista_lambd": 0.0,
-    "dictionary_alpha": 0.2,
-    "rho_epochs": 5,
-    "mu_epochs": 5,
-    "model_epochs": 150,
+    "dictionary_alpha": 0.3,
+    "rho_epochs": 10,
+    "mu_epochs": 10,
+    "model_epochs": 2500,
     "dict_epochs": 5,
-    "ista_epochs": 5,
+    "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    "weight_decay": 0.004875,
+    "weight_decay": 0.0,
     "permutation_times": 1,
     "seed": 45,
     "dfngroup": 1,

@@ -77,7 +77,8 @@ class ISTALayer(Module):
         self.setup()
 
         if criterion is None:
-            self.criterion = torch.nn.L1Loss()
+            # self.criterion = torch.nn.L1Loss()  # L1 to promote sparsity
+            self.criterion = torch.nn.MSELoss()
         else:
             self.criterion = criterion
 
