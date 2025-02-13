@@ -15,7 +15,6 @@ class ISTALayer(Module):
 
     Attributes:
         n_functions (int): Number of basis functions or components in the sparse vector.
-        weight_decay (float): Coefficient for weight decay regularization.
         alpha (float): Learning rate for parameter updates.
         lambd (float): Regularization parameter controlling the strength of shrinkage operations.
         criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
@@ -43,7 +42,6 @@ class ISTALayer(Module):
     def __init__(
             self,
             n_functions: int,
-            weight_decay: float,
             alpha: float,
             lambd: float,
             evaluation_func: Callable[[Tensor, Tensor], Tensor],
@@ -57,7 +55,6 @@ class ISTALayer(Module):
 
         Args:
             n_functions (int): Number of basis functions or components in the sparse vector.
-            weight_decay (float): Weight decay coefficient for regularization.
             alpha (float): Learning rate for parameter updates.
             lambd (float): Regularization parameter for shrinkage operations.
             criterion (torch.nn.Module, optional): Loss function used for training (default: MSELoss).
@@ -68,7 +65,6 @@ class ISTALayer(Module):
         super(ISTALayer, self).__init__()
         self.h = None
         self.n_functions = n_functions
-        self.weight_decay = weight_decay
         self.alpha = alpha
         self.lambd = lambd
         self.evaluation_func = evaluation_func
@@ -82,13 +78,16 @@ class ISTALayer(Module):
         else:
             self.criterion = criterion
 
+        # It is particularly dangerous to activate weight decay with ISTA, because then
+        # h will be enforce to be closer to zero, and that goes against all the logic.
+        # A previous bug tought us to better enforce weight_decay=0 here, no matter what.
         if optimizer is None:
             self.optimizer = torch.optim.SGD(
-                self.parameters(), lr=alpha, weight_decay=weight_decay
+                self.parameters(), lr=alpha, weight_decay=0
             )
         else:
             self.optimizer = optimizer(
-                parameters=self.parameters(), lr=alpha, weight_decay=weight_decay
+                parameters=self.parameters(), lr=alpha, weight_decay=0
             )
 
         # TODO: add this in the arguments too.  These are used in the custom regularization

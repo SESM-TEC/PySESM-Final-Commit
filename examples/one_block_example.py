@@ -57,7 +57,7 @@ def show_data(X,y,c,marker,label,ax=None):
     return ax
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_one_gaussian_dataset(experiment)
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)

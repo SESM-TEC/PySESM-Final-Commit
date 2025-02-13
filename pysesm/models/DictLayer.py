@@ -93,7 +93,7 @@ class DictLayer(torch.nn.Module):
 
         self.criterion = torch.nn.MSELoss() if criterion is None else criterion
 
-        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha) 
+        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0) 
                          if optimizer is None else optimizer)
 
     def setup(self, X: torch.Tensor) -> None:

@@ -31,7 +31,6 @@ class BSESM(SESM):
         ista_alpha: float,
         ista_lambd: float,
         dictionary_alpha: float,
-        weight_decay: float,
         psi: Union[SurrogateFunction, SurrogateFunctionEnum],
         dfngroup,
         seed: int,
@@ -52,7 +51,6 @@ class BSESM(SESM):
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            weight_decay (float): Regularization term for preventing overfitting.
             surrogate_function (Union[SurrogateFunction, SurrogateFunctionEnum]): The surrogate function used to create the dictionary.
             dfngroup: Grouping information for the functions (specific to the implementation).
             T (list[int]): A list of the number of elements in each block for partitioning.
@@ -81,7 +79,6 @@ class BSESM(SESM):
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             dictionary_alpha=dictionary_alpha,
-            weight_decay=weight_decay,
             seed=seed,
             logger=logger,
             debug=debug,

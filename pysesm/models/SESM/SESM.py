@@ -50,10 +50,6 @@ class SESM(torch.nn.Module):
             The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
             training.
 
-        weight_decay (float):
-            The weight decay (L2 regularization) applied to the loss function, helping to prevent overfitting and improving
-            generalization of the model.
-
         seed (int):
             The random seed used for initialization and reproducibility of training processes, including random weight
             initialization and other stochastic processes.
@@ -96,7 +92,6 @@ class SESM(torch.nn.Module):
     ista_alpha: float
     ista_lambd: float
     dictionary_alpha: float
-    weight_decay: float
     seed: int
     debug: bool
     logger: logging.Logger
@@ -130,7 +125,6 @@ class SESM(torch.nn.Module):
             ista_alpha: float,
             ista_lambd: float,
             dictionary_alpha: float,
-            weight_decay: float,
             mu_epochs: int,
             rho_epochs: int,
             seed: int,
@@ -176,10 +170,6 @@ class SESM(torch.nn.Module):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
                 training.
 
-            weight_decay (float):
-                The weight decay (L2 regularization) applied to the loss function, helping to prevent overfitting and improving
-                generalization of the model.
-
             mu_epochs (int):
                 The number of epochs dedicated to adjusting the `μ` parameter in the dictionary layer. This parameter helps
                 define the dictionary's characteristics.
@@ -216,7 +206,6 @@ class SESM(torch.nn.Module):
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
-        self.weight_decay = weight_decay
         self.seed = seed
         self.debug = debug
         self.logger = logger
@@ -241,7 +230,6 @@ class SESM(torch.nn.Module):
             n_functions=n_features,
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
-            weight_decay=self.weight_decay,
             evaluation_func=self.evaluation_func,
             logger=logger
         )
@@ -356,8 +344,6 @@ class SESM(torch.nn.Module):
         self.losses_Dictionary = self.dictionary_layer.losses
 
 
-    # TODO: FIX "forward" because it is not really a forward method, but rather a "train step"
-    #  
     def train_step(
             self,
             X: torch.Tensor,

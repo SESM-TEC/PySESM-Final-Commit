@@ -35,11 +35,10 @@ def test_ista_perfect_dictionary():
         n_functions=n_functions,
         alpha=0.1,
         lambd=0.001,  # Small lambda since we want h≈1
-        weight_decay=0.0,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger,
-        #optimizer=lambda parameters, lr, weight_decay: torch.optim.Adam(
-        #    parameters, lr=lr, weight_decay=weight_decay
+        #optimizer=lambda parameters, lr : torch.optim.Adam(
+        #    parameters, lr=lr
         #)
     )
     
@@ -97,7 +96,6 @@ def test_ista_sparse_selection():
         n_functions=n_functions,
         alpha=0.15,
         lambd=0.05,
-        weight_decay=0.0,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )
@@ -132,7 +130,6 @@ def test_ista_gradient_flow():
         n_functions=1,
         alpha=0.1,
         lambd=0.001,
-        weight_decay=0.0,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )

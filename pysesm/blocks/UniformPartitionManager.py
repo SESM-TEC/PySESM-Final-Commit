@@ -211,7 +211,6 @@ class UniformPartitionManager(BlockManager):
         n_functions: int,
         ista_alpha: float,
         ista_lambd: float,
-        weight_decay: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     ):
 
@@ -222,7 +221,6 @@ class UniformPartitionManager(BlockManager):
             n_functions (int): Number of functions or features for the ISTA layer.
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
-            weight_decay (float): Weight decay penalty for the ISTA layer.
             evaluation_func (Callable): Function for evaluating the ISTA layer.
         """
         for index in np.ndindex(self.blocks.shape):
@@ -231,7 +229,6 @@ class UniformPartitionManager(BlockManager):
                 n_functions=n_functions,
                 alpha=ista_alpha,
                 lambd=ista_lambd,
-                weight_decay=weight_decay,
                 evaluation_func=evaluation_func,
                 logger=self.logger
             )

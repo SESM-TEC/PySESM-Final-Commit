@@ -30,7 +30,6 @@ class SSESM(SESM):
         ista_alpha: float,
         ista_lambd: float,
         dictionary_alpha: float,
-        weight_decay: float,
         psi: SurrogateFunction,
         permutation_times: int,
         dfngroup,
@@ -60,7 +59,6 @@ class SSESM(SESM):
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            weight_decay (float): Weight decay to prevent overfitting.
             surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
             dfngroup: Grouping information for function blocks (specific to implementation).
@@ -90,7 +88,6 @@ class SSESM(SESM):
             dictionary_alpha=dictionary_alpha,
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
-            weight_decay=weight_decay,
             logger=logger,
             debug=debug,
             **kwargs
@@ -121,7 +118,6 @@ class SSESM(SESM):
             self.n_functions,
             self.ista_alpha,
             self.ista_lambd,
-            self.weight_decay,
             self.evaluation_func,
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
