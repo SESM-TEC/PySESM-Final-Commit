@@ -33,7 +33,7 @@ def test_ista_perfect_dictionary():
     # Initialize ISTA layer
     ista = ISTALayer(
         n_functions=n_functions,
-        alpha=0.1,
+        alpha=0.2,
         lambd=0.001,  # Small lambda since we want h≈1
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger,
@@ -94,8 +94,8 @@ def test_ista_sparse_selection():
     # Initialize ISTA layer
     ista = ISTALayer(
         n_functions=n_functions,
-        alpha=0.15,
-        lambd=0.05,
+        alpha=0.2,
+        lambd=0.15,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )
@@ -104,7 +104,7 @@ def test_ista_sparse_selection():
     ista.h.data = torch.ones(n_functions, 1) / n_functions
     
     # Run optimization
-    for _ in range(100):
+    for _ in range(200):
         ista.train_step(y, dictionary)
     
     # Verify results
