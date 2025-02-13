@@ -340,7 +340,7 @@ class SESM(torch.nn.Module):
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self.forward(X, y, dictionary_shape)
+            self.train_step(X, y, dictionary_shape)
 
             self.elapsed_time += time.time() - epoch_start_time
 
@@ -352,7 +352,13 @@ class SESM(torch.nn.Module):
                 )
             )
 
-    def forward(
+        self.losses_ISTA = self.ista_layer.losses
+        self.losses_Dictionary = self.dictionary_layer.losses
+
+
+    # TODO: FIX "forward" because it is not really a forward method, but rather a "train step"
+    #  
+    def train_step(
             self,
             X: torch.Tensor,
             y: torch.Tensor,
@@ -371,12 +377,14 @@ class SESM(torch.nn.Module):
                                                 computing the loss. If not provided, the default shape is used.
         """
 
+        # Detach h before dictionary optimization to prevent unwanted gradient flows
+        h_detached = self.ista_layer.h.clone().detach()
 
         self.dictionary_layer.partial_fit(
             X=X,
             y=y,
             epochs=self.mu_epochs,
-            h=self.ista_layer.h,
+            h=h_detached,
             mu_flag=True,
             dictionary_shape=dictionary_shape,
         )
@@ -387,7 +395,7 @@ class SESM(torch.nn.Module):
             X=X,
             y=y,
             epochs=self.rho_epochs,
-            h=self.ista_layer.h,
+            h=h_detached,
             rho_flag=True,
             dictionary_shape=dictionary_shape,
         )
@@ -399,12 +407,10 @@ class SESM(torch.nn.Module):
     
 
         self.ista_layer.partial_fit(
-            y=y, epochs=self.ista_epochs, dictionary=dictionary_for_ista
+            y=y, 
+            epochs=self.ista_epochs, 
+            dictionary=dictionary_for_ista
         )
-
-        # TODO: Check if we can just use the losses within each layer rather than copying their values each epoch
-        self.losses_ISTA.append(self.ista_layer.losses[-1])
-        self.losses_Dictionary.append(self.dictionary_layer.losses[-1])
 
     def predict(
             self,

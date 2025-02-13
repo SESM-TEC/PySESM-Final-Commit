@@ -24,10 +24,10 @@ experiment = {
     "ista_alpha": 0.05,
     "ista_lambd": 0.0,
     "dictionary_alpha": 0.2,
-    "rho_epochs": 20,
-    "mu_epochs": 20,
-    "model_epochs": 500,
-    "dict_epochs": 1,
+    "rho_epochs": 5,
+    "mu_epochs": 5,
+    "model_epochs": 150,
+    "dict_epochs": 5,
     "ista_epochs": 5,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
@@ -61,8 +61,8 @@ def show_data(X,y,c,marker,label,ax=None):
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_one_gaussian_dataset(experiment)
 
-ax = show_data(X_train,y_train,'r','x','Training')
-show_data(X_test,y_test,'0.4','.','Test',ax)
+# ax = show_data(X_train,y_train,'r','x','Training')
+# show_data(X_test,y_test,'0.4','.','Test',ax)
 
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
