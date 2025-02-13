@@ -136,8 +136,7 @@ class SSESM(SESM):
                 # print("Optimizer state:", [p.shape for p in self.ista_layer.optimizer.param_groups[0]['params']])
 
                 X_torch = block.normalized_X.clone().detach().requires_grad_(False)
-                y_torch = torch.tensor(block.target, dtype=X.dtype).requires_grad_(False)
-                super().partial_fit(X_torch, y_torch)
+                super().partial_fit(X_torch, block.target)
 
     def predict(self, X, y, *_):
         """

@@ -159,7 +159,7 @@ class UniformPartitionManager(BlockManager):
                     block.amplitude = squeeze_factor(block.y)
 
                     block.h = torch.nn.Parameter(
-                        torch.rand(self.n_functions), requires_grad=True
+                        torch.rand(self.n_functions,1), requires_grad=True
                     )
                     block.h.data /= block.h.data.sum()
 
@@ -167,7 +167,10 @@ class UniformPartitionManager(BlockManager):
                         f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
                     )
 
-                block.target = [value * block.amplitude for value in block.y]
+                block.target = torch.stack([value * block.amplitude for value in block.y])
+                if block.target.dim() == 1:
+                    block.target = block.target.unsqueeze(-1)
+                block.target = block.target.detach()
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
@@ -181,6 +184,12 @@ class UniformPartitionManager(BlockManager):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
                 selected_block.new_point(X[i], y[i], i)
+
+        # Fix dimensions at the end
+        for idx in np.ndindex(self.blocks.shape):
+            block = self.blocks[idx]
+            if len(block.y) > 0:  # Only if block has points
+                block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """

@@ -120,6 +120,27 @@ def generate_list_of_subblock(
 
     return list_sub_blocks
 
+
+def data_mapping(X, T):
+    """
+    Maps input data to a normalized range and separates it into integer and fractional parts.
+
+    Args:
+    - X (torch.Tensor): A tensor containing the input data.
+    - T (int): The scaling factor to normalize the data.
+
+    Returns:
+    - t (numpy.ndarray): An array of integer parts of the normalized data.
+    - x_n (torch.Tensor): A tensor of fractional parts of the normalized data.
+    """
+    delta = torch.max(X) - torch.min(X)
+    eps = delta * 1e-6
+    norm_x = ((X - torch.min(X)) / (delta + eps)) * T
+    t = norm_x.numpy().astype(int)
+    x_n = norm_x - t
+    return t, x_n
+
+
 def predict_on_test_set(X_test, model, T, train_sb):
     """
     Predicts on a test set using a given model and training sub-blocks.

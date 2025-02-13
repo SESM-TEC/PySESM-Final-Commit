@@ -161,6 +161,12 @@ class ISTALayer(Module):
 
         assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
 
+        # DEBUG
+        # print("y:", y[:5])  # First few values
+        # print("y_pred:", y_pred[:5])
+        # print("dict:", dictionary[:5])  # First few values of the dictionary
+
+
         loss = self.criterion(y, y_pred)
 
         reg_loss = self.get_custom_regularization()
@@ -178,6 +184,12 @@ class ISTALayer(Module):
         self.optimizer.zero_grad()
         loss = self.forward(y, dictionary, log_losses)
         loss.backward()
+
+        # DEBUG
+        # print("h:", self.h)
+        # print("gradient:", self.h.grad)  # After backward()
+
+
         self.optimizer.step()
 
         with torch.no_grad():
