@@ -44,6 +44,7 @@ class DictLayer(torch.nn.Module):
         alpha: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         logger: logging.Logger,
+        momentum: float = 0,
         criterion: Union[Callable] = None,
         optimizer: torch.optim.Optimizer = None,
         parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -63,6 +64,7 @@ class DictLayer(torch.nn.Module):
             alpha (float): Learning rate for the optimizer.
             evaluation_func (Callable): Function used to evaluate predictions.
             logger (logging.Logger): Logger instance to capture runtime information.
+            momentum (float): Learning momentum.
             criterion (torch.nn.modules.loss._Loss, optional): Loss function (default: Mean Squared Error).
             optimizer (torch.optim.Optimizer, optional): Optimizer for training (default: SGD with learning rate `alpha`).
             **kwargs: Additional arguments passed to the surrogate function factory.
@@ -73,6 +75,7 @@ class DictLayer(torch.nn.Module):
         self.n_features = n_features
         self.n_functions = n_functions
         self.alpha = alpha
+        self.momentum = momentum
         self.evaluation_func = evaluation_func
 
         self.psi = (
@@ -94,7 +97,8 @@ class DictLayer(torch.nn.Module):
 
         self.criterion = torch.nn.MSELoss() if criterion is None else criterion
 
-        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0) 
+        # TODO: FIX-ME optimizer must be handled differently.  We need a callable constructor instead!!
+        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0, momentum=momentum) 
                          if optimizer is None else optimizer)
         
         self.parameter_hook = parameter_hook

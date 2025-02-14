@@ -50,6 +50,9 @@ class SESM(torch.nn.Module):
             The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
             training.
 
+        dictionary_momentum (float):
+            Momentum to be used by the optimizer in the dictionary layer.
+
         seed (int):
             The random seed used for initialization and reproducibility of training processes, including random weight
             initialization and other stochastic processes.
@@ -92,6 +95,7 @@ class SESM(torch.nn.Module):
     ista_alpha: float
     ista_lambd: float
     dictionary_alpha: float
+    dictionary_momentum: float
     seed: int
     debug: bool
     logger: logging.Logger
@@ -125,6 +129,7 @@ class SESM(torch.nn.Module):
             ista_alpha: float,
             ista_lambd: float,
             dictionary_alpha: float,
+            dictionary_momentum: float,
             mu_epochs: int,
             rho_epochs: int,
             seed: int,
@@ -170,6 +175,9 @@ class SESM(torch.nn.Module):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
                 training.
 
+            dictionary_momentum (float):
+                Momentum to be used by the optimizer in the dictionary layer.
+        
             mu_epochs (int):
                 The number of epochs dedicated to adjusting the `μ` parameter in the dictionary layer. This parameter helps
                 define the dictionary's characteristics.
@@ -206,6 +214,7 @@ class SESM(torch.nn.Module):
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
+        self.dictionary_momentum = dictionary_momentum
         self.seed = seed
         self.debug = debug
         self.logger = logger
@@ -239,6 +248,7 @@ class SESM(torch.nn.Module):
             n_features=n_features,
             n_functions=n_functions,
             alpha=self.dictionary_alpha,
+            momentum=self.dictionary_momentum,
             evaluation_func=self.evaluation_func,
             logger=logger,
             psi=psi,

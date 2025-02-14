@@ -30,6 +30,7 @@ class SSESM(SESM):
         ista_alpha: float,
         ista_lambd: float,
         dictionary_alpha: float,
+        dictionary_momentum: float,
         psi: SurrogateFunction,
         permutation_times: int,
         dfngroup,
@@ -59,6 +60,7 @@ class SSESM(SESM):
             ista_alpha (float): Learning rate for the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
+            dictionary_momentum (float): Momentum to be used by the optimizer.
             surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
             dfngroup: Grouping information for function blocks (specific to implementation).
@@ -86,6 +88,7 @@ class SSESM(SESM):
             ista_alpha=ista_alpha,
             ista_lambd=ista_lambd,
             dictionary_alpha=dictionary_alpha,
+            dictionary_momentum=dictionary_momentum,
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             logger=logger,

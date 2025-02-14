@@ -83,7 +83,7 @@ class ISTALayer(Module):
         # A previous bug tought us to better enforce weight_decay=0 here, no matter what.
         if optimizer is None:
             self.optimizer = torch.optim.SGD(
-                self.parameters(), lr=alpha, weight_decay=0
+                self.parameters(), lr=alpha, weight_decay=0, momentum=0.1
             )
         else:
             self.optimizer = optimizer(
