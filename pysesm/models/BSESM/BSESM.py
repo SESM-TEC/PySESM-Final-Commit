@@ -130,7 +130,7 @@ class BSESM(SESM):
                                     max_points_in_block - block.normalized_X.shape[0]
                                 )
                             ],
-                            dtype=torch.float32,
+                            dtype=normalized_X.dtype,
                         ),
                     ]
                 )

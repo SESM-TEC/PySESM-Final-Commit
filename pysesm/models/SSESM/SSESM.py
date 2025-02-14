@@ -30,12 +30,13 @@ class SSESM(SESM):
         ista_alpha: float,
         ista_lambd: float,
         dictionary_alpha: float,
-        dictionary_momentum: float,
         psi: SurrogateFunction,
         permutation_times: int,
         dfngroup,
         seed: int,
         logger: logging.Logger,
+        dictionary_momentum: float = 0,
+        ista_momentum: float = 0,
         iter: int = 0,
         initial_bounds=None,
         debug=True,
@@ -58,9 +59,10 @@ class SSESM(SESM):
             rho_epochs (int): Number of epochs for adjusting the rho parameter.
             mu_epochs (int): Number of epochs for adjusting the mu parameter.
             ista_alpha (float): Learning rate for the ISTA layer.
+            ista_momentum (float): Momentum used by the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            dictionary_momentum (float): Momentum to be used by the optimizer.
+            dictionary_momentum (float): Momentum to be used by the dictionary layer.
             surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
             dfngroup: Grouping information for function blocks (specific to implementation).
@@ -118,10 +120,11 @@ class SSESM(SESM):
 
         self.partition_manager.add_points(X, y)
         self.partition_manager.init_ista_per_block(
-            self.n_functions,
-            self.ista_alpha,
-            self.ista_lambd,
-            self.evaluation_func,
+            n_functions=self.n_functions,
+            ista_alpha=self.ista_alpha,
+            ista_momentum=self.ista_momentum,
+            ista_lambd=self.ista_lambd,
+            evaluation_func=self.evaluation_func,
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
 

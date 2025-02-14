@@ -136,8 +136,8 @@ class BlockManager(ABC):
         self,
         n_functions: int,
         ista_alpha: float,
+        ista_momentum: float,
         ista_lambd: float,
-        weight_decay: float,
         evaluation_func: Callable[[Tensor, Tensor], Tensor],
     ):
         pass

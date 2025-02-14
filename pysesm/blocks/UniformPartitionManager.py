@@ -210,6 +210,7 @@ class UniformPartitionManager(BlockManager):
         self,
         n_functions: int,
         ista_alpha: float,
+        ista_momentum: float,
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     ):
@@ -228,6 +229,7 @@ class UniformPartitionManager(BlockManager):
             block.ista_layer = ISTALayer(
                 n_functions=n_functions,
                 alpha=ista_alpha,
+                momentum=ista_momentum,
                 lambd=ista_lambd,
                 evaluation_func=evaluation_func,
                 logger=self.logger

@@ -129,11 +129,12 @@ class SESM(torch.nn.Module):
             ista_alpha: float,
             ista_lambd: float,
             dictionary_alpha: float,
-            dictionary_momentum: float,
             mu_epochs: int,
             rho_epochs: int,
             seed: int,
             logger: logging.Logger,
+            dictionary_momentum: float = 0,
+            ista_momentum: float = 0,
             debug: bool = False,
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             **kwargs
@@ -168,6 +169,9 @@ class SESM(torch.nn.Module):
             ista_alpha (float):
                 The learning rate for the ISTA layer, controlling how much to adjust the sparse encodings during training.
 
+            ista_momentum (float):
+                The momentum used in the ISTA layer, used as noise filter in the gradient descent steps.
+                
             ista_lambd (float):
                 The regularization parameter for the ISTA layer, which controls the sparsity of the learned representations.
 
@@ -209,6 +213,7 @@ class SESM(torch.nn.Module):
         self.n_functions = n_functions
         self.model_epochs = model_epochs
         self.ista_alpha = ista_alpha
+        self.ista_momentum = ista_momentum
         self.ista_epochs = ista_epochs
         self.ista_lambd = ista_lambd
         self.mu_epochs = mu_epochs
@@ -238,6 +243,7 @@ class SESM(torch.nn.Module):
         self.ista_layer = ISTALayer(
             n_functions=n_features,
             alpha=self.ista_alpha,
+            momentum=self.ista_momentum,
             lambd=self.ista_lambd,
             evaluation_func=self.evaluation_func,
             logger=logger

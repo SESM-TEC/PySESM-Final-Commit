@@ -97,10 +97,16 @@ class DictLayer(torch.nn.Module):
 
         self.criterion = torch.nn.MSELoss() if criterion is None else criterion
 
-        # TODO: FIX-ME optimizer must be handled differently.  We need a callable constructor instead!!
-        self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0, momentum=momentum) 
-                         if optimizer is None else optimizer)
-        
+        if optimizer is None:
+            self.optimizer = torch.optim.SGD(
+                self.parameters(), lr=alpha, weight_decay=0, momentum=momentum
+            )
+        else:
+            self.optimizer = optimizer(
+                parameters=self.parameters(), lr=alpha, weight_decay=0,momentum=momentum
+            )
+
+
         self.parameter_hook = parameter_hook
 
     def setup(self, X: torch.Tensor) -> None:

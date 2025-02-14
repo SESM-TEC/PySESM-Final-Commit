@@ -46,6 +46,7 @@ class ISTALayer(Module):
             lambd: float,
             evaluation_func: Callable[[Tensor, Tensor], Tensor],
             logger: logging.Logger,
+            momentum: float = 0,
             debug: bool = False,
             criterion=None,
             optimizer=None,
@@ -66,6 +67,7 @@ class ISTALayer(Module):
         self.h = None
         self.n_functions = n_functions
         self.alpha = alpha
+        self.momentum = momentum
         self.lambd = lambd
         self.evaluation_func = evaluation_func
         self.losses = []
@@ -83,11 +85,11 @@ class ISTALayer(Module):
         # A previous bug tought us to better enforce weight_decay=0 here, no matter what.
         if optimizer is None:
             self.optimizer = torch.optim.SGD(
-                self.parameters(), lr=alpha, weight_decay=0, momentum=0.1
+                self.parameters(), lr=alpha, weight_decay=0, momentum=momentum
             )
         else:
             self.optimizer = optimizer(
-                parameters=self.parameters(), lr=alpha, weight_decay=0
+                parameters=self.parameters(), lr=alpha, weight_decay=0,momentum=momentum
             )
 
         # TODO: add this in the arguments too.  These are used in the custom regularization
