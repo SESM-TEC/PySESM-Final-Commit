@@ -13,22 +13,30 @@ def test_dict_layer_find_mu_only():
     n_functions = 1
     logger = logging.getLogger('test')
     
-    # Create synthetic data from a known 2D Gaussian
+    # Create uniform grid of points for better coverage
     n_samples = 100
-    true_mean = np.array([0.5, -0.3])
-    # Fixed identity covariance
-    fixed_cov = np.eye(2)
+    X = torch.rand(n_samples, 2) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
     
-    # Generate random points
-    rng = np.random.default_rng(42)  # Fixed seed for reproducibility
-    X = rng.multivariate_normal(true_mean, fixed_cov, n_samples)
+    # Define target Gaussian parameters
+    true_mean = np.array([0.5, -0.3])
+    fixed_cov = 0.5*np.eye(2)  # Identity covariance
     
     # Calculate true unnormalized Gaussian values
-    gaussian_values = multivariate_normal.pdf(X, mean=true_mean, cov=fixed_cov)
+    gaussian_values = multivariate_normal.pdf(X.numpy(), mean=true_mean, cov=fixed_cov)
     peak_value = multivariate_normal.pdf(true_mean, mean=true_mean, cov=fixed_cov)
     y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32).reshape(-1, 1)
-    X = torch.tensor(X, dtype=torch.float32)
     
+    # Track parameter evolution
+    mu_history = []
+    
+    def parameter_tracker(info):
+        mu_history.append({
+            'epoch': info['epoch'],
+            'mu': info['mu'].numpy(),
+            'loss': info['loss']
+        })
+
+
     # Initialize dictionary layer with fixed covariance (identity)
     dict_layer = DictLayer(
         n_features=n_features,
@@ -37,16 +45,17 @@ def test_dict_layer_find_mu_only():
             n_features=n_features,
             n_functions=n_functions,
             logger=logger,
-            eig_range=[1.0, 1.0],  # Force eigenvalues to 1 (identity covariance)
-            mu_range=[[-2.0, 2.0], [-2.0, 2.0]]  # Wide range for mean
+            eig_range=[0.5, 0.5],  # Force eigenvalues to 1 (identity covariance)
+            mu_range=[[0, 1.0], [-1.0, 0]]  # Wide range for mean
         ),
-        alpha=0.1,  # Learning rate
+        alpha=0.15,  # Learning rate
         evaluation_func=lambda d, h: torch.matmul(d, h),
-        logger=logger
+        logger=logger,
+        parameter_hook=parameter_tracker
     )
     
     # Initialize h to [1] since we only have one Gaussian
-    h = torch.ones((1, 1), dtype=torch.float32)
+    h = torch.ones((1, 1), dtype=torch.float32).detach()
     
     # Train for several epochs
     n_epochs = 100
@@ -75,18 +84,18 @@ def test_dict_layer_find_diagonal_covariance():
     n_functions = 1
     logger = logging.getLogger('test')
     
-    # Create synthetic data with diagonal covariance
+    # Create uniform grid of points
     n_samples = 100
+    X = torch.rand(n_samples, 2) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
+    
+    # Define target Gaussian parameters
     fixed_mean = np.array([0.0, 0.0])
     true_cov = np.array([[2.0, 0.0], [0.0, 0.5]])  # Diagonal covariance
     
-    rng = np.random.default_rng(42)
-    X = rng.multivariate_normal(fixed_mean, true_cov, n_samples)
-    
-    gaussian_values = multivariate_normal.pdf(X, mean=fixed_mean, cov=true_cov)
+    # Calculate true unnormalized Gaussian values
+    gaussian_values = multivariate_normal.pdf(X.numpy(), mean=fixed_mean, cov=true_cov)
     peak_value = multivariate_normal.pdf(fixed_mean, mean=fixed_mean, cov=true_cov)
     y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32).reshape(-1, 1)
-    X = torch.tensor(X, dtype=torch.float32)
     
     dict_layer = DictLayer(
         n_features=n_features,

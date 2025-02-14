@@ -5,8 +5,7 @@ from pysesm.functions import SurrogateFunction
 from pysesm.enums import SurrogateFunctionEnum
 
 import torch
-from typing import Union, Callable
-
+from typing import Optional, Callable, Union, Dict
 
 class DictLayer(torch.nn.Module):
     """
@@ -24,6 +23,7 @@ class DictLayer(torch.nn.Module):
         losses (list): History of loss values, recorded if `log_losses` is enabled.
         criterion (torch.nn.modules.loss._Loss): Loss function used for training (default: Mean Squared Error).
         optimizer (torch.optim.Optimizer): Optimizer used to train the layer (default: SGD with learning rate `alpha`).
+        parameter_hook (Optional): Callback function to inspect the current parameter state
     """
 
     # These are type hints (not class attributes) for instance attributes:
@@ -46,6 +46,7 @@ class DictLayer(torch.nn.Module):
         logger: logging.Logger,
         criterion: Union[Callable] = None,
         optimizer: torch.optim.Optimizer = None,
+        parameter_hook: Optional[Callable[[dict], None]] = None,
         **kwargs
     ):
         """
@@ -95,6 +96,8 @@ class DictLayer(torch.nn.Module):
 
         self.optimizer = (torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0) 
                          if optimizer is None else optimizer)
+        
+        self.parameter_hook = parameter_hook
 
     def setup(self, X: torch.Tensor) -> None:
         """
@@ -143,7 +146,9 @@ class DictLayer(torch.nn.Module):
         Returns:
             None
         """
-        for _ in range(epochs):
+        for epoch in range(epochs):
+            self.optimizer.zero_grad()
+            
             self.dictionary = self.forward(
                 X, dictionary_shape, rho_flag, mu_flag
             )
@@ -152,12 +157,25 @@ class DictLayer(torch.nn.Module):
             y_pred = self.evaluation_func(self.dictionary, h)
 
             loss = self.criterion(y_pred, y)
-            self.optimizer.zero_grad()
             loss.backward(retain_graph=False)
             self.optimizer.step()
 
             if log_losses:
                 self.losses.append(loss.item())
+
+            # After parameter update, if we have a hook, call it with useful info
+            if self.parameter_hook is not None:
+                # Create info dictionary with detached clones
+                hook_info = {
+                    'epoch': epoch,
+                    'theta': self.theta_parameter_vector.clone().detach(),
+                    'loss': loss.item(),
+                    'mu': self.theta_parameter_vector[-self.n_features:].clone().detach(),
+                    'rho': self.theta_parameter_vector[:-self.n_features].clone().detach(),
+                    'mu_flag': mu_flag,
+                    'rho_flag': rho_flag
+                }
+                self.parameter_hook(hook_info)
 
     def forward(
         self,
