@@ -137,7 +137,7 @@ def test_single_gaussian_gradient():
         
         # Compare gradients
         assert torch.allclose(numerical_grad, analytical_grad, atol=5e-2), \
-            f"Gradient mismatch at point {point.T}"
+            f"Gradient mismatch at point {point}"
         
         # Additional verification that gradients point in same direction
         # Add cosine similarity check with zero handling
@@ -146,11 +146,11 @@ def test_single_gaussian_gradient():
             normalized_analytical = analytical_grad / torch.norm(analytical_grad)
             cosine_similarity = torch.sum(normalized_numerical * normalized_analytical)
             assert cosine_similarity > 0.9, \
-                f"Gradient directions differ significantly at point {point.T}"
+                f"Gradient directions differ significantly at point {point}"
         else:
             # If either gradient is essentially zero, verify both are close to zero
             assert torch.norm(numerical_grad) < 1e-10 and torch.norm(analytical_grad) < 1e-10, \
-                f"Only one gradient is zero at point {point.T}"
+                f"Only one gradient is zero at point {point}"
         
 def test_two_gaussians():
     """Test two Gaussians with different means and covariances"""
@@ -250,7 +250,7 @@ def test_gaussian_exponent():
     theta.data[-n_features:, 0] = 0.0  # zero mean
     
     # Test single point [1,0,0]
-    point = torch.tensor([[1.0], [0.0], [0.0]], requires_grad=True)
+    point = torch.tensor([[1.0, 0.0, 0.0]], requires_grad=True)
     
     # The exponent should be -0.5 for this point
     values = gaussian(point, theta)
@@ -289,14 +289,14 @@ def test_gaussian_exponent_non_diagonal():
     theta.data[-n_features:, 0] = 0.0  # zero mean
     
     # First test point 
-    point = torch.tensor([[-1.0], [0.7], [0.5]], requires_grad=True)
+    point = torch.tensor([[-1.0, 0.7, 0.5]], requires_grad=True)
     
     values = gaussian(point, theta)
     expected = torch.exp(torch.tensor(-0.6757)).view(1, 1)
     assert torch.allclose(values, expected, rtol=1e-4, atol=1e-4)
     
     # Second test point 
-    point = torch.tensor([[0.8577], [0.1606], [-0.4884]], requires_grad=True)
+    point = torch.tensor([[0.8577, 0.1606, -0.4884]], requires_grad=True)
 
     values = gaussian(point, theta)
     expected = torch.exp(torch.tensor(-0.5947650466)).view(1, 1)  # 
@@ -361,7 +361,7 @@ def test_complex_3d_gaussian():
     
     # Create test points in a 3D grid
     x = torch.linspace(-2, 2, 4)
-    points = torch.cartesian_prod(x, x, x).T.requires_grad_(True)  # (3, 64)
+    points = torch.cartesian_prod(x, x, x).requires_grad_(True)  # (64, 3)
     
     # Compute Gaussian function values
     values = gaussian(points, theta)
@@ -369,7 +369,7 @@ def test_complex_3d_gaussian():
     # Compute expected values using scipy for verification
     expected_values = torch.tensor(
         multivariate_normal.pdf(
-            points.T.detach().numpy(),
+            points.detach().numpy(),
             mean=true_mean.squeeze().numpy(),
             cov=true_covariance.numpy()  # Note: scipy wants covariance, not precision
         ) / multivariate_normal.pdf(
@@ -403,7 +403,7 @@ def test_complex_3d_gaussian():
     ]
     
     for point in test_points:
-        point = point.T.requires_grad_(True)
+        point = point.requires_grad_(True)
         
         def f(params):
             return gaussian(point, params, rho_flag=True, mu_flag=True)
@@ -427,7 +427,7 @@ def test_complex_3d_gaussian():
         
         # Compare gradients with higher tolerance due to 3D complexity
         assert torch.allclose(numerical_grad, analytical_grad, atol=1e-1), \
-            f"Gradient mismatch at point {point.T}"
+            f"Gradient mismatch at point {point}"
         
         # Verify gradient directions
         if torch.norm(numerical_grad) > 1e-10 and torch.norm(analytical_grad) > 1e-10:
@@ -435,10 +435,10 @@ def test_complex_3d_gaussian():
             normalized_analytical = analytical_grad / torch.norm(analytical_grad)
             cosine_similarity = torch.sum(normalized_numerical * normalized_analytical)
             assert cosine_similarity > 0.9, \
-                f"Gradient directions differ significantly at point {point.T}"
+                f"Gradient directions differ significantly at point {point}"
         else:
             assert torch.norm(numerical_grad) < 1e-10 and torch.norm(analytical_grad) < 1e-10, \
-                f"Only one gradient is zero at point {point.T}"
+                f"Only one gradient is zero at point {point}"
 
     # Test gradient flow control
     # Test mu gradients only
