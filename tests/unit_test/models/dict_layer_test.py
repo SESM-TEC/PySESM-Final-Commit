@@ -51,7 +51,8 @@ def test_dict_layer_find_mu_only():
         alpha=0.15,  # Learning rate
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger,
-        parameter_hook=parameter_tracker
+        parameter_hook=parameter_tracker,
+        momentum=0.15
     )
     
     # Initialize h to [1] since we only have one Gaussian

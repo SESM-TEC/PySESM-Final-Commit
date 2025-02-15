@@ -211,7 +211,7 @@ class DictLayer(torch.nn.Module):
             or reshaped to `(active_blocks_count, max_points_in_block, n_functions)` if partitioning is applied.
         """
         evaluated_dictionary = self.psi.__call__(
-            X.mT, self.theta_parameter_vector, rho_flag, mu_flag
+            X, self.theta_parameter_vector, rho_flag, mu_flag
         )
         return evaluated_dictionary if not dictionary_shape else evaluated_dictionary.view(dictionary_shape)
 

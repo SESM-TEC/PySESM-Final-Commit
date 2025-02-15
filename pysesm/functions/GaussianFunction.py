@@ -115,13 +115,11 @@ class GaussianFunction(SurrogateFunction):
         L2 norm of the triangular matrix A transposed times x minus
         the mean value.
 
-        Th
-        
         This is equivalent to the traditional Mahalanobis distance but
         much more efficient to compute.
         
         Args:
-            x: Input tensor (n_features, n_samples)
+            x: Input tensor as traditional design matrix n_samples x n_features
             Theta: Parameter tensor containing rho and mu
             rho_flag: Whether rho parameters are being optimized
             mu_flag: Whether mu parameters are being optimized
@@ -130,9 +128,15 @@ class GaussianFunction(SurrogateFunction):
             Tensor of shape (n_samples, n_functions) containing the evaluated gaussians
 
         """
+
+        assert x.shape[1] == self.n_features, f"Input x should have shape [n_samples, n_features], got {x.shape}"
+
         # Split parameters
         rho = Theta[:-self.n_features, :]  # (n_rho_params, n_functions)
-        mu = Theta[-self.n_features:, :].mT.unsqueeze(2)  # (n_functions, n_features, 1)
+
+        # Starting with Theta[-self.n_features:, :] which is [n_features, n_functions]
+        mu = Theta[-self.n_features:, :].T  # [n_functions, n_features]
+        mu = mu.reshape(self.n_functions, 1, self.n_features)  # [n_functions, 1, n_features]
         
         # Handle gradient flow control
         if not rho_flag:
@@ -140,9 +144,10 @@ class GaussianFunction(SurrogateFunction):
         if not mu_flag:
             mu = mu.detach()
         
-        # Convert x to shape (n_functions, n_features, n_samples) by repeating
-        x_expanded = x.unsqueeze(0).expand(self.n_functions, -1, -1)  # (n_functions, n_features, n_samples)
-        
+        # Convert x to shape (n_functions, n_features, n_samples) by repeating        
+        x_expanded = x.unsqueeze(0)                     # Add functions dim -> [1, n_samples, n_features]
+        x_expanded = x_expanded.repeat(self.n_functions, 1, 1)  # [n_functions, n_samples, n_features]
+
         # Compute x-µ for all functions at once
         x_mu = x_expanded - mu  # (n_functions, n_features, n_samples)
         
@@ -150,13 +155,13 @@ class GaussianFunction(SurrogateFunction):
         n = self.n_features
         A = torch.zeros(self.n_functions, n, n, device=Theta.device)
         indices = torch.triu_indices(n, n, offset=0)
-        A[:, indices[0], indices[1]] = rho.T  # Use rho.T to match batch dimension
+        A[:, indices[1], indices[0]] = rho.T  # Use rho.T to match batch dimension
         
         # Compute A'*(x-µ) for all functions and samples at once
-        A_t_x_mu = torch.bmm(A, x_mu)
+        A_t_x_mu = torch.bmm(x_mu,A)
         
         # Compute squared L2 norm: ||A'*(x-µ)||_2^2
-        squared_norms = torch.sum(A_t_x_mu ** 2, dim=1)  # (n_functions, n_samples)
+        squared_norms = torch.sum(A_t_x_mu ** 2, dim=2)  # (n_functions, n_samples)
         
         # Compute final exponential
         result = torch.exp(-0.5 * squared_norms).T

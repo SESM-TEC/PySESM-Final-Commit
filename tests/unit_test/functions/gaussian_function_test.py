@@ -28,7 +28,7 @@ def test_single_gaussian_identity():
     x = torch.linspace(-2, 2, 5)
     y = torch.linspace(-2, 2, 5)
     X, Y = torch.meshgrid(x, y, indexing='ij')
-    points = torch.stack([X.flatten(), Y.flatten()], dim=1).T.requires_grad_(True)  # (2, 25)
+    points = torch.stack([X.flatten(), Y.flatten()], dim=1).requires_grad_(True)  # (25, 2)
     
     # Compute Gaussian function values
     values = gaussian(points, theta)
@@ -37,7 +37,7 @@ def test_single_gaussian_identity():
     mean = np.zeros(2)
     cov = np.eye(2)
     expected_values = torch.tensor(
-        ( multivariate_normal.pdf(points.T.detach().numpy(), mean=mean, cov=cov) /
+        ( multivariate_normal.pdf(points.detach().numpy(), mean=mean, cov=cov) /
           multivariate_normal.pdf(mean, mean=mean, cov=cov) ),
           dtype = values.dtype
     ).unsqueeze(1)
@@ -102,12 +102,12 @@ def test_single_gaussian_gradient():
     
     # Test points at different locations
     test_points = [
-        torch.tensor([[0.0], [0.0]]),  # At mean
-        torch.tensor([[1.0], [0.0]]),  # Along x axis
-        torch.tensor([[0.0], [1.0]]),  # Along y axis
-        torch.tensor([[1.0], [1.0]]),  # Diagonal
-        torch.tensor([[-1.0], [-1.0]]), # Other diagonal
-        torch.tensor([[-0.5], [0.3]])  # And something else
+        torch.tensor([[0.0, 0.0]]),  # At mean
+        torch.tensor([[1.0, 0.0]]),  # Along x axis
+        torch.tensor([[0.0, 1.0]]),  # Along y axis
+        torch.tensor([[1.0, 1.0]]),  # Diagonal
+        torch.tensor([[-1.0, -1.0]]), # Other diagonal
+        torch.tensor([[-0.5, 0.3]])  # And something else
     ]
 
 
@@ -181,7 +181,7 @@ def test_two_gaussians():
     x = torch.linspace(-2, 2, 5)
     y = torch.linspace(-2, 2, 5)
     X, Y = torch.meshgrid(x, y, indexing='ij')
-    points = torch.stack([X.flatten(), Y.flatten()], dim=1).T.requires_grad_(True)
+    points = torch.stack([X.flatten(), Y.flatten()], dim=1).requires_grad_(True)
     
     # Compute values
     values = gaussian(points, theta)
