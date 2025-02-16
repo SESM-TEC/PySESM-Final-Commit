@@ -29,7 +29,7 @@ class DictLayer(torch.nn.Module):
     # These are type hints (not class attributes) for instance attributes:
     psi: SurrogateFunction
     theta_parameter_vector: torch.nn.Parameter
-    dictionary: torch.Tensor = None
+    dictionary: torch.Tensor
     n_features: int
     n_functions: int
     losses: list
@@ -123,7 +123,7 @@ class DictLayer(torch.nn.Module):
             None
         """
         if self.dictionary is None:
-            self.dictionary = self.psi.__call__(X.mT, self.theta_parameter_vector)
+            self.dictionary = self.psi.__call__(X, self.theta_parameter_vector)
 
     def partial_fit(
         self,

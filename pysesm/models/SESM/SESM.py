@@ -2,7 +2,7 @@ import logging
 import time
 import numpy as np
 import torch
-from typing import Union, Callable
+from typing import Union, Callable, Optional
 
 from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
@@ -106,6 +106,7 @@ class SESM(torch.nn.Module):
     evaluation_func_registry: dict
     mu_epochs: int
     rho_epochs: int
+    batch_size: int
 
 
     # Constant class attributes
@@ -137,6 +138,7 @@ class SESM(torch.nn.Module):
             ista_momentum: float = 0,
             debug: bool = False,
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
+            batch_size: Optional[int] = None,
             **kwargs
     ):
         """
@@ -202,6 +204,10 @@ class SESM(torch.nn.Module):
                 A custom logger instance used to record runtime information during the execution of the model.
                 This enables detailed tracking of key events, debugging, and monitoring during model use.
 
+            batch_size (int or None):
+                Size of the batch used in the ISTA and Dictionary layers.  If None, the whole data set is used at once
+                (this is, SGD acts as batch gradient descent).
+
             **kwargs: Additional keyword arguments passed to the constructor of the `SurrogateFunction` class
                       (if `psi` is a `SurrogateFunction` class). These kwargs can be used to specify configuration
                       parameters specific to the surrogate function being used.
@@ -224,12 +230,11 @@ class SESM(torch.nn.Module):
         self.debug = debug
         self.logger = logger
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
+        self.batch_size = batch_size
 
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
 
-        self.losses_ISTA = []
-        self.losses_Dictionary = []
         self.elapsed_time = 0
 
         self.loss_stats = {
@@ -356,8 +361,10 @@ class SESM(torch.nn.Module):
                 )
             )
 
-        self.losses_ISTA = self.ista_layer.losses
-        self.losses_Dictionary = self.dictionary_layer.losses
+        # Deprecated: we have the accessors self.ista_layer_losses and 
+        #             self.dictionary_layer_losses
+        # self.losses_ISTA = self.ista_layer.losses
+        # self.losses_Dictionary = self.dictionary_layer.losses
 
 
     def train_step(

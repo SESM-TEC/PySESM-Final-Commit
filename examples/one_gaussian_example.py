@@ -17,7 +17,7 @@ experiment = {
     "n_samples": 500,
     "n_features": 2,
     "n_functions": 1,
-    "eig_range": [1.0e0, 1.0e1],
+    "eig_range": [0.1, 1],
     "mu_range": [-2.0, 2.0],
     "ista_alpha": 0.1,
     "ista_lambd": 0.0,

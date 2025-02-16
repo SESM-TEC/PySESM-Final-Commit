@@ -27,15 +27,15 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
 
     # Total epochs = 6 [2 * ( 3 permutaciones )] * 16 bloques
     ax1 = fig.add_subplot(231)
-    ax1.scatter(range(len(model.losses_ISTA)), model.losses_ISTA)
+    ax1.scatter(range(len(model.ista_layer_losses)), model.ista_layer_losses)
     ax1.set_xlabel("Total epochs")
-    ax1.set_ylabel("losses_ISTA")
+    ax1.set_ylabel("ISTA loss")
     ax1.set_title("ISTA Loss (Model epochs)")
 
     ax5 = fig.add_subplot(232)
-    ax5.scatter(range(len(model.losses_Dictionary)), model.losses_Dictionary)
+    ax5.scatter(range(len(model.dictionary_layer_losses)), model.dictionary_layer_losses)
     ax5.set_xlabel("Total epochs")
-    ax5.set_ylabel("losses_Dictionary")
+    ax5.set_ylabel("Dictionary loss")
     ax5.set_title("Dictionary Loss (Model epochs)")
 
     ax3 = fig.add_subplot(233)
