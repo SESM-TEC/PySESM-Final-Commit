@@ -5,6 +5,45 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
+def test_gaussian_fixed_parameters():
+    """Test that GaussianFunction produces correct values with fixed parameters"""
+    n_features = 2
+    n_functions = 1
+    logger = logging.getLogger('test')
+    
+    # Create uniform points just like in dict_layer_test
+    n_samples = 100
+    X = torch.rand(n_samples, 2) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
+    
+    # Define the exact parameters we're using in dict_layer_test
+    true_mean = np.array([0.5, -0.3])
+    fixed_cov = 0.5 * np.eye(2)  # Identity covariance
+    
+    # Calculate expected values using scipy
+    expected_values = multivariate_normal.pdf(X.numpy(), mean=true_mean, cov=fixed_cov)
+    peak_value = multivariate_normal.pdf(true_mean, mean=true_mean, cov=fixed_cov)
+    expected_y = torch.tensor(expected_values / peak_value, dtype=torch.float32).reshape(-1, 1)
+    
+    # Create GaussianFunction with fixed parameters
+    gaussian = GaussianFunction(
+        n_features=n_features,
+        n_functions=n_functions,
+        logger=logger,
+        eig_range=[0.5, 0.5],  # Fixed eigenvalue
+        mu_range=[[0.5, 0.5], [-0.3, -0.3]]  # Fixed mean
+    )
+    
+    # Initialize and get parameters
+    theta = gaussian.initialize()
+    
+    # Evaluate function
+    values = gaussian(X, theta)
+    
+    # Values should match expected_y
+    assert torch.allclose(values, expected_y, rtol=1e-4, atol=1e-4), \
+        f"Maximum difference: {(values - expected_y).abs().max()}"
+
+
 def test_single_gaussian_identity():
     """Test a single Gaussian with zero mean and identity covariance"""
     # Setup
@@ -162,7 +201,7 @@ def test_two_gaussians():
         n_features=n_features,
         n_functions=n_functions,
         logger=logger,
-        eig_range=[1.0, 2.0],
+        eig_range=[0.5, 1.0],
         mu_range=[[-1.0, 1.0], [-1.0, 1.0]],
     )
     
@@ -325,7 +364,7 @@ def test_complex_3d_gaussian():
         n_features=n_features,
         n_functions=n_functions,
         logger=logger,
-        eig_range=[1.0, 2.0],  # Allow some variation in eigenvalues
+        eig_range=[0.5, 1.0],  # Allow some variation in eigenvalues
         mu_range=[[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0]]  # 3D means
     )
     

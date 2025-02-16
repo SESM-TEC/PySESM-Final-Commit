@@ -29,6 +29,24 @@ class GaussianFunction(SurrogateFunction):
     triangular elements of A (i.e. without the zeros).   
 
     Theta holds the parameters for all words in a dictionary.
+
+    Parameters
+    ----------
+    mu_range : list or array-like
+        Specifies the range for initializing the means (μ) of the Gaussians.
+        Can be provided in two formats:
+        1. As a list of two values [min, max] - This range will be used for all dimensions
+           Example: [-1, 1] will initialize all mean components uniformly in [-1, 1]
+        2. As a list of ranges per dimension: [[min1, max1], [min2, max2], ...]
+           Example: [[0, 1], [-1, 0]] specifies different ranges for each dimension
+           Must have length n_features if provided in this format.
+
+    eig_range : list[float]
+        A list of two values [min, max] specifying the range for the eigenvalues
+        of the covariance matrix. These values represent variances, not precisions.
+        Example: [0.5, 0.5] will create Gaussians with variance 0.5 in all directions
+                [0.1, 1.0] will create Gaussians with variances randomly chosen 
+                between 0.1 and 1.0 for each eigendirection
     """
 
     eig_range: list[float]
@@ -44,8 +62,11 @@ class GaussianFunction(SurrogateFunction):
     def initialize(self) -> torch.nn.Parameter:
         """
         Initialize the parameter vector Theta maintaining specific
-        statistical properties:
+        statistical properties given at construction time:
+        mu_range: 
         - Means (mu) uniformly distributed in mu_range
+          
+
         - Covariance matrices with controlled eigenvalue distribution
         """
 
@@ -74,16 +95,18 @@ class GaussianFunction(SurrogateFunction):
         Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
         Q_all, _ = torch.linalg.qr(Q_all)
 
-        # Generate eigenvalues in specified range
+        # Generate eigenvalues in specified range (these are variances)
         D_all = torch.rand(self.n_functions, self.n_features) * \
                 (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0]
-        D_all = torch.diag_embed(D_all)
+        # Convert to precision eigenvalues (1/variance)
+        D_precision = 1.0 / D_all
+        D_precision = torch.diag_embed(D_precision)
 
-        # Batch compute all covariance matrices
-        Sigma_all = torch.bmm(torch.bmm(Q_all, D_all), Q_all.transpose(1, 2))
+        # Now when we compute Q D Q', we get the precision matrix directly
+        Sigma_inv_all = torch.bmm(torch.bmm(Q_all, D_precision), Q_all.transpose(1, 2))
         
         # Batch Cholesky decomposition
-        L_all = torch.linalg.cholesky(Sigma_all).transpose(1, 2)
+        L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2)
 
         # Extract upper triangular elements from all matrices at once
         n = L_all.shape[1]
@@ -103,7 +126,7 @@ class GaussianFunction(SurrogateFunction):
         with torch.no_grad():
             self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
             self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
-            eigvals = torch.linalg.eigvalsh(Sigma_all)  # Get all eigenvalues at once
+            eigvals = torch.linalg.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
             self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta

@@ -182,6 +182,8 @@ class DictLayer(torch.nn.Module):
                     'loss': loss.item(),
                     'mu': self.theta_parameter_vector[-self.n_features:].clone().detach(),
                     'rho': self.theta_parameter_vector[:-self.n_features].clone().detach(),
+                    'mu_grad': self.theta_parameter_vector.grad[-self.n_features:].clone().detach(),
+                    'rho_grad': self.theta_parameter_vector.grad[:-self.n_features].clone().detach(),
                     'mu_flag': mu_flag,
                     'rho_flag': rho_flag
                 }
