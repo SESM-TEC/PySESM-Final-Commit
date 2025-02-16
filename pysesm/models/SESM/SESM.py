@@ -1,15 +1,26 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+SESM Base Class
+
+Provides the basic functionality of the Sparse-Encoded Surrogate Model.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
 import logging
 import time
 import numpy as np
 import torch
-from typing import Union, Callable, Optional
+from typing import Union, Callable, Iterator
 
 from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
 from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
-
 
 class SESM(torch.nn.Module):
     """
@@ -44,14 +55,23 @@ class SESM(torch.nn.Module):
             The learning rate for the ISTA layer, controlling how much to adjust the sparse encodings during training.
 
         ista_lambd (float):
-            The regularization parameter for the ISTA layer, which controls the sparsity of the learned representations.
+            The shrinkage threshold used in the ISTA layer, if the absolute value of an entry in h is below this,
+            then that entry is forced to zero, which promotes sparsity.
+
+        ista_optimizer (torch.optim.Optimizer):
+            A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
+            receives the parameters to be iteratively optimized.
+            Example:
+            ista_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
 
         dictionary_alpha (float):
             The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
             training.
 
-        dictionary_momentum (float):
-            Momentum to be used by the optimizer in the dictionary layer.
+        dictionary_optimizer (torch.optim.Optimizer):
+            A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
+            receives the parameters to be iteratively optimized.  Example:
+            dict_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
 
         seed (int):
             The random seed used for initialization and reproducibility of training processes, including random weight
@@ -95,7 +115,6 @@ class SESM(torch.nn.Module):
     ista_alpha: float
     ista_lambd: float
     dictionary_alpha: float
-    dictionary_momentum: float
     seed: int
     debug: bool
     logger: logging.Logger
@@ -106,7 +125,8 @@ class SESM(torch.nn.Module):
     evaluation_func_registry: dict
     mu_epochs: int
     rho_epochs: int
-    batch_size: int
+    dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
+    ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
 
 
     # Constant class attributes
@@ -134,11 +154,10 @@ class SESM(torch.nn.Module):
             rho_epochs: int,
             seed: int,
             logger: logging.Logger,
-            dictionary_momentum: float = 0,
-            ista_momentum: float = 0,
             debug: bool = False,
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
-            batch_size: Optional[int] = None,
+            dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
+            ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
             **kwargs
     ):
         """
@@ -171,18 +190,25 @@ class SESM(torch.nn.Module):
             ista_alpha (float):
                 The learning rate for the ISTA layer, controlling how much to adjust the sparse encodings during training.
 
-            ista_momentum (float):
-                The momentum used in the ISTA layer, used as noise filter in the gradient descent steps.
-                
             ista_lambd (float):
-                The regularization parameter for the ISTA layer, which controls the sparsity of the learned representations.
+                The shrinkage threshold used in the ISTA layer, if the absolute value of an entry in h is below this,
+                then that entry is forced to zero, which promotes sparsity.
+
+            ista_optimizer (torch.optim.Optimizer):
+                A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
+                receives the parameters to be iteratively optimized.
+                Example:
+                ista_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
 
             dictionary_alpha (float):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
                 training.
 
-            dictionary_momentum (float):
-                Momentum to be used by the optimizer in the dictionary layer.
+            dictionary_optimizer (torch.optim.Optimizer):
+                A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
+                receives the parameters to be iteratively optimized.  Example:
+                dict_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
+                
         
             mu_epochs (int):
                 The number of epochs dedicated to adjusting the `μ` parameter in the dictionary layer. This parameter helps
@@ -204,10 +230,6 @@ class SESM(torch.nn.Module):
                 A custom logger instance used to record runtime information during the execution of the model.
                 This enables detailed tracking of key events, debugging, and monitoring during model use.
 
-            batch_size (int or None):
-                Size of the batch used in the ISTA and Dictionary layers.  If None, the whole data set is used at once
-                (this is, SGD acts as batch gradient descent).
-
             **kwargs: Additional keyword arguments passed to the constructor of the `SurrogateFunction` class
                       (if `psi` is a `SurrogateFunction` class). These kwargs can be used to specify configuration
                       parameters specific to the surrogate function being used.
@@ -219,18 +241,20 @@ class SESM(torch.nn.Module):
         self.n_functions = n_functions
         self.model_epochs = model_epochs
         self.ista_alpha = ista_alpha
-        self.ista_momentum = ista_momentum
+        self.ista_optimizer = ista_optimizer
         self.ista_epochs = ista_epochs
         self.ista_lambd = ista_lambd
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
-        self.dictionary_momentum = dictionary_momentum
+        self.dictionary_optimizer = dictionary_optimizer
         self.seed = seed
         self.debug = debug
         self.logger = logger
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
-        self.batch_size = batch_size
+
+        self.dictionary_optimizer = dictionary_optimizer
+        self.ista_optimizer = ista_optimizer
 
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
@@ -248,9 +272,9 @@ class SESM(torch.nn.Module):
         self.ista_layer = ISTALayer(
             n_functions=n_features,
             alpha=self.ista_alpha,
-            momentum=self.ista_momentum,
             lambd=self.ista_lambd,
             evaluation_func=self.evaluation_func,
+            optimizer = ista_optimizer,
             logger=logger
         )
 
@@ -259,8 +283,8 @@ class SESM(torch.nn.Module):
             n_features=n_features,
             n_functions=n_functions,
             alpha=self.dictionary_alpha,
-            momentum=self.dictionary_momentum,
             evaluation_func=self.evaluation_func,
+            dictionary_optimizer=self.dictionary_optimizer,
             logger=logger,
             psi=psi,
             **kwargs
@@ -389,27 +413,44 @@ class SESM(torch.nn.Module):
         # Detach h before dictionary optimization to prevent unwanted gradient flows
         h_detached = self.ista_layer.h.clone().detach()
 
-        self.dictionary_layer.partial_fit(
-            X=X,
-            y=y,
-            epochs=self.mu_epochs,
-            h=h_detached,
-            mu_flag=True,
-            dictionary_shape=dictionary_shape,
-        )
+        SPLIT_MU_RHO = True
+        
+        if SPLIT_MU_RHO:
+            self.dictionary_layer.partial_fit(
+                X=X,
+                y=y,
+                epochs=self.mu_epochs,
+                h=h_detached,
+                mu_flag=True,
+                dictionary_shape=dictionary_shape,
+            )
 
-        self.loss_analysis(self.mu_epochs)
+            self.loss_analysis(self.mu_epochs)
 
-        self.dictionary_layer.partial_fit(
-            X=X,
-            y=y,
-            epochs=self.rho_epochs,
-            h=h_detached,
-            rho_flag=True,
-            dictionary_shape=dictionary_shape,
-        )
+            self.dictionary_layer.partial_fit(
+                X=X,
+                y=y,
+                epochs=self.rho_epochs,
+                h=h_detached,
+                rho_flag=True,
+                dictionary_shape=dictionary_shape,
+            )
 
-        self.loss_analysis(self.rho_epochs)
+            self.loss_analysis(self.rho_epochs)
+        else: # Both mu a rho adjusted at the same time
+            self.dictionary_layer.partial_fit(
+                X=X,
+                y=y,
+                epochs=self.mu_epochs,
+                h=h_detached,
+                mu_flag=True,
+                rho_flag=True,
+                dictionary_shape=dictionary_shape,
+            )
+
+            self.loss_analysis(self.mu_epochs)
+
+
 
          # Detach dictionary before passing to ISTA layer
         dictionary_for_ista = self.dictionary_layer.dictionary.detach()
@@ -420,6 +461,9 @@ class SESM(torch.nn.Module):
             epochs=self.ista_epochs, 
             dictionary=dictionary_for_ista
         )
+
+        # DEBUG: TODO: make a hook to use W&B and other stuff like this
+        # print(self.ista_layer.h.detach().numpy().flatten())
 
     def predict(
             self,

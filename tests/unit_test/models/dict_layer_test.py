@@ -85,8 +85,7 @@ def test_dict_layer_find_mu_only():
         
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger,
-        parameter_hook=parameter_tracker,
-        momentum=0.15
+        parameter_hook=parameter_tracker
     )
     
     # Initialize h to [1] since we only have one Gaussian
@@ -174,7 +173,6 @@ def test_dict_layer_find_diagonal_covariance():
             mu_range=[[0.0, 0.0], [0.0, 0.0]]  # Fixed mean at origin
         ),
         alpha=0.2,
-        momentum=0.1,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )
@@ -247,7 +245,6 @@ def test_dict_layer_find_non_diagonal_covariance():
             mu_range=[[0.0, 0.0], [0.0, 0.0]]  # Fixed mean at origin
         ),
         alpha=0.2,
-        momentum=0.1,
         evaluation_func=lambda d, h: torch.matmul(d, h),
         logger=logger
     )

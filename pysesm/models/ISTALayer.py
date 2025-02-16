@@ -1,12 +1,24 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+ISTA Layer Class
+
+Provides the layer in charge of finding h, the sparse vector 
+that chooses words in a dictionary to build a surrogate 
+function.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
 import logging
 
-from torch import Tensor
-from torch.nn import Module
-from typing import Callable
 import torch
+from typing import Callable, Iterator
 
 
-class ISTALayer(Module):
+class ISTALayer(torch.nn.Module):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
 
@@ -18,7 +30,7 @@ class ISTALayer(Module):
         alpha (float): Learning rate for parameter updates.
         lambd (float): Regularization parameter controlling the strength of shrinkage operations.
         criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
-        optimizer (torch.optim.Optimizer): Optimizer for updating the model parameters (default: SGD).
+        optimizer (torch.optim.Optimizer): Optimizer builder (default: None (uses SGD)).
         h (torch.nn.Parameter): Sparse vector maintained and updated by the layer.
         losses (list): List storing the computed losses during training.
         evaluation_func (callable): Function to compute predictions from input and parameters.
@@ -44,12 +56,11 @@ class ISTALayer(Module):
             n_functions: int,
             alpha: float,
             lambd: float,
-            evaluation_func: Callable[[Tensor, Tensor], Tensor],
+            evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: logging.Logger,
-            momentum: float = 0,
             debug: bool = False,
             criterion=None,
-            optimizer=None,
+            optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
     ):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
@@ -67,10 +78,12 @@ class ISTALayer(Module):
         self.h = None
         self.n_functions = n_functions
         self.alpha = alpha
-        self.momentum = momentum
         self.lambd = lambd
         self.evaluation_func = evaluation_func
         self.losses = []
+
+        self.logger = logger
+        self.debug = debug
 
         self.setup()
 
@@ -84,13 +97,9 @@ class ISTALayer(Module):
         # h will be enforce to be closer to zero, and that goes against all the logic.
         # A previous bug tought us to better enforce weight_decay=0 here, no matter what.
         if optimizer is None:
-            self.optimizer = torch.optim.SGD(
-                self.parameters(), lr=alpha, weight_decay=0, momentum=momentum
-            )
+            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
         else:
-            self.optimizer = optimizer(
-                parameters=self.parameters(), lr=alpha, weight_decay=0,momentum=momentum
-            )
+            self.optimizer = optimizer(self.parameters(), lr=alpha)
 
         # TODO: add this in the arguments too.  These are used in the custom regularization
         self.threshold = 11

@@ -1,3 +1,15 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Dictionary Layer
+
+Layer that learns useful words in a dictionary.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
 import logging
 
 from pysesm.customization_factories import SurrogateFunctionFactory
@@ -5,7 +17,7 @@ from pysesm.functions import SurrogateFunction
 from pysesm.enums import SurrogateFunctionEnum
 
 import torch
-from typing import Optional, Callable, Union, Dict
+from typing import Optional, Callable, Union, Iterator
 
 class DictLayer(torch.nn.Module):
     """
@@ -44,9 +56,8 @@ class DictLayer(torch.nn.Module):
         alpha: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         logger: logging.Logger,
-        momentum: float = 0,
         criterion: Union[Callable] = None,
-        optimizer: torch.optim.Optimizer = None,
+        optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
         parameter_hook: Optional[Callable[[dict], None]] = None,
         **kwargs
     ):
@@ -64,10 +75,18 @@ class DictLayer(torch.nn.Module):
             alpha (float): Learning rate for the optimizer.
             evaluation_func (Callable): Function used to evaluate predictions.
             logger (logging.Logger): Logger instance to capture runtime information.
-            momentum (float): Learning momentum.
             criterion (torch.nn.modules.loss._Loss, optional): Loss function (default: Mean Squared Error).
-            optimizer (torch.optim.Optimizer, optional): Optimizer for training (default: SGD with learning rate `alpha`).
+            optimizer (torch.optim.Optimizer, optional): Optimizer builder, for training (if None, SGD with lr=alpha is used).
             **kwargs: Additional arguments passed to the surrogate function factory.
+
+
+
+        For the optimizer with other parameters, like momentum or betas, etc. use something like this:
+
+            optimizer=lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
+
+        or
+            optimizer=lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.15)
         """
 
         super(DictLayer, self).__init__()
@@ -75,7 +94,6 @@ class DictLayer(torch.nn.Module):
         self.n_features = n_features
         self.n_functions = n_functions
         self.alpha = alpha
-        self.momentum = momentum
         self.evaluation_func = evaluation_func
 
         self.psi = (
@@ -98,14 +116,9 @@ class DictLayer(torch.nn.Module):
         self.criterion = torch.nn.MSELoss() if criterion is None else criterion
 
         if optimizer is None:
-            self.optimizer = torch.optim.SGD(
-                self.parameters(), lr=alpha, weight_decay=0, momentum=momentum
-            )
+            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
         else:
-            self.optimizer = optimizer(
-                parameters=self.parameters(), lr=alpha, weight_decay=0,momentum=momentum
-            )
-
+            self.optimizer = optimizer(self.parameters(), lr=alpha)
 
         self.parameter_hook = parameter_hook
 

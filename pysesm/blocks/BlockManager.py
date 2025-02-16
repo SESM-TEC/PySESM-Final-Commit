@@ -1,7 +1,18 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Abstract class for all Block Managers
+
+Authors: The SESM Team 
+
+License: 
+'''
+
 from pysesm.blocks.PartitionBlock import PartitionBlock
 
 from abc import ABC, abstractmethod
-from typing import Union, Callable
+from typing import Union, Callable, Iterator
+import torch
 from torch import Tensor
 from numpy.typing import NDArray
 
@@ -136,11 +147,12 @@ class BlockManager(ABC):
         self,
         n_functions: int,
         ista_alpha: float,
-        ista_momentum: float,
         ista_lambd: float,
         evaluation_func: Callable[[Tensor, Tensor], Tensor],
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
     ):
         pass
+
 
     @abstractmethod
     def retrieve_active_blocks(self):

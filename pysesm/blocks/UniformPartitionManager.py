@@ -1,10 +1,22 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Uniform Partition Manager
+
+Provides a regular grid of blocks to partition the space.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 
 import logging
 from copy import deepcopy
-from typing import Union, Callable
+from typing import Union, Callable, Iterator, Type
 import numpy as np
 import torch
 
@@ -210,9 +222,9 @@ class UniformPartitionManager(BlockManager):
         self,
         n_functions: int,
         ista_alpha: float,
-        ista_momentum: float,
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
     ):
 
         """
@@ -229,10 +241,10 @@ class UniformPartitionManager(BlockManager):
             block.ista_layer = ISTALayer(
                 n_functions=n_functions,
                 alpha=ista_alpha,
-                momentum=ista_momentum,
                 lambd=ista_lambd,
                 evaluation_func=evaluation_func,
-                logger=self.logger
+                logger=self.logger,
+                optimizer=ista_optimizer
             )
 
     def retrieve_active_blocks(self):

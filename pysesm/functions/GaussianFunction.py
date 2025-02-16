@@ -1,3 +1,18 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Unnormalized Gaussian Function Set
+
+This is a surrogate function set composed of unnormalized gaussians.
+It just helps with two things: randomly initialize the words and
+evaluate points on each word, where a word is an unnormalized gaussian.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
+
 import numpy as np
 import torch
 
@@ -196,33 +211,4 @@ class GaussianFunction(SurrogateFunction):
         
         return result
 
-
-    # Deprecated function
-    def __old_call__(
-        self,
-        x,
-        Theta: torch.nn.Parameter,
-        rho_flag: bool = False,
-        mu_flag: bool = False,
-    ) -> torch.Tensor:
-        # Takes the RHO values from the theta vector
-        rho = Theta[: -self.n_features, :]
-        # Takes the MU values from the theta vector
-        mu = Theta[-self.n_features :, :].mT.unsqueeze(2)
-        # Detach the computational graph for the RHO parameters tensor
-        if not rho_flag:
-            rho = rho.detach()
-        # Detach the computational graph for the MU parameters tensor
-        if not mu_flag:
-            mu = mu.detach()
-        # Takes the RHO values and packs them as a diagonal matrix of higher order
-        A = torch.stack(
-            [to_triu_matrix(rho[:, i]) for i in range(self.n_functions)], dim=0
-        )
-        Sigma_inv = torch.matmul(A, A.mT)
-        x_mu = x - mu
-        exponent = -0.5 * torch.einsum("bij,bik,bji->jb", x_mu, Sigma_inv, x_mu.mT)
-        result = torch.exp(exponent)
-
-        return result
 

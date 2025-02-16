@@ -1,3 +1,14 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Trivial example with one single block trying to represent three gaussians
+
+Authors: The SESM Team 
+
+License: 
+'''
+
+
 import logging
 import torch
 
@@ -17,15 +28,16 @@ experiment = {
     "n_samples": 500,
     "n_features": 2,
     "n_functions": 3,
-    "eig_range": [0.1, 1.0],
+    "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.1,
-    "ista_lambd": 0.0,
-    "dictionary_alpha": 0.3,
-    "dictionary_momentum": 0.2,
+    "ista_alpha": 0.15,
+    "ista_lambd": 0.005,
+    "dictionary_alpha": 0.1,
+    "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "rho_epochs": 15,
     "mu_epochs": 15,
-    "model_epochs": 2000,
+    "model_epochs": 1000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,

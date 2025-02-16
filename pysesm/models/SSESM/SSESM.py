@@ -1,3 +1,16 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+SSESM Base Class
+
+Provides the basic functionality of the Sequential SESM.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
+
 import logging
 
 from pysesm.functions import SurrogateFunction
@@ -5,6 +18,7 @@ from pysesm.blocks import UniformPartitionManager
 from pysesm.enums import EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
 
+from typing import Callable, Iterator
 
 import numpy as np
 import torch
@@ -35,8 +49,8 @@ class SSESM(SESM):
         dfngroup,
         seed: int,
         logger: logging.Logger,
-        dictionary_momentum: float = 0,
-        ista_momentum: float = 0,
+        dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,        
         iter: int = 0,
         initial_bounds=None,
         debug=True,
@@ -59,16 +73,16 @@ class SSESM(SESM):
             rho_epochs (int): Number of epochs for adjusting the rho parameter.
             mu_epochs (int): Number of epochs for adjusting the mu parameter.
             ista_alpha (float): Learning rate for the ISTA layer.
-            ista_momentum (float): Momentum used by the ISTA layer.
             ista_lambd (float): Regularization parameter for the ISTA layer.
             dictionary_alpha (float): Learning rate for the dictionary layer.
-            dictionary_momentum (float): Momentum to be used by the dictionary layer.
             surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
             dfngroup: Grouping information for function blocks (specific to implementation).
             iter (int, optional): Experiment iteration count (default: 1).
             seed (int): Random seed for reproducibility.
             logger (logging.Logger): Logger instance for runtime monitoring.
+            dictionary_optimizer (lambda): factory to build the dictionary optimizer
+            ista_optimizer (lambda): factor to build the ISTA optimizer
             T (list[int]): Scaling factors for normalization.
             initial_bounds (optional): Initial bounds for partitioning (default: None).
             debug (bool, optional): Enables or disables debug mode (default: True).
@@ -90,10 +104,11 @@ class SSESM(SESM):
             ista_alpha=ista_alpha,
             ista_lambd=ista_lambd,
             dictionary_alpha=dictionary_alpha,
-            dictionary_momentum=dictionary_momentum,
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             logger=logger,
+            dictionary_optimizer=dictionary_optimizer,
+            ista_optimizer=ista_optimizer,
             debug=debug,
             **kwargs
         )
@@ -122,8 +137,8 @@ class SSESM(SESM):
         self.partition_manager.init_ista_per_block(
             n_functions=self.n_functions,
             ista_alpha=self.ista_alpha,
-            ista_momentum=self.ista_momentum,
             ista_lambd=self.ista_lambd,
+            ista_optimizer=self.ista_optimizer,
             evaluation_func=self.evaluation_func,
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
