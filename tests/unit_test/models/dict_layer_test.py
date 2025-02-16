@@ -216,6 +216,72 @@ def test_dict_layer_find_diagonal_covariance():
     # Verify loss decreased
     assert dict_layer.losses[-1] < dict_layer.losses[0]
 
+def test_dict_layer_find_non_diagonal_covariance():
+    """Test dictionary layer's ability to find diagonal covariance with fixed mean"""
+    # Setup similar to previous test but with fixed mean and learnable diagonal covariance
+    n_features = 2
+    n_functions = 1
+    logger = logging.getLogger('test')
+    
+    # Create uniform grid of points
+    n_samples = 100
+    X = torch.rand(n_samples, 2) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
+    
+    # Define target Gaussian parameters
+    fixed_mean = np.array([0.0, 0.0])
+    true_cov = np.array([[2.0, 0.5], [0.5, 1.0]])  # Diagonal covariance
+    
+    # Calculate true unnormalized Gaussian values
+    gaussian_values = multivariate_normal.pdf(X.numpy(), mean=fixed_mean, cov=true_cov)
+    peak_value = multivariate_normal.pdf(fixed_mean, mean=fixed_mean, cov=true_cov)
+    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32).reshape(-1, 1)
+    
+    dict_layer = DictLayer(
+        n_features=n_features,
+        n_functions=n_functions,
+        psi=GaussianFunction(
+            n_features=n_features,
+            n_functions=n_functions,
+            logger=logger,
+            eig_range=[0.5, 2.0],  # Allow range for eigenvalues
+            mu_range=[[0.0, 0.0], [0.0, 0.0]]  # Fixed mean at origin
+        ),
+        alpha=0.2,
+        momentum=0.1,
+        evaluation_func=lambda d, h: torch.matmul(d, h),
+        logger=logger
+    )
+    
+    h = torch.ones((1, 1), dtype=torch.float32)
+    
+    # Train focusing on covariance
+    n_epochs = 500
+    dict_layer.partial_fit(
+        X=X,
+        y=y,
+        h=h,
+        epochs=n_epochs,
+        mu_flag=False,   # Keep mean fixed
+        rho_flag=True    # Optimize covariance
+    )
+    
+    # Extract learned covariance
+    rho = dict_layer.theta_parameter_vector[:-n_features, 0].detach()
+    A = torch.zeros(n_features, n_features)
+    indices = torch.triu_indices(n_features, n_features)
+    A[indices[0], indices[1]] = rho
+    learned_G = torch.matmul(A.T, A)
+    
+    # Convert to numpy for testing
+    learned_G = learned_G.numpy()
+    learned_cov = np.linalg.inv(learned_G)
+
+    # Verify covariance structure matches true covariance
+    np.testing.assert_allclose(learned_cov, true_cov, rtol=0.01, atol=0.01), "Learned covariance matrix doesn't match true covariance matrix"
+    
+    # Verify loss decreased
+    assert dict_layer.losses[-1] < dict_layer.losses[0]
+
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
     print_pytest_instructions()
