@@ -35,7 +35,7 @@ class BlockManager(ABC):
             determined by the specific implementation.
     """
 
-    blocks: Union[NDArray[PartitionBlock], None]
+    blocks: Union[NDArray[PartitionBlock], None] # type: ignore
 
     @abstractmethod
     def __init__(self):

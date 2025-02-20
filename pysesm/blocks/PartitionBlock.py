@@ -47,7 +47,7 @@ class PartitionBlock:
         self.y.append(point_y)
         self.positions.append(pos)
 
-    def clear_points():
+    def clear_points(self):
         """Remove all points"""
         self.X=[]
         self.normalized_X=None
