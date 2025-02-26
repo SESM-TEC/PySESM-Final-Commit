@@ -50,6 +50,10 @@ def test_single_gaussian_identity():
     n_features = 2
     n_functions = 1
     logger = logging.getLogger('test')
+
+    rndseed = 63
+    torch.manual_seed(rndseed)  # PyTorch seed
+    np.random.seed(rndseed)     # NumPy seed
     
     gaussian = GaussianFunction(
         n_features=n_features,
