@@ -61,6 +61,10 @@ def test_ista_perfect_dictionary():
 def test_ista_sparse_selection():
     """Test ISTA's ability to select correct unnormalized Gaussian when data clearly comes from it"""
     logger = logging.getLogger('test')
+
+    rndseed = 63
+    torch.manual_seed(rndseed)  # PyTorch seed
+    np.random.seed(rndseed)     # NumPy seed
     
      # Create random uniform points in [-2, 2] x [-2, 2]
     n_samples = 100
@@ -104,7 +108,7 @@ def test_ista_sparse_selection():
     ista.h.data = torch.ones(n_functions, 1) / n_functions
     
     # Run optimization
-    for _ in range(200):
+    for _ in range(400):
         ista.train_step(y, dictionary)
     
     # Verify results
