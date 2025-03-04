@@ -163,7 +163,8 @@ def test_init_ista_per_block():
         ista_alpha=0.01,
         ista_lambd=0.1,
         evaluation_func=dummy_eval_func,
-        ista_optimizer=dummy_optimizer
+        ista_optimizer=dummy_optimizer,
+        ista_criterion=None
     )
     for block in manager.blocks.flat:
         if hasattr(block, 'X') and len(block.X) > 0:
