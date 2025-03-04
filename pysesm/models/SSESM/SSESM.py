@@ -49,12 +49,14 @@ class SSESM(SESM):
         dfngroup,
         seed: int,
         logger: logging.Logger,
-        dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,        
+        dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer],
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],        
+        dictionary_criterion: torch.nn.Module = None,
+        ista_criterion: torch.nn.Module = None,
         iter: int = 0,
-        initial_bounds=None,
-        debug=True,
-        **kwargs
+        initial_bounds = None,
+        debug = True,
+        **kwargs 
     ):
         """
         Initialize the SSESM model with a sequential, block-based approach.
@@ -82,7 +84,9 @@ class SSESM(SESM):
             seed (int): Random seed for reproducibility.
             logger (logging.Logger): Logger instance for runtime monitoring.
             dictionary_optimizer (lambda): factory to build the dictionary optimizer
+            dictionary_criterion (torch.nn.Module): loss used for the dictionary learning.
             ista_optimizer (lambda): factor to build the ISTA optimizer
+            ista_criterion (Callable) : Loss function or None
             T (list[int]): Scaling factors for normalization.
             initial_bounds (optional): Initial bounds for partitioning (default: None).
             debug (bool, optional): Enables or disables debug mode (default: True).
@@ -108,7 +112,9 @@ class SSESM(SESM):
             rho_epochs=rho_epochs,
             logger=logger,
             dictionary_optimizer=dictionary_optimizer,
+            dictionary_criterion=dictionary_criterion,
             ista_optimizer=ista_optimizer,
+            ista_criterion=ista_criterion,
             debug=debug,
             **kwargs
         )
@@ -139,6 +145,7 @@ class SSESM(SESM):
             ista_alpha=self.ista_alpha,
             ista_lambd=self.ista_lambd,
             ista_optimizer=self.ista_optimizer,
+            ista_criterion=self.ista_criterion,
             evaluation_func=self.evaluation_func,
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()

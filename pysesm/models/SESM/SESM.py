@@ -126,7 +126,9 @@ class SESM(torch.nn.Module):
     mu_epochs: int
     rho_epochs: int
     dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
+    dictionary_criterion: torch.nn.Module
     ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
+    ista_criterion: torch.nn.Module
 
 
     # Constant class attributes
@@ -157,7 +159,9 @@ class SESM(torch.nn.Module):
             debug: bool = False,
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
+            dictionary_criterion: torch.nn.Module = None,
             ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
+            ista_criterion: torch.nn.Module = None,
             **kwargs
     ):
         """
@@ -200,6 +204,9 @@ class SESM(torch.nn.Module):
                 Example:
                 ista_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
 
+            ista_criterion (torch.nn.Module):
+                Loss criterion used for ISTA.  If None, MSELoss is used.
+
             dictionary_alpha (float):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
                 training.
@@ -209,7 +216,9 @@ class SESM(torch.nn.Module):
                 receives the parameters to be iteratively optimized.  Example:
                 dict_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
                 
-        
+            dictionary_criterion (torch.nn.Module):
+                Loss criterion used for dictionary learning.  If None, MSELoss is used.
+                
             mu_epochs (int):
                 The number of epochs dedicated to adjusting the `μ` parameter in the dictionary layer. This parameter helps
                 define the dictionary's characteristics.
@@ -242,19 +251,18 @@ class SESM(torch.nn.Module):
         self.model_epochs = model_epochs
         self.ista_alpha = ista_alpha
         self.ista_optimizer = ista_optimizer
+        self.ista_criterion = ista_criterion
         self.ista_epochs = ista_epochs
         self.ista_lambd = ista_lambd
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
         self.dictionary_optimizer = dictionary_optimizer
+        self.dictionary_criterion = dictionary_criterion
         self.seed = seed
         self.debug = debug
         self.logger = logger
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
-
-        self.dictionary_optimizer = dictionary_optimizer
-        self.ista_optimizer = ista_optimizer
 
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
@@ -275,6 +283,7 @@ class SESM(torch.nn.Module):
             lambd=self.ista_lambd,
             evaluation_func=self.evaluation_func,
             optimizer = ista_optimizer,
+            criterion = ista_criterion,
             logger=logger
         )
 
@@ -285,6 +294,7 @@ class SESM(torch.nn.Module):
             alpha=self.dictionary_alpha,
             evaluation_func=self.evaluation_func,
             dictionary_optimizer=self.dictionary_optimizer,
+            criterion=self.dictionary_criterion,
             logger=logger,
             psi=psi,
             **kwargs

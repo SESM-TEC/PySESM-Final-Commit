@@ -224,7 +224,8 @@ class UniformPartitionManager(BlockManager):
         ista_alpha: float,
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],
+        ista_criterion: torch.nn.Module
     ):
 
         """
@@ -244,7 +245,8 @@ class UniformPartitionManager(BlockManager):
                 lambd=ista_lambd,
                 evaluation_func=evaluation_func,
                 logger=self.logger,
-                optimizer=ista_optimizer
+                optimizer=ista_optimizer,
+                criterion=ista_criterion
             )
 
     def retrieve_active_blocks(self):
