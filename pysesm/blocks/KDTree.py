@@ -4,25 +4,24 @@ import torch
 class KDTree():
     def __init__(self, data: torch.Tensor):
         self.threshold=0.0001
-        dim=self.greatestVarDim(data)
         self.root = Node(data)
-        #self.splitDataInNodes(self.root, dim, self.threshold)
+        self.splitDataInNodes(self.root)
 
-    def greatestVarDim(self, data : torch.Tensor):
-        variances = data.var(dim=0)
-        dim = torch.argmax(variances).item()
-
-        return dim
-
-    def splitDataInNodes(self, node: Node, dim: int, threshold : float):
+    def splitDataInNodes(self, node: Node):
         """Splits data based on the median of the greatest variance dimension and adds a threshold to avoid
-        splitting at an exact point"""
+        splitting at an exact point. It is recursive and stops when the data of the node is less than 5 points"""
         medians = torch.median(node.data, dim=0).values
-        split = medians[dim].item()+threshold
-        mask = node.data[:, dim] > split
+        node.split_point = medians[node.dim].item()+self.threshold
+        mask = node.data[:, node.dim] > node.split_point
 
         greaterData = node.data[mask]
         lowerData = node.data[~mask]
 
         node.right = Node(greaterData)
         node.left = Node(lowerData)
+
+        if node.left.data.size()[0] > 5:
+            self.splitDataInNodes(node.left)
+        if node.right.data.size()[0] > 5:
+            self.splitDataInNodes(node.right)
+
