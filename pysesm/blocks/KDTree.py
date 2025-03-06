@@ -3,6 +3,9 @@ import torch
 
 class KDTree():
     def __init__(self, data: torch.Tensor):
+        """
+        threshold: Value added to the split point to avoid splitting a data point.
+        """
         self.threshold=0.0001
         self.root = Node(data)
         self.splitDataInNodes(self.root)
