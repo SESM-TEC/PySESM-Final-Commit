@@ -22,24 +22,52 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
+class KLDivLossWrapper(torch.nn.Module):
+    def __init__(self, reduction='mean', log_input=False):
+        super(KLDivLossWrapper, self).__init__()
+        self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
+        
+    def forward(self, inputs, targets):
+        # Step 1: Ensure non-negativity (if your data can be negative)
+        inputs = torch.nn.functional.relu(inputs) + 1e-8  # Small constant for numerical stability
+        targets = torch.nn.functional.relu(targets) + 1e-8
+        
+        # Step 2: Normalize to make them proper distributions
+        # Option 1: Normalize across all elements
+        inputs_normalized = inputs / torch.sum(inputs)
+        targets_normalized = targets / torch.sum(targets)
+        
+        # Option 2: If batched data, normalize each sample independently
+        # inputs_normalized = inputs / torch.sum(inputs, dim=1, keepdim=True)
+        # targets_normalized = targets / torch.sum(targets, dim=1, keepdim=True)
+        
+        # Step 3: Log-space transformation (since log_input=False by default)
+        log_inputs = torch.log(inputs_normalized)
+        
+        # Step 4: Apply KL divergence
+        loss = self.kl_loss(log_inputs, targets_normalized)
+        
+        return loss
+
+
 # SESM CONFIGURATION
 experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 3,
+    "n_functions": 10,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
     "ista_alpha": 0.15,
     "ista_lambd": 0.005,
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    "dictionary_criterion": torch.nn.MSELoss(),
+    "dictionary_criterion": torch.nn.MSELoss(), ## KLDivLossWrapper(), ## torch.nn.MSELoss(),
     "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 15,
     "mu_epochs": 15,
-    "model_epochs": 1000,
+    "model_epochs": 5000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
