@@ -14,7 +14,6 @@ class Node():
         self.data=Data
         self.left=None
         self.right=None 
-
         self.split_point=None
         self.dim=self.greatestVarDim(Data)
     
@@ -23,4 +22,3 @@ class Node():
         variances = data.var(dim=0)
         dim = torch.argmax(variances).item()
         return dim
-    

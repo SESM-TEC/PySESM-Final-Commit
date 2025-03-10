@@ -2,38 +2,62 @@ from pysesm.blocks.Node import Node
 from pysesm.blocks.KDTree import KDTree
 import torch
 
-def test_KDTree_initialization():
+def test_greatestVarDim():
+    """
+    Asserts the greatest variance dimension is calculated correctly in the node
+    """
+
+    x = torch.randn(20, 5)  
+    node=Node(x)
+    dim = node.greatestVarDim(x)
+
+    variances = x.var(dim=0)
+
+    dim_test = torch.argmax(variances).item()
+
+    assert dim==dim_test
     return
 
-# def test_greatestVarDim():
-#     x = torch.randn(20, 5)  
-#     kd=KDTree(x)
-#     dim = kd.greatestVarDim(x)
-
-#     variances = x.var(dim=0)
-
-#     dim_test = torch.argmax(variances).item()
-
-#     assert dim==dim_test
 
 def test_splitDataInNodes():
+    """
+    Tests the splitDataInNodes function which basically initializes the KDTree
+    """
     torch.manual_seed(42) 
-    x = torch.randn(15, 6) 
+    x = torch.randn(191, 6)
+
     kd=KDTree(x)
-    dim = 2
-
-    kd.splitDataInNodes(kd.root) 
-    preorder_assert(kd.root, kd.threshold)
+    Data=torch.Tensor()
+    Data=preorder_assert(kd.root, Data)
     
-def preorder_assert(node, threshold):
+    sortx, _ = torch.sort(Data,0)
+    sortData, _ = torch.sort(x,0)
 
+    assert torch.equal(sortData,sortx)
+
+def preorder_assert(node, Data):  
+    """
+    Asserts the nodes that are not in the lowest level have no data,
+    Asserts that no node has only a left or only a right child.
+    Returns the concatenated data from the lowest-level nodes.
+    """
     if node.left is not None:
-        print()
-        assert (node.left.data[:, node.dim] < node.split_point).all()
+        assert node.right is not None
         if (node.left.right is not None) and (node.left.left is not None):
-            preorder_assert(node.left, threshold)
+            Data=preorder_assert(node.left, Data)
+            
+        else:
+            Data=torch.cat((Data, node.left.data))
+            assert (node.left.data[:, node.dim] < node.split_point).all()
 
     if node.right is not None:
-        assert (node.right.data[:, node.dim] > node.split_point).all()
+        assert node.left is not None
+
         if (node.right.right is not None) and (node.right.left is not None):
-            preorder_assert(node.right, threshold)
+            Data=preorder_assert(node.right, Data)
+        
+        else:
+            Data=torch.cat((Data, node.right.data))
+            assert (node.right.data[:, node.dim] >= node.split_point).all()
+    
+    return Data
