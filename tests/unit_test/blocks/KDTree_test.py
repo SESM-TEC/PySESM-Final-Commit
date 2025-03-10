@@ -61,3 +61,22 @@ def preorder_assert(node, Data):
             assert (node.right.data[:, node.dim] >= node.split_point).all()
     
     return Data
+
+def test_add_point():
+    torch.manual_seed(42) 
+    X = torch.randn(191, 6)
+
+    kd=KDTree(X)
+
+    x=torch.rand(1,6)
+    kd.add_point(x)
+
+    X=torch.cat((X,x))
+
+    Data=torch.Tensor()
+    Data=preorder_assert(kd.root, Data)
+    
+    sortx, _ = torch.sort(Data,0)
+    sortData, _ = torch.sort(X,0)
+
+    assert torch.equal(sortData,sortx)

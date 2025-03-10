@@ -35,9 +35,30 @@ class KDTree():
         node.right = Node(greaterData)
         node.left = Node(lowerData)
 
-
         if node.left.data.size()[0] > self.nodeSize:
             self.splitDataInNodes(node.left)
+
         if node.right.data.size()[0] > self.nodeSize:
             self.splitDataInNodes(node.right)
         return
+
+    def add_point(self, x : torch.Tensor, node = None):
+        """
+        Add point to the KDTree in the corresponding node
+        """
+
+        if node == None:
+            node=self.root
+
+        if node.data is None:
+            if x[0, node.dim].item() >= node.split_point:
+                self.add_point(x, node.right)
+
+            if x[0, node.dim].item() < node.split_point:
+                self.add_point(x, node.left)
+        
+        else:
+            node.data=torch.cat((node.data,x))
+
+
+
