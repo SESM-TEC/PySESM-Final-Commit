@@ -12,18 +12,16 @@ License:
 
 
 import logging
-
+import numpy as np
+import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
 from pysesm.enums import EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
-
 from typing import Callable, Iterator
-
-import numpy as np
-import torch
 from sklearn.metrics import mean_squared_error
-
+from pysesm.device_manager.DeviceManager import DeviceManager
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 class SSESM(SESM):
     """
@@ -49,14 +47,13 @@ class SSESM(SESM):
         dfngroup,
         seed: int,
         logger: logging.Logger,
-        dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],        
-        dictionary_criterion: torch.nn.Module = None,
-        ista_criterion: torch.nn.Module = None,
+        dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,        
         iter: int = 0,
-        initial_bounds = None,
-        debug = True,
-        **kwargs 
+        initial_bounds=None,
+        debug=True,
+        device_map=None, 
+        **kwargs
     ):
         """
         Initialize the SSESM model with a sequential, block-based approach.
@@ -84,18 +81,20 @@ class SSESM(SESM):
             seed (int): Random seed for reproducibility.
             logger (logging.Logger): Logger instance for runtime monitoring.
             dictionary_optimizer (lambda): factory to build the dictionary optimizer
-            dictionary_criterion (torch.nn.Module): loss used for the dictionary learning.
             ista_optimizer (lambda): factor to build the ISTA optimizer
-            ista_criterion (Callable) : Loss function or None
             T (list[int]): Scaling factors for normalization.
             initial_bounds (optional): Initial bounds for partitioning (default: None).
             debug (bool, optional): Enables or disables debug mode (default: True).
             **kwargs: Additional keyword arguments passed to the base class.
         """
+        self.device_manager = DeviceManager(logger,device_map=device_map)
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.partition_manager = UniformPartitionManager(
-            logger, kwargs.get("T"), n_functions=n_functions, initial_bounds=initial_bounds
+            logger, kwargs.get("T"), 
+            n_functions=n_functions, 
+            initial_bounds=initial_bounds,
+            device_manager=self.device_manager
         )
 
         super().__init__(
@@ -112,10 +111,9 @@ class SSESM(SESM):
             rho_epochs=rho_epochs,
             logger=logger,
             dictionary_optimizer=dictionary_optimizer,
-            dictionary_criterion=dictionary_criterion,
             ista_optimizer=ista_optimizer,
-            ista_criterion=ista_criterion,
             debug=debug,
+            device_manager=self.device_manager,
             **kwargs
         )
 
@@ -134,7 +132,6 @@ class SSESM(SESM):
         Returns:
             None
         """
-
         # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)
@@ -145,7 +142,6 @@ class SSESM(SESM):
             ista_alpha=self.ista_alpha,
             ista_lambd=self.ista_lambd,
             ista_optimizer=self.ista_optimizer,
-            ista_criterion=self.ista_criterion,
             evaluation_func=self.evaluation_func,
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
