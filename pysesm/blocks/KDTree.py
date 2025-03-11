@@ -2,14 +2,14 @@ from pysesm.blocks.Node import Node
 import torch
 
 class KDTree():
-    def __init__(self, data: torch.Tensor, nodeSize: int = 5):
+    def __init__(self, data: torch.Tensor, maxNodeSize: int = 5):
         """
         root (Node): Root node of the tree
-        nodeSize (int): A node should contain more points than nodeSize in order to be split into two nodes.
+        maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
         """
 
         self.root = Node(data)
-        self.nodeSize=nodeSize
+        self.maxNodeSize=maxNodeSize
 
         self.splitDataInNodes(self.root)
         
@@ -35,16 +35,17 @@ class KDTree():
         node.right = Node(greaterData)
         node.left = Node(lowerData)
 
-        if node.left.data.size()[0] > self.nodeSize:
+        if node.left.data.size()[0] > self.maxNodeSize:
             self.splitDataInNodes(node.left)
 
-        if node.right.data.size()[0] > self.nodeSize:
+        if node.right.data.size()[0] > self.maxNodeSize:
             self.splitDataInNodes(node.right)
         return
 
     def add_point(self, x : torch.Tensor, node = None):
         """
-        Add point to the KDTree in the corresponding node
+        Add point to the KDTree in the corresponding node.
+        If the node exceeds maxNodeSize then split it.
         """
 
         if node == None:
@@ -53,12 +54,12 @@ class KDTree():
         if node.data is None:
             if x[0, node.dim].item() >= node.split_point:
                 self.add_point(x, node.right)
-
             if x[0, node.dim].item() < node.split_point:
                 self.add_point(x, node.left)
-        
         else:
             node.data=torch.cat((node.data,x))
+            if node.data.size()[0] > self.maxNodeSize:
+                self.splitDataInNodes(node)
 
 
 
