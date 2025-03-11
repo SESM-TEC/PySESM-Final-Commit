@@ -35,6 +35,26 @@ def test_splitDataInNodes():
 
     assert torch.equal(sortData,sortx)
 
+def test_find_node():
+    torch.manual_seed(42) 
+    X = torch.randn(191, 6)
+
+    kd=KDTree(X)
+    x=torch.rand(1,6)
+
+    node=kd.find_node(x)
+
+    node_test=kd.root
+    if node_test.data is None:
+        if x[0, node_test.dim].item() >= node_test.split_point:
+            node_test= kd.find_node(x, node_test.right)
+        elif x[0, node_test.dim].item() < node_test.split_point:
+            node_test = kd.find_node(x, node_test.left)
+
+    assert torch.equal(node.data, node_test.data)   
+
+    return
+
 def preorder_assert(node, Data, maxNodeSize):  
     """
     Asserts the nodes that are not in the lowest level have no data,

@@ -11,11 +11,9 @@ class KDTree():
         self.root = Node(data)
         self.maxNodeSize=maxNodeSize
 
-        self.splitDataInNodes(self.root)
+        self._splitDataInNodes(self.root)
         
-        return
-
-    def splitDataInNodes(self, node: Node):
+    def _splitDataInNodes(self, node: Node):
         """
         Splits data based on the median of the greatest variance dimension. 
         It stops when the children nodes have less than 5 points
@@ -36,30 +34,54 @@ class KDTree():
         node.left = Node(lowerData)
 
         if node.left.data.size()[0] > self.maxNodeSize:
-            self.splitDataInNodes(node.left)
+            self._splitDataInNodes(node.left)
 
         if node.right.data.size()[0] > self.maxNodeSize:
-            self.splitDataInNodes(node.right)
-        return
+            self._splitDataInNodes(node.right)
 
-    def add_point(self, x : torch.Tensor, node = None):
+    def find_node(self, x, node = None):
         """
-        Add point to the KDTree in the corresponding node.
-        If the node exceeds maxNodeSize then split it.
+        Finds the node where a point should be located based on split points and the greatest variance dimensions of each node.
         """
-
         if node == None:
             node=self.root
 
         if node.data is None:
             if x[0, node.dim].item() >= node.split_point:
-                self.add_point(x, node.right)
+                return self.find_node(x, node.right)
             if x[0, node.dim].item() < node.split_point:
-                self.add_point(x, node.left)
+                return self.find_node(x, node.left)
         else:
-            node.data=torch.cat((node.data,x))
-            if node.data.size()[0] > self.maxNodeSize:
-                self.splitDataInNodes(node)
+            return node
+
+    def add_point(self, x : torch.Tensor):
+        """
+        Adds a point to the KDTree in the corresponding node.
+        If the node exceeds maxNodeSize then split it.
+        """
+
+        node = self.find_node(x)
+        
+        node.data=torch.cat((node.data,x))
+        if node.data.size()[0] > self.maxNodeSize:
+            self._splitDataInNodes(node)
+
+    def find_point(self, point : torch.Tensor):
+        """
+        Finds the node where a given point is. If no node has the given point, returns None
+        """
+        
+        node = self.find_node(point)
+
+        isPointInNode = torch.any(torch.all(node.data == point, dim=1))
+
+        if isPointInNode:
+            return node
+            
+        return None
+
+        
+    
 
 
 
