@@ -15,6 +15,7 @@ class Node():
         self.left=None
         self.right=None 
         self.split_point=None
+        self.block=None
         self.dim=self.greatestVarDim(Data)
     
     def greatestVarDim(self, data : torch.Tensor):

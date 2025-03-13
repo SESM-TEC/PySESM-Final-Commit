@@ -16,8 +16,10 @@ class KDTree():
     def _splitDataInNodes(self, node: Node):
         """
         Splits data based on the median of the greatest variance dimension. 
-        It stops when the children nodes have less than 5 points
+        It stops when the children nodes have 5 points or less
         """
+        if node is None:
+            return
 
         medians = torch.median(node.data, dim=0).values
         node.split_point = medians[node.dim].item()
@@ -39,7 +41,7 @@ class KDTree():
         if node.right.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node.right)
 
-    def find_node(self, x, node = None):
+    def _find_node(self, x, node = None):
         """
         Finds the node where a point should be located based on split points and the greatest variance dimensions of each node.
         """
@@ -48,9 +50,9 @@ class KDTree():
 
         if node.data is None:
             if x[0, node.dim].item() >= node.split_point:
-                return self.find_node(x, node.right)
+                return self._find_node(x, node.right)
             if x[0, node.dim].item() < node.split_point:
-                return self.find_node(x, node.left)
+                return self._find_node(x, node.left)
         else:
             return node
 
@@ -60,18 +62,18 @@ class KDTree():
         If the node exceeds maxNodeSize then split it.
         """
 
-        node = self.find_node(x)
+        node = self._find_node(x)
         
         node.data=torch.cat((node.data,x))
         if node.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node)
 
-    def find_point(self, point : torch.Tensor):
+    def find_block(self, point : torch.Tensor):
         """
         Finds the node where a given point is. If no node has the given point, returns None
         """
         
-        node = self.find_node(point)
+        node = self._find_node(point)
 
         isPointInNode = torch.any(torch.all(node.data == point, dim=1))
 
@@ -79,7 +81,26 @@ class KDTree():
             return node
             
         return None
+    
+    def get_leaves(self,  leaves : list = [], node = None):
+        if node is None:
+            node = self.root
+        
+        if node.data is not None:
+            leaves.append(node)
 
+        if node.left is not None:
+            self.get_leaves(leaves, node.left)
+        
+        if node.right is not None:
+            self.get_leaves(leaves, node.right)
+
+        return leaves
+
+        
+
+
+    
         
     
 

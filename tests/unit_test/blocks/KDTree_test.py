@@ -42,14 +42,14 @@ def test_find_node():
     kd=KDTree(X)
     x=torch.rand(1,6)
 
-    node=kd.find_node(x)
+    node=kd._find_node(x)
 
     node_test=kd.root
     if node_test.data is None:
         if x[0, node_test.dim].item() >= node_test.split_point:
-            node_test= kd.find_node(x, node_test.right)
+            node_test= kd._find_node(x, node_test.right)
         elif x[0, node_test.dim].item() < node_test.split_point:
-            node_test = kd.find_node(x, node_test.left)
+            node_test = kd._find_node(x, node_test.left)
 
     assert torch.equal(node.data, node_test.data)   
 
@@ -102,5 +102,46 @@ def test_add_point():
         
         sortx, _ = torch.sort(Data,0)
         sortData, _ = torch.sort(X,0)
+        assert torch.equal(sortData,sortx)
+
+    kd.add_point(x)
+    Data=torch.Tensor()
+    sortx, _ = torch.sort(Data,0)   
+    sortData, _ = torch.sort(X,0)
+
+    assert not torch.equal(sortData,sortx)
+
+def test_find_block():
+    torch.manual_seed(42) 
+    X = torch.randn(191, 6)
+    x=torch.rand(1,6)
+    kd=KDTree(X)
+
+    node=kd.find_block(x)
+
+    assert node is None
+
+    kd.add_point(x)
+    node=kd.find_block(x)
+
+    assert torch.any(torch.all(node.data == x, dim=1))
+
+def test_get_leaves():
+    torch.manual_seed(42) 
+    X = torch.randn(191, 6)
+    x=torch.rand(1,6)
+    kd=KDTree(X)
+
+    leaves=kd.get_leaves()
+
+    leaves_data=torch.Tensor()
+
+    for node in leaves:
+        leaves_data = torch.cat((leaves_data, node.data))
+
+    sortx, _ = torch.sort(leaves_data,0)   
+    sortData, _ = torch.sort(X,0)
 
     assert torch.equal(sortData,sortx)
+
+    
