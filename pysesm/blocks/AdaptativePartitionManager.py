@@ -39,6 +39,7 @@ class AdaptativePartitionManager(BlockManager):
         self.X = None
         self.y = None
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
+        self.kdtree=None
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -50,6 +51,7 @@ class AdaptativePartitionManager(BlockManager):
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
         """
+        self.kdtree.find_point(x) #Check type, should be PartitionBlock its node
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         """
@@ -60,8 +62,11 @@ class AdaptativePartitionManager(BlockManager):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
-        # If no T is given, create a T with a default size
-
+        if self.kdtree is None:
+            self.kdtree = KDTree(X)
+        treeNodes=self.kdtree.getleaves()
+        for node in treeNodes:
+            #Instantiate blocks and add them to self.blocks.
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -81,6 +86,9 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (np.ndarray): Target data corresponding to the input points.
         """
+        self.kdtree=KDTree(X)
+        
+
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
