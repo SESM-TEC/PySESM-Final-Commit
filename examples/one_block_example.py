@@ -28,23 +28,32 @@ class KLDivLossWrapper(torch.nn.Module):
         self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
         
     def forward(self, inputs, targets):
-        # Step 1: Ensure non-negativity (if your data can be negative)
-        inputs = torch.nn.functional.relu(inputs) + 1e-8  # Small constant for numerical stability
-        targets = torch.nn.functional.relu(targets) + 1e-8
+        # Step 1: Find the minimum value between both tensors to ensure non-negativity
+        min_value = torch.min(torch.min(inputs), torch.min(targets))
         
-        # Step 2: Normalize to make them proper distributions
-        # Option 1: Normalize across all elements
-        inputs_normalized = inputs / torch.sum(inputs)
-        targets_normalized = targets / torch.sum(targets)
+        # Step 2: Add the absolute minimum value (plus a small constant) if there are negative values
+        if min_value < 0:
+            offset = abs(min_value) + 1e-8
+            inputs_shifted = inputs + offset
+            targets_shifted = targets + offset
+        else:
+            # If no negative values, just add a small constant for numerical stability
+            inputs_shifted = inputs + 1e-8
+            targets_shifted = targets + 1e-8
         
-        # Option 2: If batched data, normalize each sample independently
-        # inputs_normalized = inputs / torch.sum(inputs, dim=1, keepdim=True)
-        # targets_normalized = targets / torch.sum(targets, dim=1, keepdim=True)
+        # Step 3: Find the maximum sum to use as the common normalization factor
+        inputs_sum = torch.sum(inputs_shifted)
+        targets_sum = torch.sum(targets_shifted)
+        norm_factor = torch.max(inputs_sum, targets_sum)
         
-        # Step 3: Log-space transformation (since log_input=False by default)
+        # Step 4: Normalize both by the same factor
+        inputs_normalized = inputs_shifted / norm_factor
+        targets_normalized = targets_shifted / norm_factor
+        
+        # Step 5: Log-space transformation
         log_inputs = torch.log(inputs_normalized)
         
-        # Step 4: Apply KL divergence
+        # Step 6: Apply KL divergence
         loss = self.kl_loss(log_inputs, targets_normalized)
         
         return loss
@@ -58,17 +67,18 @@ experiment = {
     "n_functions": 10,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.15,
+    "ista_alpha": 0.05,
     "ista_lambd": 0.005,
-    "dictionary_alpha": 0.1,
-    "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    "dictionary_criterion": torch.nn.MSELoss(),
-    ##"dictionary_criterion": KLDivLossWrapper(), 
+    "dictionary_alpha": 0.001,
+    ##"dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    "dictionary_optimizer": lambda params, lr: torch.optim.AdamW(params, lr=lr),
+    ##"dictionary_criterion": torch.nn.MSELoss(),
+    "dictionary_criterion": KLDivLossWrapper(), 
     "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 5000,
+    "model_epochs": 3000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
