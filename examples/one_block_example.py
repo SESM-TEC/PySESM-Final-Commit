@@ -17,7 +17,7 @@ from pysesm.models import BSESM, SSESM, SESM
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
-
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -133,7 +133,7 @@ experiment = {
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 5000,
+    "model_epochs": 10,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -144,6 +144,12 @@ experiment = {
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
+    "device_map": {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
 }
 
 def show_data(X,y,c,marker,label,ax=None):

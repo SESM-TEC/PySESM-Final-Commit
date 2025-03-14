@@ -11,12 +11,10 @@ License:
 '''
 
 import logging
-
+import torch
 from pysesm.customization_factories import SurrogateFunctionFactory
 from pysesm.functions import SurrogateFunction
 from pysesm.enums import SurrogateFunctionEnum
-
-import torch
 from typing import Optional, Callable, Union, Iterator
 
 class DictLayer(torch.nn.Module):
@@ -59,6 +57,7 @@ class DictLayer(torch.nn.Module):
         criterion: Union[Callable] = None,
         optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
         parameter_hook: Optional[Callable[[dict], None]] = None,
+        device = None,
         **kwargs
     ):
         """
@@ -95,7 +94,9 @@ class DictLayer(torch.nn.Module):
         self.n_functions = n_functions
         self.alpha = alpha
         self.evaluation_func = evaluation_func
-
+        self.device = device
+        # Move the layer to the assigned device for DICTIONARY_LAYER
+        #self.to(self.device)
         self.psi = (
             psi
             if issubclass(type(psi), SurrogateFunction)
@@ -109,7 +110,9 @@ class DictLayer(torch.nn.Module):
         )
 
         self.losses = []
-        self.theta_parameter_vector = self.psi.initialize()
+        #self.theta_parameter_vector = self.psi.initialize().to(self.device)  # Ensure theta is on the correct device
+        # Registrar theta_parameter_vector como un parámetro aprendible
+        self.theta_parameter_vector = torch.nn.Parameter(self.psi.initialize().to(self.device))
 
         self.dictionary = None
 
@@ -122,6 +125,8 @@ class DictLayer(torch.nn.Module):
 
         self.parameter_hook = parameter_hook
 
+        print("Dict ----------", self.device)
+        
     def setup(self, X: torch.Tensor) -> None:
         """
         Initialize the dictionary for the layer.
@@ -135,6 +140,11 @@ class DictLayer(torch.nn.Module):
         Returns:
             None
         """
+        X = X.to(self.device)  # Ensure X is on the correct device
+        print("X.device", X.device)
+        self.theta_parameter_vector = self.theta_parameter_vector.to(self.device)
+        print("self.theta_parameter_vector.device", self.theta_parameter_vector.device)
+
         if self.dictionary is None:
             self.dictionary = self.psi.__call__(X, self.theta_parameter_vector)
 
@@ -169,6 +179,10 @@ class DictLayer(torch.nn.Module):
         Returns:
             None
         """
+        # Ensure all input tensors are on the correct device
+        X = X.to(self.device)
+        y = y.to(self.device)
+        h = h.to(self.device)
         for epoch in range(epochs):
             self.optimizer.zero_grad()
             
@@ -225,6 +239,7 @@ class DictLayer(torch.nn.Module):
             torch.Tensor: Evaluated dictionary of shape `(n_samples, n_functions)`,
             or reshaped to `(active_blocks_count, max_points_in_block, n_functions)` if partitioning is applied.
         """
+        X = X.to(self.device)  # Ensure X is on the correct device
         evaluated_dictionary = self.psi.__call__(
             X, self.theta_parameter_vector, rho_flag, mu_flag
         )
