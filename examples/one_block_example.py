@@ -17,7 +17,7 @@ from pysesm.models import BSESM, SSESM, SESM
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
-
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -28,37 +28,92 @@ class KLDivLossWrapper(torch.nn.Module):
         self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
         
     def forward(self, inputs, targets):
-        # Step 1: Find the minimum value between both tensors to ensure non-negativity
-        min_value = torch.min(torch.min(inputs), torch.min(targets))
+        # Step 1: Ensure non-negativity (if your data can be negative)
+        inputs = torch.nn.functional.relu(inputs) + 1e-8  # Small constant for numerical stability
+        targets = torch.nn.functional.relu(targets) + 1e-8
         
-        # Step 2: Add the absolute minimum value (plus a small constant) if there are negative values
-        if min_value < 0:
-            offset = abs(min_value) + 1e-8
-            inputs_shifted = inputs + offset
-            targets_shifted = targets + offset
-        else:
-            # If no negative values, just add a small constant for numerical stability
-            inputs_shifted = inputs + 1e-8
-            targets_shifted = targets + 1e-8
+        # Step 2: Normalize to make them proper distributions
+        # Option 1: Normalize across all elements
+        inputs_normalized = inputs / torch.sum(inputs)
+        targets_normalized = targets / torch.sum(targets)
         
-        # Step 3: Find the maximum sum to use as the common normalization factor
-        inputs_sum = torch.sum(inputs_shifted)
-        targets_sum = torch.sum(targets_shifted)
-        norm_factor = torch.max(inputs_sum, targets_sum)
+        # Option 2: If batched data, normalize each sample independently
+        # inputs_normalized = inputs / torch.sum(inputs, dim=1, keepdim=True)
+        # targets_normalized = targets / torch.sum(targets, dim=1, keepdim=True)
         
-        # Step 4: Normalize both by the same factor
-        inputs_normalized = inputs_shifted / norm_factor
-        targets_normalized = targets_shifted / norm_factor
-        
-        # Step 5: Log-space transformation
+        # Step 3: Log-space transformation (since log_input=False by default)
         log_inputs = torch.log(inputs_normalized)
         
-        # Step 6: Apply KL divergence
+        # Step 4: Apply KL divergence
         loss = self.kl_loss(log_inputs, targets_normalized)
         
         return loss
 
+class CrossEntropyLossWrapper(torch.nn.Module):
+    """
+    Custom Cross-Entropy loss implementation based on the Octave code.
+    This implementation normalizes both inputs and targets to make them proper
+    probability distributions before calculating cross-entropy.
+    """
+    def __init__(self, reduction='mean', epsilon=1e-10):
+        super(CrossEntropyLossWrapper, self).__init__()
+        self.reduction = reduction
+        self.epsilon = epsilon
+        
+    def forward(self, inputs, targets):
+        # Ensure non-negativity
+        inputs = torch.nn.functional.relu(inputs) + self.epsilon
+        targets = torch.nn.functional.relu(targets) + self.epsilon
+        
+        # Normalize to make them proper distributions
+        inputs_normalized = inputs / torch.sum(inputs)
+        targets_normalized = targets / torch.sum(targets)
+        
+        # Cross-entropy = -sum(P * log(Q))
+        # where P is targets and Q is inputs
+        cross_entropy = -torch.sum(targets_normalized * torch.log(inputs_normalized + self.epsilon))
+        
+        return cross_entropy
 
+
+class JensenShannonLossWrapper(torch.nn.Module):
+    """
+    Custom Jensen-Shannon divergence implementation based on the Octave code.
+    JS divergence is a symmetrized and smoothed version of the KL divergence.
+    
+    JS(P||Q) = 0.5 * (KL(P||M) + KL(Q||M)) where M = 0.5 * (P + Q)
+    """
+    def __init__(self, reduction='mean', epsilon=1e-10):
+        super(JensenShannonLossWrapper, self).__init__()
+        self.reduction = reduction
+        self.epsilon = epsilon
+        
+    def forward(self, inputs, targets):
+        # Ensure non-negativity
+        inputs = torch.nn.functional.relu(inputs) + self.epsilon
+        targets = torch.nn.functional.relu(targets) + self.epsilon
+        
+        # Normalize to make them proper distributions
+        inputs_normalized = inputs / torch.sum(inputs)
+        targets_normalized = targets / torch.sum(targets)
+        
+        # Compute the average distribution M
+        M = 0.5 * (inputs_normalized + targets_normalized)
+        
+        # Compute KL(targets || M)
+        ratio1 = (targets_normalized + self.epsilon) / (M + self.epsilon)
+        kl1 = torch.sum(targets_normalized * torch.log(ratio1))
+        
+        # Compute KL(inputs || M)
+        ratio2 = (inputs_normalized + self.epsilon) / (M + self.epsilon)
+        kl2 = torch.sum(inputs_normalized * torch.log(ratio2))
+        
+        # JS = 0.5 * (KL(P||M) + KL(Q||M))
+        js_divergence = 0.5 * (kl1 + kl2)
+        
+        return js_divergence
+
+    
 # SESM CONFIGURATION
 experiment = {
     "hyp_set": 1,
@@ -67,18 +122,18 @@ experiment = {
     "n_functions": 10,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.05,
+    "ista_alpha": 0.15,
     "ista_lambd": 0.005,
-    "dictionary_alpha": 0.001,
-    ##"dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    "dictionary_optimizer": lambda params, lr: torch.optim.AdamW(params, lr=lr),
+    "dictionary_alpha": 0.1,
+    "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
-    "dictionary_criterion": KLDivLossWrapper(), 
+    ##"dictionary_criterion": KLDivLossWrapper(),
+    "dictionary_criterion": JensenShannonLossWrapper(), 
     "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 3000,
+    "model_epochs": 2000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -89,6 +144,12 @@ experiment = {
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
+    "device_map": {
+        DeviceTarget.GLOBAL: "cpu",              # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",          # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cuda",   # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
 }
 
 def show_data(X,y,c,marker,label,ax=None):
