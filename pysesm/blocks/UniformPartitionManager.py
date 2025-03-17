@@ -1,27 +1,13 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
-Uniform Partition Manager
-
-Provides a regular grid of blocks to partition the space.
-
-Authors: The SESM Team 
-
-License: 
-'''
-
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
-
-import logging
 from copy import deepcopy
-from typing import Union, Callable, Iterator, Type
+from typing import Union, Callable, Iterator
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
+import logging
 import numpy as np
 import torch
-
 DEFAULT_BLOCKS_PER_DIM = 4
-
 
 def squeeze_factor(y: np.ndarray):
     """
@@ -41,7 +27,6 @@ def squeeze_factor(y: np.ndarray):
     else:
         e_f = 1.0
     return e_f
-
 
 class UniformPartitionManager(BlockManager):
     """
@@ -68,6 +53,7 @@ class UniformPartitionManager(BlockManager):
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
+        device_manager=None
     ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
@@ -81,7 +67,7 @@ class UniformPartitionManager(BlockManager):
             threshold (float, optional): Threshold for determining block activity.
         """
         super().__init__()
-
+        #torch.set_default_device(device)
         self.T = T
         self.n_functions = n_functions
         self.initial_bounds = initial_bounds
@@ -91,6 +77,7 @@ class UniformPartitionManager(BlockManager):
         self.block_size = None
         self.X = None
         self.y = None
+        self.device_manager = device_manager
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
@@ -121,11 +108,18 @@ class UniformPartitionManager(BlockManager):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        self.initial_bounds = self.initial_bounds.to(device)
+
         # If no T is given, create a T with a default size
         if self.T is None:
-            self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())])
+            self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
+            #print("1")
+            #print("self.T.device 1", self.T.device)
         elif type(self.T) is int:
-            self.T = torch.tensor([self.T for _ in range(X.dim())])
+            self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
+            #print("2", device)
+            #print("self.T.device 2", self.T.device)
 
         # When no points and no blocks have been created
         if self.blocks is None:
@@ -133,7 +127,7 @@ class UniformPartitionManager(BlockManager):
             if self.initial_bounds is None:
                 self.initial_bounds = torch.vstack(
                     [torch.min(X, dim=0).values, torch.max(X, dim=0).values]
-                )  # Calculates the range covered by the X vector
+                ).to(device)   # Calculates the range covered by the X vector
                 logging.warning(
                     "[UniformPartitionManager] No initial bounds provided, using calculated one {}".format(
                         self.initial_bounds
@@ -142,17 +136,22 @@ class UniformPartitionManager(BlockManager):
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
-            self.block_size = torch.div(delta, self.T)
+            
+            print("delta.device", delta.device, "self.T.device", self.T.device)
 
-            self.blocks = np.empty(self.T.numpy(), dtype=PartitionBlock)
+            self.block_size = torch.div(delta, self.T).to(device)
+            self.blocks = np.empty(self.T.cpu().numpy(), dtype=PartitionBlock)#----------
 
             for index in np.ndindex(self.blocks.shape):
                 self.blocks[index] = PartitionBlock(
-                    self.initial_bounds[0], index, self.block_size
+                    self.initial_bounds[0].to(device), 
+                    index, 
+                    self.block_size.to(device),
+                    device=device
                 )
         else:
-            new_max_x = torch.max(X)
-            new_min_x = torch.min(X)
+            new_max_x = torch.max(X).to(device)
+            new_min_x = torch.min(X).to(device)
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -162,6 +161,8 @@ class UniformPartitionManager(BlockManager):
         Args:
             init_h (bool, optional): Whether to initialize the sparse vector `h` for each block (default is True).
         """
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             if len(block.y) != 0:
@@ -171,7 +172,7 @@ class UniformPartitionManager(BlockManager):
                     block.amplitude = squeeze_factor(block.y)
 
                     block.h = torch.nn.Parameter(
-                        torch.rand(self.n_functions,1), requires_grad=True
+                        torch.rand(self.n_functions,1,device=device), requires_grad=True
                     )
                     block.h.data /= block.h.data.sum()
 
@@ -179,7 +180,7 @@ class UniformPartitionManager(BlockManager):
                         f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
                     )
 
-                block.target = torch.stack([value * block.amplitude for value in block.y])
+                block.target = torch.stack([value * block.amplitude for value in block.y]).to(device)
                 if block.target.dim() == 1:
                     block.target = block.target.unsqueeze(-1)
                 block.target = block.target.detach()
@@ -192,6 +193,10 @@ class UniformPartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (np.ndarray): Target data corresponding to the input points.
         """
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        X = X.to(device)
+        y = [yi.to(device) for yi in y]
+
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
@@ -210,9 +215,12 @@ class UniformPartitionManager(BlockManager):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
-        """
-        self._update_block_arrangement(X)
+        """   
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        X = X.to(device)
+        y = y.to(device)
 
+        self._update_block_arrangement(X)
         self._map_points(X, y) # Sends points to their respective blocks
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
         self._configure_blocks() # Normalize y value and initialize h in each block
@@ -244,7 +252,8 @@ class UniformPartitionManager(BlockManager):
                 lambd=ista_lambd,
                 evaluation_func=evaluation_func,
                 logger=self.logger,
-                optimizer=ista_optimizer
+                optimizer=ista_optimizer,
+                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
             )
 
     def retrieve_active_blocks(self):
@@ -271,6 +280,10 @@ class UniformPartitionManager(BlockManager):
         Returns:
             List[PartitionBlock]: A list of active blocks corresponding to the test data.
         """
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        X = X.to(device)
+        y = y.to(device)
+
         # Copy blocks without X and y, nor their normalized versions, positions, etc.
         test_blocks = deepcopy(self.blocks) # "deepcopy" is not that deep...
 

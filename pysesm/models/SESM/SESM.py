@@ -9,18 +9,17 @@ Authors: The SESM Team
 
 License: 
 '''
-
 import logging
 import time
 import numpy as np
 import torch
 from typing import Union, Callable, Iterator
-
 from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
 from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 class SESM(torch.nn.Module):
     """
@@ -105,7 +104,6 @@ class SESM(torch.nn.Module):
             The number of epochs focused on adjusting the `ρ` parameter in the dictionary layer. This parameter influences
             how well the dictionary represents the data.
     """
-
     # Type hints for instance attributes: (not class attributes)
     ista_layer: ISTALayer
     dictionary_layer: DictLayer
@@ -128,14 +126,11 @@ class SESM(torch.nn.Module):
     dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
     ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
 
-
     # Constant class attributes
     evaluation_func_registry: dict[
         EvaluationFuncEnum, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
     ] = {
-        EvaluationFuncEnum.BMM_MULT: lambda dictionary, h: torch.bmm(dictionary, h)
-        .squeeze(-1)
-        .flatten(),
+        EvaluationFuncEnum.BMM_MULT: lambda dictionary, h: torch.bmm(dictionary, h).squeeze(-1).flatten(),
         EvaluationFuncEnum.TWOD_MULT: lambda dictionary, h: torch.matmul(dictionary, h),
         EvaluationFuncEnum.DEFAULT: lambda dictionary, h: torch.matmul(dictionary, h),
     }
@@ -158,6 +153,7 @@ class SESM(torch.nn.Module):
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
             ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
+            device_manager=None,
             **kwargs
     ):
         """
@@ -234,9 +230,8 @@ class SESM(torch.nn.Module):
                       (if `psi` is a `SurrogateFunction` class). These kwargs can be used to specify configuration
                       parameters specific to the surrogate function being used.
         """
-
         super(SESM, self).__init__()
-
+        
         self.n_features = n_features
         self.n_functions = n_functions
         self.model_epochs = model_epochs
@@ -252,10 +247,10 @@ class SESM(torch.nn.Module):
         self.debug = debug
         self.logger = logger
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
-
+        self.device_manager = device_manager
         self.dictionary_optimizer = dictionary_optimizer
         self.ista_optimizer = ista_optimizer
-
+        
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
 
@@ -267,7 +262,7 @@ class SESM(torch.nn.Module):
             "loss_max": [],
             "loss_min": [],
         }
-
+        #NOTE: We use the ISTA Layer that come from UniformPartitionManager
         # Instantiate ISTA Layer
         self.ista_layer = ISTALayer(
             n_functions=n_features,
@@ -275,6 +270,7 @@ class SESM(torch.nn.Module):
             lambd=self.ista_lambd,
             evaluation_func=self.evaluation_func,
             optimizer = ista_optimizer,
+            device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
             logger=logger
         )
 
@@ -286,6 +282,7 @@ class SESM(torch.nn.Module):
             evaluation_func=self.evaluation_func,
             dictionary_optimizer=self.dictionary_optimizer,
             logger=logger,
+            device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             psi=psi,
             **kwargs
         )
@@ -355,20 +352,15 @@ class SESM(torch.nn.Module):
         Returns:
             None
         """
-
         # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)
 
         validate_sesm_partial_fit(self, X, y)
-
         self.dictionary_layer.setup(X)
-
         # Add shape validation here before the training loop
         assert self.ista_layer.h.dim() == 2, \
             f"ISTA layer h parameter must be 2D tensor, got {self.ista_layer.h.shape}"
-
-
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -384,12 +376,6 @@ class SESM(torch.nn.Module):
                     self.dictionary_layer_losses[-1],
                 )
             )
-
-        # Deprecated: we have the accessors self.ista_layer_losses and 
-        #             self.dictionary_layer_losses
-        # self.losses_ISTA = self.ista_layer.losses
-        # self.losses_Dictionary = self.dictionary_layer.losses
-
 
     def train_step(
             self,
@@ -447,21 +433,15 @@ class SESM(torch.nn.Module):
                 rho_flag=True,
                 dictionary_shape=dictionary_shape,
             )
-
             self.loss_analysis(self.mu_epochs)
-
-
 
          # Detach dictionary before passing to ISTA layer
         dictionary_for_ista = self.dictionary_layer.dictionary.detach()
-    
-
         self.ista_layer.partial_fit(
             y=y, 
             epochs=self.ista_epochs, 
             dictionary=dictionary_for_ista
         )
-
         # DEBUG: TODO: make a hook to use W&B and other stuff like this
         # print(self.ista_layer.h.detach().numpy().flatten())
 
@@ -487,12 +467,17 @@ class SESM(torch.nn.Module):
         Returns:
             torch.Tensor: Predicted values of shape `(n_samples,)`.
         """
+        device = self.device_manager.get_device(DeviceTarget.GLOBAL)
 
         with torch.no_grad():
             self.dictionary_layer.dictionary = self.dictionary_layer.forward(X, dictionary_shape)
 
-        dictionary = self.dictionary_layer.dictionary
+        dictionary = self.dictionary_layer.dictionary.to(device)
         h = custom_h if custom_h is not None else self.ista_layer.h
+        h = h.to(device)
+
+        print("dictionary", dictionary.device)
+        print("h", h.device)
 
         return self.evaluation_func(dictionary, h)
 

@@ -12,18 +12,16 @@ License:
 
 
 import logging
-
+import numpy as np
+import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
 from pysesm.enums import EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
-
 from typing import Callable, Iterator
-
-import numpy as np
-import torch
 from sklearn.metrics import mean_squared_error
-
+from pysesm.device_manager.DeviceManager import DeviceManager
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 class SSESM(SESM):
     """
@@ -54,6 +52,7 @@ class SSESM(SESM):
         iter: int = 0,
         initial_bounds=None,
         debug=True,
+        device_map=None, 
         **kwargs
     ):
         """
@@ -88,10 +87,14 @@ class SSESM(SESM):
             debug (bool, optional): Enables or disables debug mode (default: True).
             **kwargs: Additional keyword arguments passed to the base class.
         """
+        self.device_manager = DeviceManager(logger,device_map=device_map)
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.partition_manager = UniformPartitionManager(
-            logger, kwargs.get("T"), n_functions=n_functions, initial_bounds=initial_bounds
+            logger, kwargs.get("T"), 
+            n_functions=n_functions, 
+            initial_bounds=initial_bounds,
+            device_manager=self.device_manager
         )
 
         super().__init__(
@@ -110,6 +113,7 @@ class SSESM(SESM):
             dictionary_optimizer=dictionary_optimizer,
             ista_optimizer=ista_optimizer,
             debug=debug,
+            device_manager=self.device_manager,
             **kwargs
         )
 
@@ -128,7 +132,6 @@ class SSESM(SESM):
         Returns:
             None
         """
-
         # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)

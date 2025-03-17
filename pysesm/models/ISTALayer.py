@@ -13,10 +13,8 @@ License:
 '''
 
 import logging
-
 import torch
 from typing import Callable, Iterator
-
 
 class ISTALayer(torch.nn.Module):
     """
@@ -60,7 +58,8 @@ class ISTALayer(torch.nn.Module):
             logger: logging.Logger,
             debug: bool = False,
             criterion=None,
-            optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
+            optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
+            device = None
     ):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
@@ -81,10 +80,11 @@ class ISTALayer(torch.nn.Module):
         self.lambd = lambd
         self.evaluation_func = evaluation_func
         self.losses = []
-
+        self.device = device
+        
+        self.to(self.device) # Move the layer to the assigned device for ISTA_LAYER
         self.logger = logger
         self.debug = debug
-
         self.setup()
 
         if criterion is None:
@@ -100,6 +100,8 @@ class ISTALayer(torch.nn.Module):
             self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
         else:
             self.optimizer = optimizer(self.parameters(), lr=alpha)
+        
+        print("ISTA ----------", self.device)
 
         # TODO: add this in the arguments too.  These are used in the custom regularization
         self.threshold = 11
@@ -123,13 +125,16 @@ class ISTALayer(torch.nn.Module):
             # Ensure h is 2D
             if h.dim() != 2:
                 h = h.reshape(-1, 1)  # Default to column vector if reshaping needed
-            self.h = torch.nn.Parameter(h)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
         else:
             # Initialize h as 2D
             self.h = torch.nn.Parameter(
-                torch.rand(self.n_functions,1), requires_grad=True
+                torch.rand(self.n_functions, 1).to(self.device), 
+                requires_grad=True
             )
             self.h.data /= self.h.data.sum()
+
+        
 
     def get_custom_regularization(self) -> float:
         """
@@ -152,9 +157,9 @@ class ISTALayer(torch.nn.Module):
         """
         return torch.where(
             torch.abs(self.h) < self.lambd,
-            torch.zeros_like(self.h),
+            torch.zeros_like(self.h, device=self.device),
             self.h
-    )
+        )
 
     def forward(self, y, dictionary, log_losses=True):
         """
@@ -168,6 +173,9 @@ class ISTALayer(torch.nn.Module):
         Returns:
             torch.Tensor: Estimated loss after forward step
         """
+        y = y.to(self.device)
+        dictionary = dictionary.to(self.device)
+
         y_pred = self.evaluation_func(dictionary, self.h)
 
         assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
@@ -177,9 +185,7 @@ class ISTALayer(torch.nn.Module):
         # print("y_pred:", y_pred[:5])
         # print("dict:", dictionary[:5])  # First few values of the dictionary
 
-
         loss = self.criterion(y, y_pred)
-
         reg_loss = self.get_custom_regularization()
         total_loss = loss + reg_loss
 
@@ -192,20 +198,17 @@ class ISTALayer(torch.nn.Module):
         """
         Performs a single training step: forward, backward, and optimization.
         """
+        # Move input tensors to the ISTA_LAYER device
+        y = y.to(self.device)
+        dictionary = dictionary.to(self.device)
+
         self.optimizer.zero_grad()
         loss = self.forward(y, dictionary, log_losses)
         loss.backward()
-
-        # DEBUG
-        # print("h:", self.h)
-        # print("gradient:", self.h.grad)  # After backward()
-
-
         self.optimizer.step()
 
         with torch.no_grad():
             self.h.data = self.shrinkage()
-
         return loss
     
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
@@ -224,6 +227,8 @@ class ISTALayer(torch.nn.Module):
         Returns:
             None
         """
+        y = y.to(self.device)
+        dictionary = dictionary.to(self.device)
         for _ in range(epochs):
             self.train_step(y, dictionary, log_losses)
 
