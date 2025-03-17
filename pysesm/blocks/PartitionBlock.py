@@ -4,12 +4,11 @@ class PartitionBlock:
     """
     Represents a sub-block in a 2D grid.
     Attributes:
-    - vertices (np.ndarray): The vertices of the sub-block.
-    - amplitude (int): The amplitude of the sub-block.
-    - samples_inside (list): List of samples inside the sub-block.
-    - output_values (list): List of output values.
-    - index (list): List of index of the original point X
-
+    - space_bound (torch.Tensor[float]): Bounds of each dimension (e.g. tensor([-2.1,-2.1]))
+    - amplitude (float): The squeeze_factor of targets (self.y).
+    - block_index (tuple): index of this block in the array of blocks.
+    - block_size (torch.Tensor[float]): Space length of each dimension.
+    - 
     Methods:
     - add_point(point): Add a point to the sub-block.
     """
@@ -23,7 +22,11 @@ class PartitionBlock:
         h=None,
         ista_layer=None,
         device=None
-    ):
+    ):  
+        print("space_bound",space_bound)
+        print("block_index",block_index)
+        print("block_size", block_size)
+
         self.block_index = block_index
         self.block_size = block_size
         self.device = device

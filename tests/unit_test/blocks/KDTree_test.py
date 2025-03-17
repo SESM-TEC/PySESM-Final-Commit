@@ -1,6 +1,10 @@
 from pysesm.blocks.Node import Node
 from pysesm.blocks.KDTree import KDTree
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.device_manager.DeviceManager import DeviceManager
+from pysesm.utils.loggers import setup_logger
 import torch
+import logging 
 
 def test_greatestVarDim():
     """
@@ -25,8 +29,16 @@ def test_splitDataInNodes():
     """
     torch.manual_seed(42) 
     x = torch.randn(191, 6)
-
-    kd=KDTree(x)
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    kd=KDTree(x,device=device)
     Data=torch.Tensor()
     Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
     

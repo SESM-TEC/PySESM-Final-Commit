@@ -122,7 +122,7 @@ class UniformPartitionManager(BlockManager):
             #print("self.T.device 2", self.T.device)
 
         # When no points and no blocks have been created
-        if self.blocks is None:
+        if self.blocks is None: 
             # Check for user given initial bounds
             if self.initial_bounds is None:
                 self.initial_bounds = torch.vstack(
@@ -137,8 +137,6 @@ class UniformPartitionManager(BlockManager):
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
             
-            print("delta.device", delta.device, "self.T.device", self.T.device)
-
             self.block_size = torch.div(delta, self.T).to(device)
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=PartitionBlock)#----------
 
@@ -170,10 +168,13 @@ class UniformPartitionManager(BlockManager):
                 if init_h:
                     # Squeeze should be computed only with training data
                     block.amplitude = squeeze_factor(block.y)
-
+                    print("amplitude:", block.amplitude)
+                    print("Maxy",torch.stack(block.y).abs().max())
                     block.h = torch.nn.Parameter(
                         torch.rand(self.n_functions,1,device=device), requires_grad=True
                     )
+                    print("h:", block.h)
+
                     block.h.data /= block.h.data.sum()
 
                     self.logger.debug(
@@ -255,6 +256,7 @@ class UniformPartitionManager(BlockManager):
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
             )
+            print("Ista:", block.ista_layer)
 
     def retrieve_active_blocks(self):
         """

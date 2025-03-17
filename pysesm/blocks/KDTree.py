@@ -1,16 +1,17 @@
 from pysesm.blocks.Node import Node
+
 import torch
 
 class KDTree():
-    def __init__(self, data: torch.Tensor, maxNodeSize: int = 5):
+    def __init__(self, data: torch.Tensor, device=None, maxNodeSize: int = 5):
         """
         root (Node): Root node of the tree
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
         """
-
+        self.device=device
         self.root = Node(data)
         self.maxNodeSize=maxNodeSize
-
+        
         self._splitDataInNodes(self.root)
         
     def _splitDataInNodes(self, node: Node):
@@ -28,7 +29,10 @@ class KDTree():
         not_mask = node.data[:, node.dim] < node.split_point
         
         greaterData = node.data[mask].clone()
+        print("greaterData:",greaterData.device)
         lowerData = node.data[not_mask].clone()
+
+        print("LowerData",lowerData.device)
 
         node.data = None
 

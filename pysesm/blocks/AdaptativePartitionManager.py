@@ -4,7 +4,10 @@ from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
+import torch
+import numpy as np
 from typing import Union, Callable, Iterator, Type
 
 class AdaptativePartitionManager(BlockManager):
@@ -15,6 +18,7 @@ class AdaptativePartitionManager(BlockManager):
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
+        device_manager=None
     ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
@@ -40,6 +44,7 @@ class AdaptativePartitionManager(BlockManager):
         self.y = None
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
         self.kdtree=None
+        self.device_manager=device_manager
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -62,8 +67,10 @@ class AdaptativePartitionManager(BlockManager):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
+        print()
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         if self.kdtree is None:
-            self.kdtree = KDTree(X)
+            self.kdtree = KDTree(X, device=device)
         treeNodes=self.kdtree.getleaves()
         for node in treeNodes:
             #Instantiate blocks and add them to self.blocks.

@@ -12,6 +12,7 @@ class Node():
             dim (int): Dimension where the data has the greatest variance
         """
         self.data=Data
+        print(self.data.device)
         self.left=None
         self.right=None 
         self.split_point=None
