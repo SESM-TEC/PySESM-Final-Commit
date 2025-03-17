@@ -95,8 +95,7 @@ class DictLayer(torch.nn.Module):
         self.alpha = alpha
         self.evaluation_func = evaluation_func
         self.device = device
-        # Move the layer to the assigned device for DICTIONARY_LAYER
-        #self.to(self.device)
+        self.to(self.device)  # Move the layer to the assigned device for DICTIONARY_LAYER
         self.psi = (
             psi
             if issubclass(type(psi), SurrogateFunction)
@@ -110,22 +109,15 @@ class DictLayer(torch.nn.Module):
         )
 
         self.losses = []
-        #self.theta_parameter_vector = self.psi.initialize().to(self.device)  # Ensure theta is on the correct device
-        # Registrar theta_parameter_vector como un parámetro aprendible
         self.theta_parameter_vector = torch.nn.Parameter(self.psi.initialize().to(self.device))
-
         self.dictionary = None
-
         self.criterion = torch.nn.MSELoss() if criterion is None else criterion
-
         if optimizer is None:
             self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
         else:
             self.optimizer = optimizer(self.parameters(), lr=alpha)
 
         self.parameter_hook = parameter_hook
-
-        print("Dict ----------", self.device)
         
     def setup(self, X: torch.Tensor) -> None:
         """
@@ -141,10 +133,7 @@ class DictLayer(torch.nn.Module):
             None
         """
         X = X.to(self.device)  # Ensure X is on the correct device
-        print("X.device", X.device)
         self.theta_parameter_vector = self.theta_parameter_vector.to(self.device)
-        print("self.theta_parameter_vector.device", self.theta_parameter_vector.device)
-
         if self.dictionary is None:
             self.dictionary = self.psi.__call__(X, self.theta_parameter_vector)
 

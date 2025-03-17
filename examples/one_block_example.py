@@ -18,6 +18,7 @@ from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.enums.HookTypeEnum import HookType
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -149,7 +150,10 @@ experiment = {
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
+    },
+    "use_wandb": True,
+    "active_hooks": [HookType.ISTALAYER],
+    "project_name": "sesm-test"
 }
 
 def show_data(X,y,c,marker,label,ax=None):

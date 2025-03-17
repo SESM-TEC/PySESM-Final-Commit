@@ -2,8 +2,9 @@ from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 from copy import deepcopy
-from typing import Union, Callable, Iterator
+from typing import Union, Callable, Iterator, Dict
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.enums.HookTypeEnum import HookType
 import logging
 import numpy as np
 import torch
@@ -53,7 +54,8 @@ class UniformPartitionManager(BlockManager):
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
-        device_manager=None
+        device_manager=None,
+        hook_manager=None
     ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
@@ -78,7 +80,15 @@ class UniformPartitionManager(BlockManager):
         self.X = None
         self.y = None
         self.device_manager = device_manager
+        self.hook_manager = hook_manager
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
+    
+    def _ista_hook(self, info: Dict) -> None:
+        """
+        Hook for ISTALayer to log or store data.
+        """
+        if self.hook_manager:
+            self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -114,12 +124,8 @@ class UniformPartitionManager(BlockManager):
         # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
-            #print("1")
-            #print("self.T.device 1", self.T.device)
         elif type(self.T) is int:
             self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
-            #print("2", device)
-            #print("self.T.device 2", self.T.device)
 
         # When no points and no blocks have been created
         if self.blocks is None:
@@ -136,9 +142,6 @@ class UniformPartitionManager(BlockManager):
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
-            
-            print("delta.device", delta.device, "self.T.device", self.T.device)
-
             self.block_size = torch.div(delta, self.T).to(device)
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=PartitionBlock)#----------
 
@@ -253,7 +256,8 @@ class UniformPartitionManager(BlockManager):
                 evaluation_func=evaluation_func,
                 logger=self.logger,
                 optimizer=ista_optimizer,
-                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
+                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
             )
 
     def retrieve_active_blocks(self):
