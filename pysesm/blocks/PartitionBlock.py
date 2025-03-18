@@ -4,11 +4,14 @@ class PartitionBlock:
     """
     Represents a sub-block in a 2D grid.
     Attributes:
-    - space_bound (torch.Tensor[float]): Bounds of each dimension (e.g. tensor([-2.1,-2.1]))
+    - space_bound (torch.Tensor[float]): Min value of each dimension (e.g. tensor([-2.1,-2.1]))
     - amplitude (float): The squeeze_factor of targets (self.y).
     - block_index (tuple): index of this block in the array of blocks.
     - block_size (torch.Tensor[float]): Space length of each dimension.
-    - 
+    - h (torch.nn.parameter.Parameter): Sparse vector h. 
+    - ista_layer: Ista layer for this block.
+    - block_scope (torch.Tensor): Lower and upper bounds for each dimension.
+    
     Methods:
     - add_point(point): Add a point to the sub-block.
     """
@@ -23,10 +26,6 @@ class PartitionBlock:
         ista_layer=None,
         device=None
     ):  
-        print("space_bound",space_bound)
-        print("block_index",block_index)
-        print("block_size", block_size)
-
         self.block_index = block_index
         self.block_size = block_size
         self.device = device
@@ -37,7 +36,6 @@ class PartitionBlock:
         eps = torch.finfo(torch.float32).eps
         base_edge = self.space_bound + torch.mul(torch.tensor(block_index, device=self.device), self.block_size)
         self.block_scope = torch.stack((base_edge - eps, base_edge + self.block_size + eps)).to(self.device)
-        
         self.h = h
         self.amplitude = amplitude
         self.X = []

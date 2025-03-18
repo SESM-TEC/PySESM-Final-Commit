@@ -114,12 +114,8 @@ class UniformPartitionManager(BlockManager):
         # If no T is given, create a T with a default size
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
-            #print("1")
-            #print("self.T.device 1", self.T.device)
         elif type(self.T) is int:
             self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
-            #print("2", device)
-            #print("self.T.device 2", self.T.device)
 
         # When no points and no blocks have been created
         if self.blocks is None: 
@@ -138,7 +134,7 @@ class UniformPartitionManager(BlockManager):
             delta = self.initial_bounds[1] - self.initial_bounds[0]
             
             self.block_size = torch.div(delta, self.T).to(device)
-            self.blocks = np.empty(self.T.cpu().numpy(), dtype=PartitionBlock)#----------
+            self.blocks = np.empty(self.T.cpu().numpy(), dtype=PartitionBlock)
 
             for index in np.ndindex(self.blocks.shape):
                 self.blocks[index] = PartitionBlock(
@@ -168,12 +164,9 @@ class UniformPartitionManager(BlockManager):
                 if init_h:
                     # Squeeze should be computed only with training data
                     block.amplitude = squeeze_factor(block.y)
-                    print("amplitude:", block.amplitude)
-                    print("Maxy",torch.stack(block.y).abs().max())
                     block.h = torch.nn.Parameter(
                         torch.rand(self.n_functions,1,device=device), requires_grad=True
                     )
-                    print("h:", block.h)
 
                     block.h.data /= block.h.data.sum()
 
@@ -256,7 +249,6 @@ class UniformPartitionManager(BlockManager):
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
             )
-            print("Ista:", block.ista_layer)
 
     def retrieve_active_blocks(self):
         """

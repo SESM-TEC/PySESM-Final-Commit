@@ -29,21 +29,29 @@ class KDTree():
         not_mask = node.data[:, node.dim] < node.split_point
         
         greaterData = node.data[mask].clone()
-        print("greaterData:",greaterData.device)
         lowerData = node.data[not_mask].clone()
-
-        print("LowerData",lowerData.device)
-
-        node.data = None
 
         node.right = Node(greaterData)
         node.left = Node(lowerData)
+        
+        self._set_children_bounds(node)
+        node.data = None
+        node.bounds = None
 
         if node.left.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node.left)
 
         if node.right.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node.right)
+    
+    def _set_children_bounds(self, node):
+        if node.bounds is None:
+            bounds, _ = torch.max(node.data, dim=0)
+            node.bounds=bounds.tolist()
+
+        bounds=node.bounds
+        node.left.bounds[node.dim]=node.split_point        
+        node.right.bounds[node.dim]=node.split_point        
 
     def _find_node(self, x, node = None):
         """

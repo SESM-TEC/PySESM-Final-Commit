@@ -6,6 +6,7 @@ from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
+import logging
 import torch
 import numpy as np
 from typing import Union, Callable, Iterator, Type
@@ -38,7 +39,7 @@ class AdaptativePartitionManager(BlockManager):
         self.initial_bounds = initial_bounds
         self.threshold = threshold
         self.logger = logger
-        self.blocks = None
+        self.blocks = []
         self.block_size = None
         self.X = None
         self.y = None
@@ -67,12 +68,22 @@ class AdaptativePartitionManager(BlockManager):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
-        print()
-        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        #device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         if self.kdtree is None:
-            self.kdtree = KDTree(X, device=device)
-        treeNodes=self.kdtree.getleaves()
-        for node in treeNodes:
+
+            self.kdtree = KDTree(X)
+            treeNodes=self.kdtree.get_leaves()
+
+            self.blocks = np.empty(len(treeNodes), dtype=object)  # Creates an empty array of size 5
+
+            # for i in range(len(treeNodes)):
+            #     self.blocks[i] = PartitionBlock(
+            #         0, 
+            #         (i,), 
+                    
+            #     )
+                
+
             #Instantiate blocks and add them to self.blocks.
 
     def _configure_blocks(self, init_h: bool = True):
@@ -107,9 +118,9 @@ class AdaptativePartitionManager(BlockManager):
         """
         self._update_block_arrangement(X)
 
-        self._map_points(X, y) # Sends points to their respective blocks
-        self._vectorized_normalization(self.blocks) # Normalize X coords in each block
-        self._configure_blocks() # Normalize y value and initialize h in each block
+        #self._map_points(X, y) # Sends points to their respective blocks
+        #self._vectorized_normalization(self.blocks) # Normalize X coords in each block
+        #self._configure_blocks() # Normalize y value and initialize h in each block
 
 
     def init_ista_per_block(

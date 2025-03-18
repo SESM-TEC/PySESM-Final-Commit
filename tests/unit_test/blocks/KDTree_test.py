@@ -156,4 +156,11 @@ def test_get_leaves():
 
     assert torch.equal(sortData,sortx)
 
+def test_set_children_bounds():
+    X = torch.randn(30, 6)
+    kd=KDTree(X)
+    #kd._set_children_bounds(kd.root)
+
+    
+
     
