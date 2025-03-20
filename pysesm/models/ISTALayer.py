@@ -14,7 +14,7 @@ License:
 
 import logging
 import torch
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Optional
 
 class ISTALayer(torch.nn.Module):
     """
@@ -59,6 +59,7 @@ class ISTALayer(torch.nn.Module):
             debug: bool = False,
             criterion=None,
             optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
+            parameter_hook: Optional[Callable[[dict], None]] = None,
             device = None
     ):
         """
@@ -72,6 +73,7 @@ class ISTALayer(torch.nn.Module):
             optimizer (torch.optim.Optimizer, optional): Optimizer for parameter updates (default: SGD).
             h (torch.Tensor, optional): Initial sparse vector. If not provided, it is initialized randomly.
             calculate_y_pred (callable, optional): Function to compute predictions (default: None).
+            parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
         """
         super(ISTALayer, self).__init__()
         self.h = None
@@ -81,10 +83,10 @@ class ISTALayer(torch.nn.Module):
         self.evaluation_func = evaluation_func
         self.losses = []
         self.device = device
-        
         self.to(self.device) # Move the layer to the assigned device for ISTA_LAYER
         self.logger = logger
         self.debug = debug
+        self.parameter_hook = parameter_hook
         self.setup()
 
         if criterion is None:
@@ -100,8 +102,6 @@ class ISTALayer(torch.nn.Module):
             self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
         else:
             self.optimizer = optimizer(self.parameters(), lr=alpha)
-        
-        print("ISTA ----------", self.device)
 
         # TODO: add this in the arguments too.  These are used in the custom regularization
         self.threshold = 11
@@ -175,16 +175,8 @@ class ISTALayer(torch.nn.Module):
         """
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
-
         y_pred = self.evaluation_func(dictionary, self.h)
-
         assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
-
-        # DEBUG
-        # print("y:", y[:5])  # First few values
-        # print("y_pred:", y_pred[:5])
-        # print("dict:", dictionary[:5])  # First few values of the dictionary
-
         loss = self.criterion(y, y_pred)
         reg_loss = self.get_custom_regularization()
         total_loss = loss + reg_loss
@@ -209,6 +201,14 @@ class ISTALayer(torch.nn.Module):
 
         with torch.no_grad():
             self.h.data = self.shrinkage()
+        # Call the parameter hook if provided
+        if self.parameter_hook is not None:
+            hook_info = {
+                'h': self.h.clone().detach(),
+                'h_grad': self.h.grad.clone().detach() if self.h.grad is not None else None,
+                'loss': loss.item(),
+            }
+            self.parameter_hook(hook_info)
         return loss
     
     def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
