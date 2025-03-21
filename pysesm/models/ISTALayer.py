@@ -163,7 +163,7 @@ class ISTALayer(torch.nn.Module):
 
     def forward(self, y, dictionary, log_losses=True):
         """
-        Performs a forward pass and updates the layer's parameters using backpropagation.
+        Performs a forward pass 
 
         Args:
             y (torch.Tensor): Ground truth or target vector.
@@ -173,13 +173,18 @@ class ISTALayer(torch.nn.Module):
         Returns:
             torch.Tensor: Estimated loss after forward step
         """
+
+        # Ensure all tensors are on the right device
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
+
+        # Combine the words in the dictionary using self.h
         y_pred = self.evaluation_func(dictionary, self.h)
         assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
+        
         loss = self.criterion(y, y_pred)
-        reg_loss = self.get_custom_regularization()
-        total_loss = loss + reg_loss
+        # reg_loss = self.get_custom_regularization() ## Temporarily removed
+        total_loss = loss # + reg_loss
 
         if log_losses:
             self.losses.append(total_loss.item())
