@@ -18,6 +18,7 @@ from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.enums.HookTypeEnum import HookType
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -119,17 +120,16 @@ experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 3,
+    "n_functions": 10,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
     "ista_alpha": 0.15,
     "ista_lambd": 0.005,
-    "dictionary_alpha": 0.25,
+    "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
     ##"dictionary_criterion": KLDivLossWrapper(),
-    "dictionary_criterion": JensenShannonLossWrapper(),
-    ##"dictionary_criterion": CrossEntropyLossWrapper(),
+    "dictionary_criterion": JensenShannonLossWrapper(), 
     "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
@@ -146,11 +146,14 @@ experiment = {
     "iter": 0,
     "debug": True,
     "device_map": {
-        DeviceTarget.GLOBAL: "cuda",              # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cuda",          # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cuda",   # Dictionary en CPU
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
+    },
+    "use_wandb": True,
+    "active_hooks": [HookType.ISTALAYER],
+    "project_name": "sesm-test"
 }
 
 def show_data(X,y,c,marker,label,ax=None):
@@ -190,15 +193,14 @@ ssesm_model = SSESM(**experiment,logger=logger)
 try:
     # TRAIN AND TEST THE ALL MODELS
     for model in [ssesm_model]: # bsesm_model
-               
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
         model.partial_fit(X_train, y_train,initial_h=torch.tensor([[1.25],[0.5],[0.75]]))
-        Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
+        y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-        plot_surface(testDataset, X_train, y_train, Z_predict, model, experiment["hyp_set"])
+        plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
     plt.show(block=True)
 except KeyboardInterrupt:
