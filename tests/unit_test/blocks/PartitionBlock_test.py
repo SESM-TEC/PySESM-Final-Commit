@@ -38,7 +38,7 @@ def test_add_point_to_block():
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
+    block.new_point(point_x, point_y, pos)
 
     assert len(block.X) == 1
     assert torch.allclose(block.X[0], point_x)
@@ -56,8 +56,8 @@ def test_clear_points():
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
-#     block.clear_points()
+    block.new_point(point_x, point_y, pos)
+    block.clear_points()
 
     assert len(block.X) == 0
     assert len(block.y) == 0
@@ -71,15 +71,15 @@ def test_is_active():
     block_size = torch.tensor([1.0, 1.0], device='cpu')
     block = PartitionBlock(space_bound, block_index, block_size, device='cpu')
 
-#     assert not block.is_active
+    assert not block.is_active
 
     point_x = torch.tensor([0.5, 0.5], device='cpu')
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
+    block.new_point(point_x, point_y, pos)
 
-#     assert block.is_active
+    assert block.is_active
 
 def test_is_point_in_block():
     """Test if a point is within the block's boundaries."""
@@ -91,8 +91,8 @@ def test_is_point_in_block():
     point_inside = torch.tensor([0.5, 0.5], device='cpu')
     point_outside = torch.tensor([1.5, 1.5], device='cpu')
 
-#     assert block.is_point_in_block(point_inside)
-#     assert not block.is_point_in_block(point_outside)
+    assert block.is_point_in_block(point_inside)
+    assert not block.is_point_in_block(point_outside)
 
 def test_normalize():
     """Test the normalization of points within the block."""
@@ -105,8 +105,8 @@ def test_normalize():
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
-#     block.normalize()
+    block.new_point(point_x, point_y, pos)
+    block.normalize()
 
     assert block.normalized_X is not None
     assert torch.allclose(block.normalized_X, torch.tensor([[0.5, 0.5]], device='cpu'))

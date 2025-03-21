@@ -68,10 +68,10 @@ def test_find_block():
 
     block_test = manager._find_block(X)
 
-#     for index in np.ndindex(manager.blocks.shape):
-#         block: PartitionBlock = manager.blocks[index]
-#         if block.is_point_in_block(X):
-#             block_true = block
+    for index in np.ndindex(manager.blocks.shape):
+        block: PartitionBlock = manager.blocks[index]
+        if block.is_point_in_block(X):
+            block_true = block
 
     assert block_test.block_index == block_true.block_index
     assert torch.equal(block_test.block_size, block_true.block_size)
