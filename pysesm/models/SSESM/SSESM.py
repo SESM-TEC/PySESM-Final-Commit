@@ -117,7 +117,7 @@ class SSESM(SESM):
             **kwargs
         )
 
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
 
@@ -127,6 +127,7 @@ class SSESM(SESM):
         Args:
             X (torch.Tensor): Input features for training.
             y (torch.Tensor): Target values.
+            initial_h (torch.Tensor): Initial h value or None for random initialization
             *_: Additional unused positional arguments.
 
         Returns:
@@ -143,6 +144,7 @@ class SSESM(SESM):
             ista_lambd=self.ista_lambd,
             ista_optimizer=self.ista_optimizer,
             evaluation_func=self.evaluation_func,
+            initial_h=initial_h
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
 

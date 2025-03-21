@@ -119,21 +119,22 @@ experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 10,
+    "n_functions": 3,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
     "ista_alpha": 0.15,
     "ista_lambd": 0.005,
-    "dictionary_alpha": 0.1,
+    "dictionary_alpha": 0.25,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
     ##"dictionary_criterion": KLDivLossWrapper(),
-    "dictionary_criterion": JensenShannonLossWrapper(), 
+    "dictionary_criterion": JensenShannonLossWrapper(),
+    ##"dictionary_criterion": CrossEntropyLossWrapper(),
     "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 2000,
+    "model_epochs": 5000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -145,8 +146,8 @@ experiment = {
     "iter": 0,
     "debug": True,
     "device_map": {
-        DeviceTarget.GLOBAL: "cpu",              # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",          # ISTA en GPU 0
+        DeviceTarget.GLOBAL: "cuda",              # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cuda",          # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cuda",   # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     }
@@ -189,9 +190,10 @@ ssesm_model = SSESM(**experiment,logger=logger)
 try:
     # TRAIN AND TEST THE ALL MODELS
     for model in [ssesm_model]: # bsesm_model
+               
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
-        model.partial_fit(X_train, y_train)
+        model.partial_fit(X_train, y_train,initial_h=torch.tensor([[1.25],[0.5],[0.75]]))
         Z_predict, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))

@@ -232,7 +232,8 @@ class UniformPartitionManager(BlockManager):
         ista_alpha: float,
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
+        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],
+        initial_h: torch.Tensor = None
     ):
 
         """
@@ -255,6 +256,8 @@ class UniformPartitionManager(BlockManager):
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
             )
+            if initial_h is not None:
+                block.ista_layer.setup(initial_h) 
 
     def retrieve_active_blocks(self):
         """
