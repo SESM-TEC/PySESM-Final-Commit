@@ -7,21 +7,17 @@ Authors: The SESM Team
 
 License: 
 '''
-
-
 import logging
 import torch
-
+import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
+from pysesm.utils.metric_loggers import *
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -114,7 +110,6 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
-    
 # SESM CONFIGURATION
 experiment = {
     "hyp_set": 1,
@@ -134,7 +129,7 @@ experiment = {
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 5000,
+    "model_epochs": 100,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -151,9 +146,9 @@ experiment = {
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    "use_wandb": True,
-    "active_hooks": [HookType.ISTALAYER],
-    "project_name": "sesm-test"
+    #"dict_layer_hook": dict_layer_hook,
+    #"ista_layer_hook": ista_layer_hook,   
+    "sesm_hook": sesm_hook     
 }
 
 def show_data(X,y,c,marker,label,ax=None):
@@ -195,7 +190,7 @@ try:
     for model in [ssesm_model]: # bsesm_model
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
-        model.partial_fit(X_train, y_train,initial_h=torch.tensor([[1.25],[0.5],[0.75]]))
+        model.partial_fit(X_train, y_train)
         y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))

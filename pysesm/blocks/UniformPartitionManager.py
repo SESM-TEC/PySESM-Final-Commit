@@ -2,9 +2,8 @@ from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 from copy import deepcopy
-from typing import Union, Callable, Iterator, Dict
+from typing import Union, Callable, Iterator, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
 import logging
 import numpy as np
 import torch
@@ -82,13 +81,6 @@ class UniformPartitionManager(BlockManager):
         self.device_manager = device_manager
         self.hook_manager = hook_manager
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
-    
-    def _ista_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        if self.hook_manager:
-            self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -236,7 +228,9 @@ class UniformPartitionManager(BlockManager):
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],
-        initial_h: torch.Tensor = None
+        initial_h: torch.Tensor = None,
+        ista_layer_hook: Optional[Callable[[dict], None]] = None
+
     ):
 
         """
@@ -258,7 +252,7 @@ class UniformPartitionManager(BlockManager):
                 logger=self.logger,
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
-                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
+                parameter_hook=ista_layer_hook
             )
             if initial_h is not None:
                 block.ista_layer.setup(initial_h) 

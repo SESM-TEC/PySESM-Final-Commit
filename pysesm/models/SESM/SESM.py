@@ -20,7 +20,6 @@ from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.hooks_manager.HookManager import HookType
 
 class SESM(torch.nn.Module):
     """
@@ -155,7 +154,9 @@ class SESM(torch.nn.Module):
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
             ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
             device_manager=None,
-            hook_manager=None,
+            dict_layer_hook: Optional[Callable[[dict], None]] = None,
+            ista_layer_hook: Optional[Callable[[dict], None]] = None,  
+            sesm_hook: Optional[Callable[[dict], None]] = None,  
             **kwargs
     ):
         """
@@ -252,8 +253,11 @@ class SESM(torch.nn.Module):
         self.device_manager = device_manager
         self.dictionary_optimizer = dictionary_optimizer
         self.ista_optimizer = ista_optimizer
-        self.hook_manager = hook_manager
-
+        
+        self.sesm_hook = sesm_hook
+        self.dict_layer_hook = dict_layer_hook
+        self.ista_layer_hook = ista_layer_hook
+        
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
 
@@ -275,7 +279,7 @@ class SESM(torch.nn.Module):
             optimizer = ista_optimizer,
             device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
             logger=logger,
-            parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
+            parameter_hook=self.ista_layer_hook
         )
 
         # Instantiate Dictionary Layer
@@ -288,21 +292,9 @@ class SESM(torch.nn.Module):
             logger=logger,
             device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             psi=psi,
-            parameter_hook=self._dictlayer_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.DICTLAYER] else None,
+            parameter_hook=self.dict_layer_hook,
             **kwargs
         )
-    
-    def _ista_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
-
-    def _dictlayer_hook(self, info: Dict) -> None:
-        """
-        Hook for DictLayer to log or store data.
-        """
-        self.hook_manager.log_hook_data(HookType.DICTLAYER, info)
 
     @property
     def ista_layer_losses(self):
@@ -461,6 +453,19 @@ class SESM(torch.nn.Module):
         )
         # DEBUG: TODO: make a hook to use W&B and other stuff like this
         # print(self.ista_layer.h.detach().numpy().flatten())
+
+        # Llamar al hook si está definido
+        if self.sesm_hook is not None:
+            hook_info = {
+                'epoch': self.model_epochs,
+                'dictionary': self.dictionary_layer.dictionary.clone().detach(),
+                'h': self.ista_layer.h.clone().detach(),
+                'loss_ista': self.ista_layer_losses[-1] if self.ista_layer_losses else None,
+                'loss_dict': self.dictionary_layer_losses[-1] if self.dictionary_layer_losses else None,
+                'mu': self.dictionary_layer.theta_parameter_vector[-self.n_features:].clone().detach(),
+                'rho': self.dictionary_layer.theta_parameter_vector[:-self.n_features].clone().detach(),
+            }
+            self.sesm_hook(hook_info)
 
     def predict(
             self,
