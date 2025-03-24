@@ -1,3 +1,4 @@
+
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
@@ -17,7 +18,7 @@ from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_on
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from mpl_toolkits.mplot3d import Axes3D
-from pysesm.utils.metric_loggers import *
+from pysesm.utils.metric_loggers import generic_hook
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -110,6 +111,9 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
+# LOGGER INSTANCE
+logger = setup_logger()
+
 # SESM CONFIGURATION
 experiment = {
     "hyp_set": 1,
@@ -146,9 +150,10 @@ experiment = {
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    #"dict_layer_hook": dict_layer_hook,
-    #"ista_layer_hook": ista_layer_hook,   
-    "sesm_hook": sesm_hook     
+    "dict_layer_hook": lambda info: generic_hook("DictLayer", info, logger=logger,project_name="sesm-test", use_wandb=True),
+    "ista_layer_hook": lambda info: generic_hook("IstaLayer", info, logger=logger,project_name="sesm-test", use_wandb=True),   
+    #"sesm_hook": lambda info: generic_hook("SESM", info, logger=logger,project_name="sesm-test", use_wandb=True)
+    "sesm_hook": lambda info: generic_hook("SESM", info, logger=logger, use_wandb=False)
 }
 
 def show_data(X,y,c,marker,label,ax=None):
@@ -178,8 +183,6 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
 
-# LOGGER INSTANCE
-logger = setup_logger()
 
 # INSTANTIATE THE MODELS
 ssesm_model = SSESM(**experiment,logger=logger)
