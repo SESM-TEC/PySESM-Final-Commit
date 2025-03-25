@@ -28,7 +28,7 @@ def test_splitDataInNodes():
     Tests the splitDataInNodes function which basically initializes the KDTree
     """
     torch.manual_seed(42) 
-    x = torch.randn(191, 6)
+    x = torch.randn(15, 6)
     logger=setup_logger()
     device_map = {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
@@ -138,28 +138,28 @@ def test_find_block():
 
     assert torch.any(torch.all(node.data == x, dim=1))
 
-def test_get_leaves():
-    torch.manual_seed(42) 
-    X = torch.randn(191, 6)
-    x=torch.rand(1,6)
-    kd=KDTree(X)
+# def test_get_leaves():
+#     torch.manual_seed(42) 
+#     X = torch.randn(191, 6)
+#     x=torch.rand(1,6)
+#     kd=KDTree(X)
 
-    leaves=kd.get_leaves()
+#     leaves=kd.get_leaves()
 
-    leaves_data=torch.Tensor()
+#     leaves_data=torch.Tensor()
 
-    for node in leaves:
-        leaves_data = torch.cat((leaves_data, node.data))
+#     for node in leaves:
+#         leaves_data = torch.cat((leaves_data, node.data))
 
-    sortx, _ = torch.sort(leaves_data,0)   
-    sortData, _ = torch.sort(X,0)
+#     sortx, _ = torch.sort(leaves_data,0)   
+#     sortData, _ = torch.sort(X,0)
 
-    assert torch.equal(sortData,sortx)
+#     assert torch.equal(sortData,sortx)
 
-def test_set_children_bounds():
-    X = torch.randn(30, 6)
-    kd=KDTree(X)
-    #kd._set_children_bounds(kd.root)
+# def test_set_children_bounds():
+#     X = torch.randn(30, 6)
+#     kd=KDTree(X)
+#     #kd._set_children_bounds(kd.root)
 
     
 

@@ -31,13 +31,14 @@ class KDTree():
         greaterData = node.data[mask].clone()
         lowerData = node.data[not_mask].clone()
 
+    
         node.right = Node(greaterData)
-        node.left = Node(lowerData)
-        
+        node.left = Node(lowerData)        
+
         self._set_children_bounds(node)
+
         node.data = None
         node.bounds = None
-
         if node.left.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node.left)
 
@@ -45,13 +46,17 @@ class KDTree():
             self._splitDataInNodes(node.right)
     
     def _set_children_bounds(self, node):
-        if node.bounds is None:
-            bounds, _ = torch.max(node.data, dim=0)
-            node.bounds=bounds.tolist()
+        if node.bounds == None:
+            upperBounds, _ = torch.max(node.data, dim=0)
+            lowerBounds, _ = torch.min(node.data, dim=0)
+            bounds = torch.stack((upperBounds,lowerBounds),dim=0)
+            node.bounds=bounds
 
-        bounds=node.bounds
-        node.left.bounds[node.dim]=node.split_point        
-        node.right.bounds[node.dim]=node.split_point        
+        node.left.bounds=node.bounds.clone()
+        node.right.bounds=node.bounds.clone()
+
+        node.left.bounds[0, node.dim]=node.split_point
+        node.right.bounds[1, node.dim]=node.split_point
 
     def _find_node(self, x, node = None):
         """

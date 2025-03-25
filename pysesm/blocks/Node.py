@@ -1,7 +1,7 @@
 import torch
 
 class Node():
-    def __init__(self, Data : torch.Tensor, bounds: list=None):
+    def __init__(self, Data : torch.Tensor, bounds: torch.tensor=None):
         """
         This is a node of a tree, it has standard node attributes:
             data: Dataset
@@ -10,7 +10,7 @@ class Node():
         Aditionally, nodes have some attributes needed for its specific use: 
             split_point (float): Limit value in the greatestVarDim that is used to split the data. 
             dim (int): Dimension where the data has the greatest variance
-            bounds (list): Space limit of each dimension.
+            bounds (torch.Tensor): Space limit of each dimension.
         """
         self.data=Data
         self.left=None

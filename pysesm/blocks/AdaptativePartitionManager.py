@@ -15,7 +15,6 @@ class AdaptativePartitionManager(BlockManager):
     def __init__(
         self,
         logger: logging.Logger,
-        T: Union[torch.Tensor, int, None],
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
@@ -34,13 +33,11 @@ class AdaptativePartitionManager(BlockManager):
         """
         super().__init__()
 
-        self.T = T
         self.n_functions = n_functions
         self.initial_bounds = initial_bounds
         self.threshold = threshold
         self.logger = logger
         self.blocks = []
-        self.block_size = None
         self.X = None
         self.y = None
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
@@ -76,13 +73,18 @@ class AdaptativePartitionManager(BlockManager):
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  # Creates an empty array of size 5
 
-            # for i in range(len(treeNodes)):
-            #     self.blocks[i] = PartitionBlock(
-            #         0, 
-            #         (i,), 
-                    
-            #     )
-                
+            for index in range(len(treeNodes)):
+                 block_size=treeNodes[index].bounds[0]-treeNodes[index].bounds[1]
+
+                 self.blocks[(index,)] = PartitionBlock(
+                    treeNodes[index].bounds, 
+                    (index,), 
+                    block_size
+                 )
+        
+        else:  #Add logic to add points to the tree
+            #for row in 
+            self.kdtree
 
             #Instantiate blocks and add them to self.blocks.
 
