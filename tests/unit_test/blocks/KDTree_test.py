@@ -52,15 +52,15 @@ def test_find_node():
     X = torch.randn(191, 6)
 
     kd=KDTree(X)
-    x=torch.rand(1,6)
+    x=torch.rand(6)
 
     node=kd._find_node(x)
 
     node_test=kd.root
     if node_test.data is None:
-        if x[0, node_test.dim].item() >= node_test.split_point:
+        if x[node_test.dim].item() >= node_test.split_point:
             node_test= kd._find_node(x, node_test.right)
-        elif x[0, node_test.dim].item() < node_test.split_point:
+        elif x[node_test.dim].item() < node_test.split_point:
             node_test = kd._find_node(x, node_test.left)
 
     assert torch.equal(node.data, node_test.data)   
@@ -104,11 +104,11 @@ def test_add_point():
 
     kd=KDTree(X)
     for _ in range(5):
-        x=torch.rand(1,6)
+        x=torch.rand(6)
         kd.add_point(x)
 
+        x=x.unsqueeze(0)
         X=torch.cat((X,x))
-
         Data=torch.Tensor()
         Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
         
@@ -116,8 +116,10 @@ def test_add_point():
         sortData, _ = torch.sort(X,0)
         assert torch.equal(sortData,sortx)
 
+    x=torch.rand(6)
     kd.add_point(x)
     Data=torch.Tensor()
+    Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
     sortx, _ = torch.sort(Data,0)   
     sortData, _ = torch.sort(X,0)
 
@@ -126,7 +128,7 @@ def test_add_point():
 def test_find_block():
     torch.manual_seed(42) 
     X = torch.randn(191, 6)
-    x=torch.rand(1,6)
+    x=torch.rand(6)
     kd=KDTree(X)
 
     node=kd.find_block(x)
@@ -138,23 +140,56 @@ def test_find_block():
 
     assert torch.any(torch.all(node.data == x, dim=1))
 
-# def test_get_leaves():
-#     torch.manual_seed(42) 
-#     X = torch.randn(191, 6)
-#     x=torch.rand(1,6)
-#     kd=KDTree(X)
+def test_get_leaves():
+    torch.manual_seed(42) 
+    X = torch.randn(191, 6)
+    kd=KDTree(X)
 
-#     leaves=kd.get_leaves()
+    leaves=kd.get_leaves()
 
-#     leaves_data=torch.Tensor()
+    leaves_data=torch.Tensor()
 
-#     for node in leaves:
-#         leaves_data = torch.cat((leaves_data, node.data))
+    for node in leaves:
+        assert node.data is not None
+        leaves_data = torch.cat((leaves_data, node.data))
+    
+    sortx, _ = torch.sort(leaves_data,0)   
+    sortData, _ = torch.sort(X,0)
 
-#     sortx, _ = torch.sort(leaves_data,0)   
-#     sortData, _ = torch.sort(X,0)
+    assert torch.equal(sortData,sortx)
+    for _ in range(5):
+        x=torch.rand(6)
 
-#     assert torch.equal(sortData,sortx)
+        kd.add_point(x)
+        x=x.unsqueeze(0)
+        X=torch.cat((X,x))
+
+    leaves=kd.get_leaves()
+    leaves_data1 = torch.empty(0, 6) 
+
+    for node in leaves:
+        assert node.data is not None
+        leaves_data1 = torch.cat((leaves_data1, node.data))
+    
+    sortx, _ = torch.sort(leaves_data1,0)   
+    sortData, _ = torch.sort(X,0)
+
+    assert torch.equal(sortData,sortx)
+
+    x=torch.rand(6)
+    kd.add_point(x)
+
+    leaves=kd.get_leaves()
+    leaves_data2 = torch.empty(0, 6) 
+
+    for node in leaves:
+        assert node.data is not None
+        leaves_data2 = torch.cat((leaves_data2, node.data))
+    
+    sortx, _ = torch.sort(leaves_data2,0)   
+    sortData, _ = torch.sort(X,0)
+    
+    assert not torch.equal(sortData,sortx)
 
 # def test_set_children_bounds():
 #     X = torch.randn(30, 6)
