@@ -83,8 +83,8 @@ class AdaptativePartitionManager(BlockManager):
                  )
         
         else:  #Add logic to add points to the tree
-            #for row in 
-            self.kdtree
+            for row in X:
+                self.kdtree.add_point(row)
 
             #Instantiate blocks and add them to self.blocks.
 
