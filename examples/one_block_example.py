@@ -1,4 +1,3 @@
-
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
@@ -18,7 +17,7 @@ from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_on
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from mpl_toolkits.mplot3d import Axes3D
-from pysesm.utils.metric_loggers import generic_hook
+from pysesm.utils.metric_loggers import *
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -137,7 +136,7 @@ experiment = {
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
-    "T": 1,
+    "T": 2,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "permutation_times": 1,
     "seed": 45,
@@ -150,10 +149,11 @@ experiment = {
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    "dict_layer_hook": lambda info: generic_hook("DictLayer", info, logger=logger,project_name="sesm-test", use_wandb=True),
-    "ista_layer_hook": lambda info: generic_hook("IstaLayer", info, logger=logger,project_name="sesm-test", use_wandb=True),   
-    #"sesm_hook": lambda info: generic_hook("SESM", info, logger=logger,project_name="sesm-test", use_wandb=True)
-    "sesm_hook": lambda info: generic_hook("SESM", info, logger=logger, use_wandb=False)
+    #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
+    #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
+    #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
+    "ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
+    #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
 
 def show_data(X,y,c,marker,label,ax=None):
