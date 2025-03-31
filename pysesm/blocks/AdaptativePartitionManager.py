@@ -2,7 +2,6 @@ from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
@@ -40,6 +39,7 @@ class AdaptativePartitionManager(BlockManager):
         self.blocks = []
         self.X = None
         self.y = None
+        self.total_blocks=0
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
         self.kdtree=None
         self.device_manager=device_manager
@@ -54,7 +54,7 @@ class AdaptativePartitionManager(BlockManager):
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
         """
-        self.kdtree.find_point(x) #Check type, should be PartitionBlock its node
+        return self.kdtree.find_block(x) #Check type, should be PartitionBlock its node
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         """
@@ -75,18 +75,23 @@ class AdaptativePartitionManager(BlockManager):
 
             for index in range(len(treeNodes)):
                  block_size=treeNodes[index].bounds[0]-treeNodes[index].bounds[1]
-
+                 self.total_blocks+=1
                  self.blocks[(index,)] = PartitionBlock(
-                    treeNodes[index].bounds, 
+                    treeNodes[index].bounds[1], 
                     (index,), 
                     block_size
                  )
-        
+
         else:  #Add logic to add points to the tree
             for row in X:
                 self.kdtree.add_point(row)
+                treeNodes=self.kdtree.get_leaves()
+                if len(treeNodes)>self.total_blocks:
+                    self.total_blocks=len(treeNodes)
+                    for index in range(len(treeNodes)):
+                        treeNodes[index].block.block_index=(index,)
+                        self.blocks[(index,)]=treeNodes[index].block
 
-            #Instantiate blocks and add them to self.blocks.
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -106,8 +111,10 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (np.ndarray): Target data corresponding to the input points.
         """
-        self.kdtree=KDTree(X)
-        
+        treeNodes=self.kdtree.get_leaves()
+        for i in range(len(treeNodes)):
+            print(treeNodes[i].block)
+            treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
 
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
@@ -119,8 +126,9 @@ class AdaptativePartitionManager(BlockManager):
             y (torch.Tensor): Target data of shape (n_samples,).
         """
         self._update_block_arrangement(X)
+        self._map_points(X, y)
+        self._vectorized_normalization(self.blocks) # Normalize X coords in each block
 
-        #self._map_points(X, y) # Sends points to their respective blocks
         #self._vectorized_normalization(self.blocks) # Normalize X coords in each block
         #self._configure_blocks() # Normalize y value and initialize h in each block
 

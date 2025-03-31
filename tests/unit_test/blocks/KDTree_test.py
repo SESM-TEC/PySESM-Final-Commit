@@ -46,6 +46,14 @@ def test_splitDataInNodes():
     sortData, _ = torch.sort(x,0)
 
     assert torch.equal(sortData,sortx)
+    leaves=kd.get_leaves()
+    for leaf in leaves:
+        if leaf.data.size()[0] == 5:
+            kd._splitDataInNodes(leaf)
+
+    leaves2=kd.get_leaves()
+    assert leaves!=leaves2
+    
 
 def test_find_node():
     torch.manual_seed(42) 
@@ -115,7 +123,10 @@ def test_add_point():
         sortx, _ = torch.sort(Data,0)
         sortData, _ = torch.sort(X,0)
         assert torch.equal(sortData,sortx)
-
+    leaves=kd.get_leaves()
+    for leaf in leaves:
+        assert leaf is not None
+        assert leaf.block is not None
     x=torch.rand(6)
     kd.add_point(x)
     Data=torch.Tensor()
@@ -157,7 +168,7 @@ def test_get_leaves():
     sortData, _ = torch.sort(X,0)
 
     assert torch.equal(sortData,sortx)
-    for _ in range(5):
+    for _ in range(15):
         x=torch.rand(6)
 
         kd.add_point(x)

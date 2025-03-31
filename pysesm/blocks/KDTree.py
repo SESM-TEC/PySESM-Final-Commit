@@ -1,6 +1,6 @@
 from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
-
+from typing import Union
 import torch
 
 class KDTree():
@@ -12,6 +12,7 @@ class KDTree():
         self.device=device
         self.root = Node(data)
         self.maxNodeSize=maxNodeSize
+        self.total_nodes=1
         
         self._splitDataInNodes(self.root)
         
@@ -32,14 +33,15 @@ class KDTree():
         greaterData = node.data[mask].clone()
         lowerData = node.data[not_mask].clone()
 
-    
+
         node.right = Node(greaterData)
         node.left = Node(lowerData)        
 
         self._set_children_bounds(node)
-
+        
         node.data = None
         node.bounds = None
+        node.block=None
         if node.left.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node.left)
 
@@ -81,7 +83,7 @@ class KDTree():
     def add_point(self, x : torch.Tensor) -> None:
         """
         Adds a point to the KDTree in the corresponding node.
-        If the node exceeds maxNodeSize then split it.
+        If the node exceeds maxNodeSize then split it and create the child blocks.
 
         x: one-dimensional tensor
         """
@@ -90,10 +92,25 @@ class KDTree():
 
         x=x.unsqueeze(0)
         node.data=torch.cat((node.data,x))
+
         if node.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node)
 
-    def find_block(self, point : torch.Tensor) -> PartitionBlock:
+            left_bound=node.left.bounds[0]-node.left.bounds[1]
+            right_bound=node.right.bounds[0]-node.right.bounds[1]
+            node.left.block=PartitionBlock(
+                node.left.bounds[1],
+                (1,),
+                left_bound)
+            
+            node.right.block=PartitionBlock(
+                node.right.bounds[1],
+                (2,),
+                right_bound)
+            print(f"Left block: {node.left.block}")  # Check if the block exists
+            print(f"Right block: {node.right.block}")
+
+    def find_block(self, point : torch.Tensor) -> Union[PartitionBlock, None]:
         """
         Finds the node where a given point is. If no node has the given point, returns None
         
@@ -105,7 +122,7 @@ class KDTree():
         isPointInNode = torch.any(torch.all(node.data == point, dim=1))
 
         if isPointInNode:
-            return node     ##CHECK: THIS MUST RETURN A PARTITIONBLOCK
+            return node    ##CHECK: THIS MUST RETURN A PARTITIONBLOCK
             
         return None
     
@@ -119,7 +136,7 @@ class KDTree():
         if node is None:
             node = self.root
         
-        if node.data is not None:
+        if node.left is None and node.right is None:
             leaves.append(node)
 
         if node.left is not None:
