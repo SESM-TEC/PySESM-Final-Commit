@@ -81,16 +81,18 @@ class AdaptativePartitionManager(BlockManager):
                     (index,), 
                     block_size
                  )
+                 treeNodes[index].block=self.blocks[(index,)]
 
         else:  #Add logic to add points to the tree
             for row in X:
                 self.kdtree.add_point(row)
-                treeNodes=self.kdtree.get_leaves()
-                if len(treeNodes)>self.total_blocks:
-                    self.total_blocks=len(treeNodes)
-                    for index in range(len(treeNodes)):
-                        treeNodes[index].block.block_index=(index,)
-                        self.blocks[(index,)]=treeNodes[index].block
+            treeNodes=self.kdtree.get_leaves()
+            if len(treeNodes)>self.total_blocks:
+                self.blocks = np.empty(len(treeNodes), dtype=object)  # Creates an empty array of size 5
+                for index in range(len(treeNodes)):
+                    treeNodes[index].block.block_index=(index,)
+                    self.blocks[(index,)]=treeNodes[index].block
+                self.total_blocks=len(treeNodes)
 
 
     def _configure_blocks(self, init_h: bool = True):
@@ -113,7 +115,6 @@ class AdaptativePartitionManager(BlockManager):
         """
         treeNodes=self.kdtree.get_leaves()
         for i in range(len(treeNodes)):
-            print(treeNodes[i].block)
             treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
 
 

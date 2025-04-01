@@ -123,10 +123,6 @@ def test_add_point():
         sortx, _ = torch.sort(Data,0)
         sortData, _ = torch.sort(X,0)
         assert torch.equal(sortData,sortx)
-    leaves=kd.get_leaves()
-    for leaf in leaves:
-        assert leaf is not None
-        assert leaf.block is not None
     x=torch.rand(6)
     kd.add_point(x)
     Data=torch.Tensor()

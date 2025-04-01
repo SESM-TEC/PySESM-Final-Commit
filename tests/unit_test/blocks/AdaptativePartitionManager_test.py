@@ -24,6 +24,9 @@ def test_update_block_arrangement():
     for block in partitionManager.blocks:
         assert block is not None
 
+def test_map_points():
+    return
+
 def test_add_points():
     X1 = torch.randn(19, 6)
 
@@ -42,20 +45,19 @@ def test_add_points():
 
     X=torch.Tensor()
 
-    # for node in leaves:
-    #     assert node.block is not None
-        #print(node.block.X, node.data)
-    #     X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
-    # sortX, _ = torch.sort(X,0)   
-    # sortX2, _ = torch.sort(X2,0)
-    # sortX1, _ = torch.sort(X1,0)
+    for node in leaves:
+        assert node.block is not None
+        X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
+    sortX, _ = torch.sort(X,0)   
+    sortX2, _ = torch.sort(X2,0)
+    sortX1, _ = torch.sort(X1,0)
 
-    # assert not torch.equal(sortX1,sortX2)
-    # assert not torch.equal(sortX,sortX1)
-    # assert not torch.equal(sortX,sortX2)
+    assert not torch.equal(sortX1,sortX2)
+    assert not torch.equal(sortX,sortX1)
+    assert not torch.equal(sortX,sortX2)
 
-    # X_added=torch.cat((X1,X2))
-    # sortX_added, _ = torch.sort(X_added,0)
+    X_added=torch.cat((X1,X2))
+    sortX_added, _ = torch.sort(X_added,0)
 
-    # assert torch.equal(sortX_added,sortX)
+    assert torch.equal(sortX_added,sortX)
 

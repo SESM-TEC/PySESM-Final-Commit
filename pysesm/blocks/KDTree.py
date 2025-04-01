@@ -107,8 +107,6 @@ class KDTree():
                 node.right.bounds[1],
                 (2,),
                 right_bound)
-            print(f"Left block: {node.left.block}")  # Check if the block exists
-            print(f"Right block: {node.right.block}")
 
     def find_block(self, point : torch.Tensor) -> Union[PartitionBlock, None]:
         """
