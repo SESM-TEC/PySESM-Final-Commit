@@ -1,5 +1,6 @@
 from pysesm.blocks.Node import Node
 from pysesm.blocks.KDTree import KDTree
+from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.utils.loggers import setup_logger
@@ -107,12 +108,15 @@ def preorder_assert(node, Data, maxNodeSize):
     return Data
 
 def test_add_point():
+    n_features=6
     torch.manual_seed(42) 
-    X = torch.randn(191, 6)
-
-    kd=KDTree(X)
-    for _ in range(5):
-        x=torch.rand(6)
+    X = torch.randn(191, n_features)
+    logger=setup_logger()
+    partitionManager=AdaptativePartitionManager(logger,n_features)
+    partitionManager._update_block_arrangement(X)
+    kd=partitionManager.kdtree
+    for _ in range(kd.maxNodeSize):
+        x=torch.rand(n_features)
         kd.add_point(x)
 
         x=x.unsqueeze(0)
@@ -123,7 +127,12 @@ def test_add_point():
         sortx, _ = torch.sort(Data,0)
         sortData, _ = torch.sort(X,0)
         assert torch.equal(sortData,sortx)
-    x=torch.rand(6)
+    leaves=kd.get_leaves()
+
+    for leaf in leaves:                 #If split nodes, check child nodes have blocks defined
+        assert leaf.block is not None
+
+    x=torch.rand(n_features)
     kd.add_point(x)
     Data=torch.Tensor()
     Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
@@ -164,6 +173,7 @@ def test_get_leaves():
     sortData, _ = torch.sort(X,0)
 
     assert torch.equal(sortData,sortx)
+    
     for _ in range(15):
         x=torch.rand(6)
 

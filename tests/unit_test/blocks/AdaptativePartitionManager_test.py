@@ -25,7 +25,24 @@ def test_update_block_arrangement():
         assert block is not None
 
 def test_map_points():
-    return
+    n_features=6
+    torch.manual_seed(42) 
+    X = torch.randn(191, n_features)
+    y=1
+    logger=setup_logger()
+    partitionManager=AdaptativePartitionManager(logger,n_features)
+    partitionManager._update_block_arrangement(X)
+    partitionManager._map_points(X, y)
+    nodes=partitionManager.kdtree.get_leaves()
+    in_blocks=[]
+    for node in nodes:
+        assert node.block.X != []
+        for x in node.block.X:
+            in_blocks.append(x)
+    in_blocks = torch.stack(in_blocks, dim=0)
+    in_blocks, _ =torch.sort(in_blocks,0)
+    sort_X, _ = torch.sort(X,0)
+    assert torch.equal(in_blocks,sort_X)
 
 def test_add_points():
     X1 = torch.randn(19, 6)

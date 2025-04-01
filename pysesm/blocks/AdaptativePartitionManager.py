@@ -71,24 +71,26 @@ class AdaptativePartitionManager(BlockManager):
             self.kdtree = KDTree(X)
             treeNodes=self.kdtree.get_leaves()
 
-            self.blocks = np.empty(len(treeNodes), dtype=object)  # Creates an empty array of size 5
+            self.blocks = np.empty(len(treeNodes), dtype=object)  
 
             for index in range(len(treeNodes)):
                  block_size=treeNodes[index].bounds[0]-treeNodes[index].bounds[1]
                  self.total_blocks+=1
                  self.blocks[(index,)] = PartitionBlock(
-                    treeNodes[index].bounds[1], 
+                    treeNodes[index].bounds[1],  
                     (index,), 
                     block_size
                  )
-                 treeNodes[index].block=self.blocks[(index,)]
+
+                 treeNodes[index].block=self.blocks[(index,)] #Define node blocks
 
         else:  #Add logic to add points to the tree
             for row in X:
                 self.kdtree.add_point(row)
             treeNodes=self.kdtree.get_leaves()
-            if len(treeNodes)>self.total_blocks:
-                self.blocks = np.empty(len(treeNodes), dtype=object)  # Creates an empty array of size 5
+            if len(treeNodes)>self.total_blocks:    #If a node was split, update self.blocks
+                self.blocks = np.empty(len(treeNodes), dtype=object)  
+                
                 for index in range(len(treeNodes)):
                     treeNodes[index].block.block_index=(index,)
                     self.blocks[(index,)]=treeNodes[index].block
@@ -115,7 +117,8 @@ class AdaptativePartitionManager(BlockManager):
         """
         treeNodes=self.kdtree.get_leaves()
         for i in range(len(treeNodes)):
-            treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
+            if treeNodes[i].block.X!=list(treeNodes[i].data.unbind(dim=0)): 
+                treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
 
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
