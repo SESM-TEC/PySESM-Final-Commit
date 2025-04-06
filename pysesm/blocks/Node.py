@@ -12,13 +12,14 @@ class Node():
             dim (int): Dimension where the data has the greatest variance
             bounds (torch.Tensor): Space limit of each dimension.
         """
-        self.data=Data
+        self.data=Data[:,:-1]
+        self.y=Data[:,-1:]
         self.left=None
         self.right=None 
         self.split_point=None
         self.block=None
         self.bounds=bounds
-        self.dim=self.greatestVarDim(Data)
+        self.dim=self.greatestVarDim(self.data)
     
     def greatestVarDim(self, data : torch.Tensor):
         """Returns the dimension with the greatest variance of the dataset"""

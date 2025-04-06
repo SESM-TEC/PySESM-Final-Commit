@@ -69,6 +69,7 @@ class AdaptativePartitionManager(BlockManager):
         if self.kdtree is None:
 
             self.kdtree = KDTree(X)
+            X=X[:,:-1]
             treeNodes=self.kdtree.get_leaves()
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  
@@ -84,9 +85,9 @@ class AdaptativePartitionManager(BlockManager):
 
                  treeNodes[index].block=self.blocks[(index,)] #Define node blocks
 
-        else:  #Add logic to add points to the tree
+        else:  #logic to add points to the tree
             for row in X:
-                self.kdtree.add_point(row)
+                self.kdtree.add_point(row[:-1],row[-1:])
             treeNodes=self.kdtree.get_leaves()
             if len(treeNodes)>self.total_blocks:    #If a node was split, update self.blocks
                 self.blocks = np.empty(len(treeNodes), dtype=object)  
@@ -129,13 +130,14 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
         """
-        self._update_block_arrangement(X)
+        Xy=torch.cat((X,y), dim=1)
+        self._update_block_arrangement(Xy)
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
 
         #self._vectorized_normalization(self.blocks) # Normalize X coords in each block
         #self._configure_blocks() # Normalize y value and initialize h in each block
-
+# 
 
     def init_ista_per_block(
         self,

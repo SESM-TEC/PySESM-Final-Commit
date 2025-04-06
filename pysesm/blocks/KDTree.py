@@ -26,7 +26,7 @@ class KDTree():
 
         medians = torch.median(node.data, dim=0).values
         node.split_point = medians[node.dim].item()
-        
+        node.data=torch.cat((node.data, node.y), dim=1)
         mask = node.data[:, node.dim] >= node.split_point
         not_mask = node.data[:, node.dim] < node.split_point
         
@@ -80,7 +80,7 @@ class KDTree():
         else:
             return node
 
-    def add_point(self, x : torch.Tensor) -> None:
+    def add_point(self, x : torch.Tensor, y: torch.Tensor) -> None:
         """
         Adds a point to the KDTree in the corresponding node.
         If the node exceeds maxNodeSize then split it and create the child blocks.
@@ -91,7 +91,9 @@ class KDTree():
         node = self._find_node(x)
 
         x=x.unsqueeze(0)
+        y=y.unsqueeze(0)
         node.data=torch.cat((node.data,x))
+        node.y=torch.cat((node.y,y))
 
         if node.data.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node)
