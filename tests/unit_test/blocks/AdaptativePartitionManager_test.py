@@ -24,6 +24,27 @@ def test_update_block_arrangement():
 
     for block in partitionManager.blocks:
         assert block is not None
+def test_configure_blocks():
+    """Test that _configure_blocks correctly sets up blocks."""
+    T = torch.tensor([2, 2], device='cpu')
+    n_functions = 2
+    logger=setup_logger()
+    manager = AdaptativePartitionManager(logger, n_functions)
+
+    X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
+    y = torch.tensor([[1.0], [2.0]], device='cpu')
+
+    manager._update_block_arrangement(X)
+    manager._map_points(X, y)
+    manager._configure_blocks()
+
+    for block in manager.blocks.flat:
+        if len(block.y) > 0:
+            assert block.amplitude is not None
+            assert block.h is not None
+            assert block.target is not None
+            assert isinstance(block.h, torch.nn.Parameter)
+            assert block.h.requires_grad
 
 def test_map_points():
     n_features=5
@@ -77,6 +98,7 @@ def test_add_points():
     for node in leaves:
         assert node.block is not None
         assert node.block.X != []
+        assert node.block.y != []
         X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
     sortX, _ = torch.sort(X,0)   
     sortX2, _ = torch.sort(X2,0)

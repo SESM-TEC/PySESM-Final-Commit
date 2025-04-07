@@ -10,6 +10,25 @@ import torch
 import numpy as np
 from typing import Union, Callable, Iterator, Type
 
+def squeeze_factor(y: np.ndarray):
+    """
+    Calculates a squeezing factor for a given set of values.
+
+    Args:
+        y (np.ndarray): An array containing numeric values.
+
+    Returns:
+        float: The squeezing factor. If the maximum value in y exceeds 1, returns 1 / max(y).
+        Otherwise, returns 1.0.
+    """
+    e_f = 0.0
+    max_y = torch.stack(y).abs().max()
+    if max_y > 1:
+        e_f = 1 / max_y
+    else:
+        e_f = 1.0
+    return e_f
+
 class AdaptativePartitionManager(BlockManager):
     def __init__(
         self,
@@ -110,7 +129,28 @@ class AdaptativePartitionManager(BlockManager):
         Args:
             init_h (bool, optional): Whether to initialize the sparse vector `h` for each block (default is True).
         """
-        
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            if len(block.y) != 0:
+                
+                if init_h:
+                    # Squeeze should be computed only with training data
+                    block.amplitude = squeeze_factor(block.y)
+
+                    block.h = torch.nn.Parameter(
+                        torch.rand(self.n_functions,1), requires_grad=True
+                    )
+
+                    block.h.data /= block.h.data.sum()
+
+                    self.logger.debug(
+                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                    )
+
+                block.target = torch.stack([value * block.amplitude for value in block.y])
+                if block.target.dim() == 1:
+                    block.target = block.target.unsqueeze(-1)
+                block.target = block.target.detach()
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
@@ -122,9 +162,9 @@ class AdaptativePartitionManager(BlockManager):
         """
         treeNodes=self.kdtree.get_leaves()
         for i in range(len(treeNodes)):
-            if treeNodes[i].block.X!=list(treeNodes[i].data.unbind(dim=0)): 
-                 treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
-            if treeNodes[i].block.y!=list(treeNodes[i].y.unbind(dim=0)): 
+            if all(torch.equal(a, b) for a, b in zip(treeNodes[i].block.X,list(treeNodes[i].data.unbind(dim=0)))): 
+                treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
+            if all(torch.equal(a, b) for a, b in zip(treeNodes[i].block.X,list(treeNodes[i].data.unbind(dim=0)))): 
                 treeNodes[i].block.y=list(treeNodes[i].y.unbind(dim=0))
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
@@ -139,10 +179,7 @@ class AdaptativePartitionManager(BlockManager):
         self._update_block_arrangement(Xy)
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
-
-        #self._vectorized_normalization(self.blocks) # Normalize X coords in each block
-        #self._configure_blocks() # Normalize y value and initialize h in each block
-# 
+        self._configure_blocks() # Normalize y value and initialize h in each block 
 
     def init_ista_per_block(
         self,
