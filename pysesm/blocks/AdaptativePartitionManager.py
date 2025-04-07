@@ -54,7 +54,11 @@ class AdaptativePartitionManager(BlockManager):
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
         """
-        return self.kdtree.find_block(x) #Check type, should be PartitionBlock its node
+        node = self.kdtree.find_block(x)
+        if node is not None:
+            return node.block
+        else:
+            return None #Check type, should be PartitionBlock its node
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         """
@@ -106,7 +110,7 @@ class AdaptativePartitionManager(BlockManager):
         Args:
             init_h (bool, optional): Whether to initialize the sparse vector `h` for each block (default is True).
         """
-
+        
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
@@ -119,8 +123,9 @@ class AdaptativePartitionManager(BlockManager):
         treeNodes=self.kdtree.get_leaves()
         for i in range(len(treeNodes)):
             if treeNodes[i].block.X!=list(treeNodes[i].data.unbind(dim=0)): 
-                treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
-
+                 treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
+            if treeNodes[i].block.y!=list(treeNodes[i].y.unbind(dim=0)): 
+                treeNodes[i].block.y=list(treeNodes[i].y.unbind(dim=0))
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """

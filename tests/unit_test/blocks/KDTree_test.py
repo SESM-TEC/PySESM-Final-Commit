@@ -14,7 +14,7 @@ def test_greatestVarDim():
 
     x = torch.randn(20, 5)  
     node=Node(x)
-    dim = node.greatestVarDim(x)
+    dim = node.greatestVarDim(node.data)
 
     variances = x[:,:-1].var(dim=0)
 

@@ -26,12 +26,12 @@ class KDTree():
 
         medians = torch.median(node.data, dim=0).values
         node.split_point = medians[node.dim].item()
-        node.data=torch.cat((node.data, node.y), dim=1)
-        mask = node.data[:, node.dim] >= node.split_point
-        not_mask = node.data[:, node.dim] < node.split_point
+        data=torch.cat((node.data, node.y), dim=1)
+        mask = data[:, node.dim] >= node.split_point
+        not_mask = data[:, node.dim] < node.split_point
         
-        greaterData = node.data[mask].clone()
-        lowerData = node.data[not_mask].clone()
+        greaterData = data[mask].clone()
+        lowerData = data[not_mask].clone()
 
 
         node.right = Node(greaterData)

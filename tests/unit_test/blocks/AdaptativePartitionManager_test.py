@@ -17,6 +17,7 @@ def test_update_block_arrangement():
 
     for block in partitionManager.blocks:
         assert block is not None
+        
     
     X2 = torch.randn(19, 6)
     partitionManager._update_block_arrangement(X2)
@@ -27,8 +28,8 @@ def test_update_block_arrangement():
 def test_map_points():
     n_features=5
     torch.manual_seed(42) 
-    X = torch.randn(191, n_features)
-    y=torch.randn(191,1)
+    X = torch.randn(6, n_features)
+    y = torch.randn(6, 1)
     Xy=torch.cat((X,y),dim=1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features)
@@ -36,14 +37,23 @@ def test_map_points():
     partitionManager._map_points(X, y)
     nodes=partitionManager.kdtree.get_leaves()
     in_blocks=[]
+    in_blocks_y=[]
     for node in nodes:
         assert node.block.X != []
+        assert node.block.y != []
         for x in node.block.X:
             in_blocks.append(x)
+        for yi in node.block.y:
+            in_blocks_y.append(yi)
     in_blocks = torch.stack(in_blocks, dim=0)
+    in_blocks_y = torch.stack(in_blocks_y, dim=0)
     in_blocks, _ =torch.sort(in_blocks,0)
+    in_blocks_y, _ =torch.sort(in_blocks_y,0)
     sort_X, _ = torch.sort(X,0)
+    sort_y, _ = torch.sort(y,0)
+
     assert torch.equal(in_blocks,sort_X)
+    assert torch.equal(in_blocks_y,sort_y)
 
 def test_add_points():
     n_features=5
@@ -66,6 +76,7 @@ def test_add_points():
 
     for node in leaves:
         assert node.block is not None
+        assert node.block.X != []
         X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
     sortX, _ = torch.sort(X,0)   
     sortX2, _ = torch.sort(X2,0)
