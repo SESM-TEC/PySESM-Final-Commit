@@ -18,6 +18,7 @@ from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from mpl_toolkits.mplot3d import Axes3D
 from pysesm.utils.metric_loggers import *
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -132,7 +133,7 @@ experiment = {
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 100,
+    "model_epochs": 10,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
@@ -143,16 +144,18 @@ experiment = {
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
+    "ista_layer_type": ISTALayerEnum.CLASSIC,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
+    
     #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
     #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
     #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
-    "ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
+    #"ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
     #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
 

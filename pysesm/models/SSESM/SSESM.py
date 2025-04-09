@@ -20,7 +20,8 @@ from pysesm.models.SESM.SESM import SESM
 from typing import Callable, Iterator, Optional
 from sklearn.metrics import mean_squared_error
 from pysesm.device_manager.DeviceManager import DeviceManager
-
+from pysesm.customization_factories.ISTALayerFactory import ISTALayerFactory
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 class SSESM(SESM):
     """
     A PyTorch module extending the SESM architecture to implement a surrogate model
@@ -52,6 +53,8 @@ class SSESM(SESM):
         debug=True,
         device_map=None,
         
+        ista_layer_type: ISTALayerEnum = None,
+
         dict_layer_hook: Optional[Callable[[dict], None]] = None,
         ista_layer_hook: Optional[Callable[[dict], None]] = None,   
         sesm_hook: Optional[Callable[[dict], None]] = None,  
@@ -91,8 +94,9 @@ class SSESM(SESM):
             **kwargs: Additional keyword arguments passed to the base class.
         """
         self.ista_layer_hook = ista_layer_hook
+        self.ista_layer_type = ista_layer_type
 
-        self.device_manager = DeviceManager(logger,device_map=device_map)
+        self.device_manager = DeviceManager(logger, device_map=device_map)
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
         self.partition_manager = UniformPartitionManager(
@@ -121,6 +125,7 @@ class SSESM(SESM):
             sesm_hook = sesm_hook,
             dict_layer_hook = dict_layer_hook,
             ista_layer_hook = ista_layer_hook,
+            ista_layer_type = ista_layer_type,
             **kwargs
         )
 
@@ -152,7 +157,8 @@ class SSESM(SESM):
             ista_optimizer=self.ista_optimizer,
             evaluation_func=self.evaluation_func,
             initial_h=initial_h,
-            ista_layer_hook=self.ista_layer_hook
+            ista_layer_hook=self.ista_layer_hook,
+            ista_layer_type=self.ista_layer_type
         )
         active_blocks = self.partition_manager.retrieve_active_blocks()
 

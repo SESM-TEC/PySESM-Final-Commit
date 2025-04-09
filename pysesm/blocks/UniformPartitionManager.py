@@ -4,9 +4,12 @@ from pysesm.models.ISTALayer import ISTALayer
 from copy import deepcopy
 from typing import Union, Callable, Iterator, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.customization_factories.ISTALayerFactory import ISTALayerFactory
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 import logging
 import numpy as np
 import torch
+
 DEFAULT_BLOCKS_PER_DIM = 4
 
 def squeeze_factor(y: np.ndarray):
@@ -80,6 +83,7 @@ class UniformPartitionManager(BlockManager):
         self.y = None
         self.device_manager = device_manager
         self.hook_manager = hook_manager
+
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
@@ -229,8 +233,8 @@ class UniformPartitionManager(BlockManager):
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],
         initial_h: torch.Tensor = None,
-        ista_layer_hook: Optional[Callable[[dict], None]] = None
-
+        ista_layer_hook: Optional[Callable[[dict], None]] = None,
+        ista_layer_type: ISTALayerEnum = None,
     ):
 
         """
@@ -244,7 +248,8 @@ class UniformPartitionManager(BlockManager):
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
-            block.ista_layer = ISTALayer(
+            block.ista_layer = ISTALayerFactory.create(
+                kind=ista_layer_type,
                 n_functions=n_functions,
                 alpha=ista_alpha,
                 lambd=ista_lambd,

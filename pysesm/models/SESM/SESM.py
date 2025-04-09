@@ -13,13 +13,15 @@ import logging
 import time
 import numpy as np
 import torch
-from typing import Dict, Union, Callable, Iterator, Optional
+from typing import Union, Callable, Iterator, Optional
 from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
 from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
+from pysesm.customization_factories.ISTALayerFactory import ISTALayerFactory
 
 class SESM(torch.nn.Module):
     """
@@ -105,7 +107,7 @@ class SESM(torch.nn.Module):
             how well the dictionary represents the data.
     """
     # Type hints for instance attributes: (not class attributes)
-    ista_layer: ISTALayer
+    ista_layer: None
     dictionary_layer: DictLayer
     n_features: int
     model_epochs: int
@@ -153,10 +155,12 @@ class SESM(torch.nn.Module):
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
             ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
-            device_manager=None,
+            device_manager = None,
             dict_layer_hook: Optional[Callable[[dict], None]] = None,
             ista_layer_hook: Optional[Callable[[dict], None]] = None,  
-            sesm_hook: Optional[Callable[[dict], None]] = None,  
+            sesm_hook: Optional[Callable[[dict], None]] = None,
+            ista_layer_type: ISTALayerEnum = None,
+
             **kwargs
     ):
         """
@@ -270,14 +274,16 @@ class SESM(torch.nn.Module):
             "loss_min": [],
         }
         #NOTE: We use the ISTA Layer that come from UniformPartitionManager
-        # Instantiate ISTA Layer
-        self.ista_layer = ISTALayer(
-            n_functions=n_features,
+        # Instantiate ISTA Layer7
+        print("--------", ista_layer_type)
+        self.ista_layer = ISTALayerFactory.create(
+            kind=ista_layer_type,
+            n_functions=n_features, 
             alpha=self.ista_alpha,
             lambd=self.ista_lambd,
             evaluation_func=self.evaluation_func,
-            optimizer = ista_optimizer,
-            device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+            optimizer=ista_optimizer,
+            device=self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
             logger=logger,
             parameter_hook=self.ista_layer_hook
         )
