@@ -4,6 +4,7 @@ from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from copy import deepcopy
 
 import logging
 import torch
@@ -199,6 +200,18 @@ class AdaptativePartitionManager(BlockManager):
             ista_lambd (float): Regularization parameter for the ISTA layer.
             evaluation_func (Callable): Function for evaluating the ISTA layer.
         """
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            block.ista_layer = ISTALayer(
+                n_functions=n_functions,
+                alpha=ista_alpha,
+                lambd=ista_lambd,
+                evaluation_func=evaluation_func,
+                logger=self.logger,
+                optimizer=ista_optimizer,
+                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+                # parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
+            )
         
     def retrieve_active_blocks(self):
         """
@@ -208,6 +221,11 @@ class AdaptativePartitionManager(BlockManager):
             List[PartitionBlock]: A list of active blocks.
         """
 
+        return [
+            self.blocks[index]
+            for index in np.ndindex(self.blocks.shape)
+            if self.blocks[index].is_active
+        ]
 
     def retrieve_test_active_blocks(self, X, y):
         """
@@ -220,4 +238,28 @@ class AdaptativePartitionManager(BlockManager):
         Returns:
             List[PartitionBlock]: A list of active blocks corresponding to the test data.
         """
-        return
+        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        X = X.to(device)
+        y = y.to(device)
+
+        # Copy blocks without X and y, nor their normalized versions, positions, etc.
+        test_blocks = deepcopy(self.blocks) # "deepcopy" is not that deep...
+
+        # Save temporarily current blocks
+        temp_current_blocks = self.blocks
+        self.blocks = test_blocks
+
+        # Map and normalize points into test blocks
+        self._map_points(X, y)
+
+        # This works because it just adjust coordinates to the block relative position
+        self._vectorized_normalization(self.blocks)
+
+        # This only applies the already computed squeeze factor.
+        self._configure_blocks(init_h=False)
+
+        # Retrieved mapped test blocks and return to usual blocks
+        test_active_blocks = self.retrieve_active_blocks()
+        self.blocks = temp_current_blocks
+
+        return test_active_blocks
