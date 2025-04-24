@@ -1,3 +1,14 @@
+'''
+Copyright (C) 2025 Tecnológico de Costa Rica
+
+Adaptive Partition Manager Class
+
+Provides a partition manager based on a kd-tree space partition, which
+adapts itself depending on the data itself.
+
+Author: Hender Valdivia
+'''
+
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.Node import Node

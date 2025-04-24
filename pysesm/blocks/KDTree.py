@@ -1,13 +1,24 @@
+'''
+Copyright (C) 2025 Tecnológico de Costa Rica
+
+Class for a kd-tree implementation
+
+Provides a kd-tree data structure.
+
+Author: Hender Valdivia
+'''
+
 from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from typing import Union
 import torch
 
 class KDTree():
-    def __init__(self, data: torch.Tensor, device=None, maxNodeSize: int = 5):
+    def __init__(self, data: torch.Tensor, maxNodeSize: int = 5, device=None):
         """
-        root (Node): Root node of the tree
+        data (Tensor): Tensor holding all data points
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
+        device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
         self.root = Node(data)
@@ -21,32 +32,30 @@ class KDTree():
         Splits data based on the median of the greatest variance dimension. 
         It stops when the children nodes have 5 points or less
         """
-        if node is None:
-            return
+        if node is None or node.data.size()[0] <= self.maxNodeSize:
+            return      
 
-        medians = torch.median(node.data, dim=0).values
-        node.split_point = medians[node.dim].item()
+        # Calculate median only for the dimension we need
+        node.split_point = torch.median(node.data[:,node.dim]).item()
+
+        # Create combined data (necessary for interface)
         data=torch.cat((node.data, node.y), dim=1)
+
+        # Create mask of data over threshold only once and reuse its inverse
         mask = data[:, node.dim] >= node.split_point
-        not_mask = data[:, node.dim] < node.split_point
+        not_mask = ~mask
         
-        greaterData = data[mask].clone()
-        lowerData = data[not_mask].clone()
-
-
-        node.right = Node(greaterData)
-        node.left = Node(lowerData)        
+        node.right = Node(data[mask])
+        node.left = Node(data[not_mask])        
 
         self._set_children_bounds(node)
         
         node.data = None
         node.bounds = None
         node.block=None
-        if node.left.data.size()[0] > self.maxNodeSize:
-            self._splitDataInNodes(node.left)
-
-        if node.right.data.size()[0] > self.maxNodeSize:
-            self._splitDataInNodes(node.right)
+        
+        self._splitDataInNodes(node.left)
+        self._splitDataInNodes(node.right)
     
     def _set_children_bounds(self, node) -> None:
         """
