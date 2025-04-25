@@ -30,15 +30,20 @@ class Node():
         self.right=None 
         self.split_point=None
         self.block=None
-        self.bounds=bounds
-        self.dim=self.greatestVarDim(self.data)
+        self._updateBounds()
+        self.dim=self.greatestVarDim()
     
-    def greatestVarDim(self, data : torch.Tensor):
+    def greatestVarDim(self):
         """Returns the dimension with the greatest variance of the dataset"""
-        if data.size(0)>1:
-            variances = data.var(dim=0)
-            dim = torch.argmax(variances).item()
-            return dim
+        if self.data.size(0)>1:
+            variances = self.data.var(dim=0)
+            return torch.argmax(variances).item()            
         else:
             return  -1 # Flag that no valid dimension selection was possible
+        
+    def _updateBounds(self):
+        "Update the bounds to fit the internal data"
+        upperBounds, _ = torch.max(self.data, dim=0)
+        lowerBounds, _ = torch.min(self.data, dim=0)
+        self.bounds = torch.stack((upperBounds,lowerBounds),dim=0)        
         

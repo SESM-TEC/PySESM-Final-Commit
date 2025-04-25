@@ -49,9 +49,7 @@ class KDTree():
         
         node.right = Node(data[mask])
         node.left = Node(data[not_mask])        
-
-        self._set_children_bounds(node)
-        
+       
         node.data = None
         node.bounds = None
         node.block=None
