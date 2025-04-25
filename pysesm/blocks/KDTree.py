@@ -35,6 +35,8 @@ class KDTree():
         if node is None or node.data.size()[0] <= self.maxNodeSize:
             return      
 
+        assert(self.maxNodeSize>0)
+
         # Calculate median only for the dimension we need
         node.split_point = torch.median(node.data[:,node.dim]).item()
 
