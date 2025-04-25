@@ -34,7 +34,8 @@ class Node():
         self.dim=self.greatestVarDim()
     
     def greatestVarDim(self):
-        """Returns the dimension with the greatest variance of the dataset"""
+        """Returns the dimension with the greatest variance of the dataset, 
+           or -1 if no preferred dimension can be computed."""
         if self.data.size(0)>1:
             variances = self.data.var(dim=0)
             return torch.argmax(variances).item()            
