@@ -14,9 +14,8 @@ License:
 
 import logging
 import torch
-from typing import Callable, Iterator, Optional
-
-class ISTALayer(torch.nn.Module):
+from pysesm.models.BaseISTALayer import BaseISTALayer
+class ISTALayer(BaseISTALayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
 
