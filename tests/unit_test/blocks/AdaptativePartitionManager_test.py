@@ -61,8 +61,8 @@ def test_configure_blocks():
 def test_map_points():
     n_features=5
     torch.manual_seed(42) 
-    X = torch.randn(6, n_features)
-    y = torch.randn(6, 1)
+    X = torch.randn(192, n_features)
+    y = torch.randn(192, 1)
     Xy=torch.cat((X,y),dim=1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features)
@@ -100,16 +100,16 @@ def test_add_points():
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
     n_features=5
-    X1 = torch.randn(19, n_features)
+    X1 = torch.randn(500, n_features)
 
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
 
-    y = torch.randn(19, 1)
+    y = torch.randn(500, 1)
 
     partitionManager.add_points(X1, y)
 
-    X2 = torch.randn(19, n_features)
+    X2 = torch.randn(500, n_features)
 
     partitionManager.add_points(X2, y)
 
@@ -150,3 +150,36 @@ def test_add_points():
 
     assert torch.equal(sortX_added,sortX)
 
+def test_init_ista_per_block():
+    """Test that init_ista_per_block correctly initializes ISTA layers."""
+    T = torch.tensor([2, 2], device='cpu')
+    n_functions = 2
+    initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], device='cpu')
+    manager = UniformPartitionManager(logger, T, n_functions, initial_bounds, device_manager=device_manager)
+
+    X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
+    y = torch.tensor([[1.0], [2.0]], device='cpu')
+
+    manager._update_block_arrangement(X)
+    manager._map_points(X, y)
+
+    def dummy_eval_func(x, y):
+        return torch.sum(x - y)
+
+    def dummy_optimizer(params, lr):
+        return torch.optim.Adam(params, lr=lr)
+
+    manager.init_ista_per_block(
+        n_functions=2,
+        ista_alpha=0.01,
+        ista_lambd=0.1,
+        evaluation_func=dummy_eval_func,
+        ista_optimizer=dummy_optimizer
+    )
+
+    for block in manager.blocks.flat:
+        if hasattr(block, 'X') and len(block.X) > 0:
+            assert hasattr(block, 'ista_layer')
+            assert isinstance(block.ista_layer, ISTALayer)
+            assert block.ista_layer.alpha == 0.01
+            assert block.ista_layer.lambd == 0.1

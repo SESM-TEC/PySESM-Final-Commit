@@ -16,6 +16,7 @@ import numpy as np
 import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
+from pysesm.blocks import AdaptativePartitionManager
 from pysesm.models.SESM.SESM import SESM
 from typing import Callable, Iterator, Optional
 from sklearn.metrics import mean_squared_error
@@ -98,12 +99,12 @@ class SSESM(SESM):
 
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
-        self.partition_manager = UniformPartitionManager(
-            logger, kwargs.get("T"), 
+        self.partition_manager = AdaptativePartitionManager(
+            logger, 
             n_functions=n_functions, 
             initial_bounds=initial_bounds,
-            device_manager=self.device_manager,
-            hook_manager=self.hook_manager,  # Pass HookManager
+            device_manager=self.device_manager#,
+            #hook_manager=self.hook_manager,  # Pass HookManager
         )
 
         super().__init__(
@@ -147,6 +148,7 @@ class SSESM(SESM):
             y = y.unsqueeze(-1)
 
         self.partition_manager.add_points(X, y)
+        print("Listo AQUI???????????????????????????????????????????")
         self.partition_manager.init_ista_per_block(
             n_functions=self.n_functions,
             ista_alpha=self.ista_alpha,

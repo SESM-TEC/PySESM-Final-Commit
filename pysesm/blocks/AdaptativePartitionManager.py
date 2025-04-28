@@ -73,8 +73,9 @@ class AdaptativePartitionManager(BlockManager):
         self.total_blocks=0
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
         self.kdtree=None
+        self.device_manager=device_manager
         self.device="cpu"
-        if device_manager is not None:
+        if self.device_manager is not None:
             self.device=device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
@@ -190,6 +191,10 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
         """
+        print("AGREGANDO:",X,y)
+        
+        
+
         Xy=torch.cat((X,y), dim=1)
         self._update_block_arrangement(Xy)
         self._map_points(X, y)
@@ -258,22 +263,19 @@ class AdaptativePartitionManager(BlockManager):
 
         # Copy blocks without X and y, nor their normalized versions, positions, etc.
         test_blocks = deepcopy(self.blocks) # "deepcopy" is not that deep...
-
+        test_kdtree = deepcopy(self.kdtree) # "deepcopy" is not that deep...
+ 
         # Save temporarily current blocks
         temp_current_blocks = self.blocks
+        temp_current_kdtree = self.kdtree
         self.blocks = test_blocks
-
-        # Map and normalize points into test blocks
-        self._map_points(X, y)
-
-        # This works because it just adjust coordinates to the block relative position
-        self._vectorized_normalization(self.blocks)
-
-        # This only applies the already computed squeeze factor.
-        self._configure_blocks(init_h=False)
+        self.kdtree = test_kdtree
+        y = y.unsqueeze(1)
+        self.add_points(X, y)
 
         # Retrieved mapped test blocks and return to usual blocks
         test_active_blocks = self.retrieve_active_blocks()
         self.blocks = temp_current_blocks
+        self.kdtree = temp_current_kdtree
 
         return test_active_blocks

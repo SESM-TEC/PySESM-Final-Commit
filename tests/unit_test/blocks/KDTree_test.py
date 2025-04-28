@@ -43,7 +43,7 @@ def test_splitDataInNodes():
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-    x = torch.randn(15, 6).to(device)
+    x = torch.randn(501, 6).to(device)
     kd=KDTree(x,device=device)
     defaultMaxNodeSize = kd.maxNodeSize
 
@@ -55,13 +55,14 @@ def test_splitDataInNodes():
 
     assert torch.equal(sortData,sortx)
     leaves=kd.get_leaves()
-    kd.maxNodeSize = round(defaultMaxNodeSize/2)
+    defaultMaxNodeSize = round(defaultMaxNodeSize/2)
+    kd.maxNodeSize=defaultMaxNodeSize
     for leaf in leaves:
-        if leaf.data.size()[0] == defaultMaxNodeSize:
+        if leaf.data.size()[0] > defaultMaxNodeSize:
             kd._splitDataInNodes(leaf)
 
     leaves2=kd.get_leaves()
-    assert leaves!=leaves2
+    assert [leaf.data for leaf in leaves]!=[leaf.data for leaf in leaves2]
     
 
 def test_find_node():
@@ -118,7 +119,7 @@ def preorder_assert(node, Data, maxNodeSize):
 def test_add_point():
     n_features=5
     torch.manual_seed(42) 
-    X = torch.randn(191, n_features+1)
+    X = torch.randn(500, n_features+1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features+1)
     partitionManager._update_block_arrangement(X)

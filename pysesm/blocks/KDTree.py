@@ -14,7 +14,7 @@ from typing import Union
 import torch
 
 class KDTree():
-    def __init__(self, data: torch.Tensor, maxNodeSize: int = 5, device=None):
+    def __init__(self, data: torch.Tensor, maxNodeSize: int = 500, device=None):
         """
         data (Tensor): Tensor holding all data points
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
