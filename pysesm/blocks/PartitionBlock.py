@@ -29,10 +29,9 @@ class PartitionBlock:
         self.block_index = block_index
         self.block_size = block_size
         self.device = device
-        
+        print("Partition",self.device)
         self.space_bound = space_bound.to(self.device)
         self.block_size = block_size.to(self.device)
-
         eps = torch.finfo(torch.float32).eps
         base_edge = self.space_bound + torch.mul(torch.tensor(block_index, device=self.device), self.block_size)
         self.block_scope = torch.stack((base_edge - eps, base_edge + self.block_size + eps)).to(self.device)
@@ -52,7 +51,6 @@ class PartitionBlock:
         self.X.append(point_x)
         self.y.append(point_y)
         self.positions.append(pos)
-
 
     def clear_points(self):
         """Remove all points"""
@@ -79,6 +77,7 @@ class PartitionBlock:
         tensor_X = torch.stack(self.X).to(self.device)
         min_vals = self.block_scope[0].to(self.device)
         sizes = self.block_size.to(self.device)
+    
         self.normalized_X = (tensor_X - min_vals) / sizes
 
     def clone_test(self):

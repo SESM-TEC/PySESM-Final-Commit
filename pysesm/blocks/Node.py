@@ -23,6 +23,8 @@ class Node():
     
     def greatestVarDim(self, data : torch.Tensor):
         """Returns the dimension with the greatest variance of the dataset"""
-        variances = data.var(dim=0)
-        dim = torch.argmax(variances).item()
-        return dim
+        if data.size()[0]>1: ##Check this workaround, warning was saying data.var() is calculating a division by zero
+            variances = data.var(dim=0)
+            dim = torch.argmax(variances).item()
+            return dim
+        return 0

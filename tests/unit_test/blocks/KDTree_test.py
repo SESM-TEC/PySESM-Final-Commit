@@ -11,15 +11,22 @@ def test_greatestVarDim():
     """
     Asserts the greatest variance dimension is calculated correctly in the node
     """
-
-    x = torch.randn(20, 5)  
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    x = torch.randn(20, 5).to(device)
     node=Node(x)
     dim = node.greatestVarDim(node.data)
-
+    print(node.data.device)
     variances = x[:,:-1].var(dim=0)
-
+    print(variances.device)
     dim_test = torch.argmax(variances).item()
-
     assert dim==dim_test
     return
 
@@ -29,18 +36,18 @@ def test_splitDataInNodes():
     Tests the splitDataInNodes function which basically initializes the KDTree
     """
     torch.manual_seed(42) 
-    x = torch.randn(15, 6)
     logger=setup_logger()
     device_map = {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    x = torch.randn(15, 6).to(device)
     kd=KDTree(x,device=device)
-    Data=torch.Tensor()
+    Data=torch.Tensor().to(kd.device)
     Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
     
     sortx, _ = torch.sort(Data,0)

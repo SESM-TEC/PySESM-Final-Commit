@@ -9,8 +9,9 @@ class KDTree():
         root (Node): Root node of the tree
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
         """
+        print(data.device)
         self.device=device
-        self.root = Node(data)
+        self.root = Node(data.to(self.device))
         self.maxNodeSize=maxNodeSize
         self.total_nodes=1
         
@@ -60,7 +61,6 @@ class KDTree():
 
         node.left.bounds=node.bounds.clone()
         node.right.bounds=node.bounds.clone()
-
         node.left.bounds[0, node.dim]=node.split_point
         node.right.bounds[1, node.dim]=node.split_point
 
@@ -87,7 +87,8 @@ class KDTree():
 
         x: one-dimensional tensor
         """
-
+        x=x.to(self.device)
+        y=y.to(self.device)
         node = self._find_node(x)
 
         x=x.unsqueeze(0)
@@ -103,12 +104,14 @@ class KDTree():
             node.left.block=PartitionBlock(
                 node.left.bounds[1],
                 (1,),
-                left_bound)
+                left_bound,
+                device=self.device)
             
             node.right.block=PartitionBlock(
                 node.right.bounds[1],
                 (2,),
-                right_bound)
+                right_bound,
+                device=self.device)
 
     def find_block(self, point : torch.Tensor) -> Union[PartitionBlock, None]:
         """

@@ -151,7 +151,7 @@ experiment = {
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    "use_wandb": True,
+    "use_wandb": False,
     "active_hooks": [HookType.ISTALAYER],
     "project_name": "sesm-test"
 }

@@ -2,6 +2,8 @@ from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks import KDTree
 from pysesm.blocks import Node
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.models.ISTALayer import ISTALayer
 import torch
 import logging
@@ -12,7 +14,16 @@ def test_update_block_arrangement():
     X1 = torch.randn(19, 6)
 
     logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,6)
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+
+    partitionManager=AdaptativePartitionManager(logger,6,device_manager=device_manager)
     partitionManager._update_block_arrangement(X1)
 
     for block in partitionManager.blocks:
@@ -77,12 +88,22 @@ def test_map_points():
     assert torch.equal(in_blocks_y,sort_y)
 
 def test_add_points():
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+
     n_features=5
     X1 = torch.randn(19, n_features)
 
     logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features)
-    
+    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+
     y = torch.randn(19, 1)
 
     partitionManager.add_points(X1, y)
@@ -93,22 +114,37 @@ def test_add_points():
 
     leaves = partitionManager.kdtree.get_leaves() 
 
-    X=torch.Tensor()
+    X=torch.Tensor().to(device)
 
     for node in leaves:
         assert node.block is not None
         assert node.block.X != []
         assert node.block.y != []
+        for tensor in node.block.X:
+            assert tensor.device.type==device
+        for tensor in node.block.y:
+            assert tensor.device.type==device
+        for tensor in node.block.space_bound:
+            assert tensor.device.type==device
+        for tensor in node.block.block_size:
+            assert tensor.device.type==device
+        for tensor in node.block.block_scope:
+            assert tensor.device.type==device
+        assert node.y.device.type==device
+        assert node.data.device.type==device
+
         X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
     sortX, _ = torch.sort(X,0)   
     sortX2, _ = torch.sort(X2,0)
     sortX1, _ = torch.sort(X1,0)
-
+    sortX2=sortX2.to(device)
+    sortX1=sortX1.to(device)
     assert not torch.equal(sortX1,sortX2)
     assert not torch.equal(sortX,sortX1)
     assert not torch.equal(sortX,sortX2)
 
     X_added=torch.cat((X1,X2))
+    X_added=X_added.to(device)
     sortX_added, _ = torch.sort(X_added,0)
 
     assert torch.equal(sortX_added,sortX)

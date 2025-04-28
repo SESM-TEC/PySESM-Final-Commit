@@ -4,7 +4,6 @@ from pysesm.models.ISTALayer import ISTALayer
 from copy import deepcopy
 from typing import Union, Callable, Iterator, Dict
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
 import logging
 import numpy as np
 import torch
@@ -83,12 +82,12 @@ class UniformPartitionManager(BlockManager):
         self.hook_manager = hook_manager
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
     
-    def _ista_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        if self.hook_manager:
-            self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
+    # def _ista_hook(self, info: Dict) -> None:
+    #     """
+    #     Hook for ISTALayer to log or store data.
+    #     """
+    #     if self.hook_manager:
+    #         self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -126,7 +125,7 @@ class UniformPartitionManager(BlockManager):
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
         elif type(self.T) is int:
             self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
-
+    
         # When no points and no blocks have been created
         if self.blocks is None: 
             # Check for user given initial bounds
@@ -197,21 +196,21 @@ class UniformPartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (np.ndarray): Target data corresponding to the input points.
         """
+
         device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         X = X.to(device)
+        #print("before",y)
         y = [yi.to(device) for yi in y]
-
+        #print("after",y)
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
                 selected_block.new_point(X[i], y[i], i)
-
         # Fix dimensions at the end
         for idx in np.ndindex(self.blocks.shape):
             block = self.blocks[idx]
             if len(block.y) > 0:  # Only if block has points
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
-
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
         Adds points to the blocks, updating the partitioning and configuration as needed.
@@ -258,7 +257,7 @@ class UniformPartitionManager(BlockManager):
                 logger=self.logger,
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
-                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
+                # parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
             )
 
     def retrieve_active_blocks(self):
