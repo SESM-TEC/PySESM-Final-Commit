@@ -1,16 +1,28 @@
+'''
+Copyright (C) 2025 Tecnológico de Costa Rica
+
+Class for a Node in a kd-tree 
+
+Provides a kd-tree node 
+
+Author: Hender Valdivia
+'''
+
 import torch
 
 class Node():
     def __init__(self, Data : torch.Tensor, bounds: torch.tensor=None):
         """
         This is a node of a tree, it has standard node attributes:
-            data: Dataset
+            data: Dataset holding all but the last columns of the given Data
+            y:    Labels, corresponding to the last column of the given Data
             right, left: Right and left child nodes
             
-        Aditionally, nodes have some attributes needed for its specific use: 
+        Aditionally, nodes have some attributes needed for its specific use:
+        
             split_point (float): Limit value in the greatestVarDim that is used to split the data. 
             dim (int): Dimension where the data has the greatest variance
-            bounds (torch.Tensor): Space limit of each dimension.
+            bounds (torch.Tensor): Space limits of each dimension.
         """
         self.data=Data[:,:-1]
         self.y=Data[:,-1:]
@@ -18,13 +30,21 @@ class Node():
         self.right=None 
         self.split_point=None
         self.block=None
-        self.bounds=bounds
-        self.dim=self.greatestVarDim(self.data)
+        self._updateBounds()
+        self.dim=self.greatestVarDim()
     
-    def greatestVarDim(self, data : torch.Tensor):
-        """Returns the dimension with the greatest variance of the dataset"""
-        if data.size()[0]>1: ##Check this workaround, warning was saying data.var() is calculating a division by zero
-            variances = data.var(dim=0)
-            dim = torch.argmax(variances).item()
-            return dim
-        return 0
+    def greatestVarDim(self):
+        """Returns the dimension with the greatest variance of the dataset, 
+           or -1 if no preferred dimension can be computed."""
+        if self.data.size(0)>1:
+            variances = self.data.var(dim=0)
+            return torch.argmax(variances).item()            
+        else:
+            return  -1 # Flag that no valid dimension selection was possible
+        
+    def _updateBounds(self):
+        "Update the bounds to fit the internal data"
+        upperBounds, _ = torch.max(self.data, dim=0)
+        lowerBounds, _ = torch.min(self.data, dim=0)
+        self.bounds = torch.stack((upperBounds,lowerBounds),dim=0)        
+        

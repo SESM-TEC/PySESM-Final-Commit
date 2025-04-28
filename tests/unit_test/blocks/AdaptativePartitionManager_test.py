@@ -35,6 +35,7 @@ def test_update_block_arrangement():
 
     for block in partitionManager.blocks:
         assert block is not None
+        
 def test_configure_blocks():
     """Test that _configure_blocks correctly sets up blocks."""
     T = torch.tensor([2, 2], device='cpu')

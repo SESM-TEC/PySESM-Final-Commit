@@ -22,8 +22,8 @@ def test_greatestVarDim():
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
     x = torch.randn(20, 5).to(device)
     node=Node(x)
-    dim = node.greatestVarDim(node.data)
-    print(node.data.device)
+    dim = node.greatestVarDim()
+
     variances = x[:,:-1].var(dim=0)
     print(variances.device)
     dim_test = torch.argmax(variances).item()
@@ -47,16 +47,19 @@ def test_splitDataInNodes():
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
     x = torch.randn(15, 6).to(device)
     kd=KDTree(x,device=device)
+    defaultMaxNodeSize = kd.maxNodeSize
+
     Data=torch.Tensor().to(kd.device)
-    Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
+    Data=preorder_assert(kd.root, Data, defaultMaxNodeSize)
     
     sortx, _ = torch.sort(Data,0)
     sortData, _ = torch.sort(x[:,:-1],0)
 
     assert torch.equal(sortData,sortx)
     leaves=kd.get_leaves()
+    kd.maxNodeSize = round(defaultMaxNodeSize/2)
     for leaf in leaves:
-        if leaf.data.size()[0] == 5:
+        if leaf.data.size()[0] == defaultMaxNodeSize:
             kd._splitDataInNodes(leaf)
 
     leaves2=kd.get_leaves()
