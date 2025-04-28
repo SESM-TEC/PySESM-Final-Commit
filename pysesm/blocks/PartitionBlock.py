@@ -29,7 +29,6 @@ class PartitionBlock:
         self.block_index = block_index
         self.block_size = block_size
         self.device = device
-        print("Partition",self.device)
         self.space_bound = space_bound.to(self.device)
         self.block_size = block_size.to(self.device)
         eps = torch.finfo(torch.float32).eps

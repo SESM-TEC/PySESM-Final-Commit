@@ -113,9 +113,7 @@ class AdaptativePartitionManager(BlockManager):
 
             for index in range(len(treeNodes)):
                  block_size=treeNodes[index].bounds[0]-treeNodes[index].bounds[1]
-                 print("size:", block_size.device)
                  self.total_blocks+=1
-                 print("device", self.device)
                  self.blocks[(index,)] = PartitionBlock(
                     treeNodes[index].bounds[1],  
                     (index,), 

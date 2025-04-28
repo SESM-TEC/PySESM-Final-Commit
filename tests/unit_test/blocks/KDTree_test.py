@@ -16,7 +16,7 @@ def test_greatestVarDim():
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
@@ -25,11 +25,9 @@ def test_greatestVarDim():
     dim = node.greatestVarDim()
 
     variances = x[:,:-1].var(dim=0)
-    print(variances.device)
     dim_test = torch.argmax(variances).item()
     assert dim==dim_test
     return
-
 
 def test_splitDataInNodes():
     """
@@ -41,7 +39,7 @@ def test_splitDataInNodes():
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
@@ -91,7 +89,7 @@ def preorder_assert(node, Data, maxNodeSize):
     Asserts the nodes that are not in the lowest level have no data,
     Asserts that no node has only a left or only a right child.
     Asserts every node with data has the maximum node size or less.
-    Returns the concatenated data from the lowest-level nodes.
+    Returns the concatenated data from the lowest-level nodes.(It could be done using get_leaves())
     """
     if node.left is not None:
         assert node.right is not None
@@ -228,10 +226,7 @@ def test_get_leaves():
     
     assert not torch.equal(sortData[:, :-1],sortx)
 
-# def test_set_children_bounds():
-#     X = torch.randn(30, 6)
-#     kd=KDTree(X)
-#     #kd._set_children_bounds(kd.root)
+
 
     
 

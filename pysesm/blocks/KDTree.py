@@ -20,7 +20,6 @@ class KDTree():
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
         device (string or None): Device where internal tensors will be stored.
         """
-        print(data.device)
         self.device=device
         self.root = Node(data.to(self.device))
         self.maxNodeSize=maxNodeSize

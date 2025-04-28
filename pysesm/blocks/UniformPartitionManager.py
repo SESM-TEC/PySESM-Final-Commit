@@ -199,9 +199,7 @@ class UniformPartitionManager(BlockManager):
 
         device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         X = X.to(device)
-        #print("before",y)
         y = [yi.to(device) for yi in y]
-        #print("after",y)
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:

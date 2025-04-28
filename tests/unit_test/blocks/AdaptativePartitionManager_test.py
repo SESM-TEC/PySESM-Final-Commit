@@ -18,7 +18,7 @@ def test_update_block_arrangement():
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
@@ -94,7 +94,7 @@ def test_add_points():
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cuda"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
