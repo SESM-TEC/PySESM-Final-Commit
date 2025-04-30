@@ -1,7 +1,7 @@
 from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 from pysesm.models.BaseISTALayer import BaseISTALayer
 from pysesm.models.ISTALayer import ISTALayer
-#from pysesm.models.FISTALayer import FISTALayer
+from pysesm.models.FISTALayer import FISTALayer
 
 class ISTALayerFactory:
     """
