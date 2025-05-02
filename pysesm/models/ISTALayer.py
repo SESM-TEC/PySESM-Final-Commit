@@ -195,7 +195,7 @@ class ISTALayer(torch.nn.Module):
                     X = X / torch.norm(X)
                 
                 # Compute largest eigenvalue using LOBPCG
-                eigenvalues, eigenvectors = torch.lobpcg(gram, X, largest=True)
+                eigenvalues, eigenvectors = torch.lobpcg(A=gram, k=1, X=X, largest=True)
                 
                 # Store eigenvector for warm starting next time
                 self.last_eigenvector = eigenvectors
