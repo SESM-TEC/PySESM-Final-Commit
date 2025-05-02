@@ -206,9 +206,12 @@ class ISTALayer(torch.nn.Module):
                 # Transpose for matrix multiplication
                 d_t = dictionary.T
                 
-                # Initialize random vector
-                v = torch.randn(dictionary.shape[1], 1, device=self.device)
-                v = v / torch.norm(v)
+                # Initialize vector - use warm start if available
+                if hasattr(self, 'last_power_vector') and self.last_power_vector is not None:
+                    v = self.last_power_vector.clone()
+                else:
+                    v = torch.randn(dictionary.shape[1], 1, device=self.device)
+                    v = v / torch.norm(v)
                 
                 # Power iteration
                 for _ in range(self.config.power_iterations):
@@ -217,9 +220,12 @@ class ISTALayer(torch.nn.Module):
                     if v_norm > 0:
                         v = v / v_norm
                 
-                # Compute Rayleigh quotient
-                L_estimate = torch.matmul(v.T, torch.matmul(torch.matmul(d_t, dictionary), v)).item()
+                # Store vector for warm starting next time
+                self.last_power_vector = v.clone()
                 
+                # Compute Rayleigh quotient
+                L_estimate = torch.matmul(v.T, torch.matmul(torch.matmul(d_t, dictionary), v)).item()                
+
             elif self.config.step_size_method == StepSizeMethod.FROBENIUS:
                 # Frobenius norm upper bound (fastest but less tight)
                 # For MSE loss, L <= 2 * ||D||_F^2
@@ -300,8 +306,8 @@ class ISTALayer(torch.nn.Module):
             # Call parameter hook if provided
             if self.parameter_hook is not None:
                 hook_info = {
-                    'h': self.h.clone().detach(),
-                    'gradient': gradient.clone().detach(),
+                    'h': self.h.detach().clone(),
+                    'gradient': gradient.detach().clone(),
                     'loss': loss.item(),
                     'alpha': step_size
                 }

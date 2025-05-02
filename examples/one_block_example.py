@@ -131,7 +131,7 @@ experiment = {
         step_size_method=StepSizeMethod.POWER_ITERATION,
         power_iterations=10,
         n_functions=n_functions,
-        criterion=JensenShannonLossWrapper(),
+        criterion=torch.nn.MSELoss(),
         evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
     ),
     "dictionary_alpha": 0.1,
@@ -143,7 +143,7 @@ experiment = {
     "mu_epochs": 10,
     "model_epochs": 5000,
     "dict_epochs": 10,
-    "ista_epochs": 10,
+    "ista_epochs": 100,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
@@ -159,7 +159,7 @@ experiment = {
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
     "use_wandb": False,
-    "active_hooks": [HookType.ISTALAYER],
+    "active_hooks": [],
     "project_name": "sesm-test"
 }
 
