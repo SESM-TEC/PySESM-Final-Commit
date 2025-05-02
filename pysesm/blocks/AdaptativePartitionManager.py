@@ -191,9 +191,6 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
         """
-        print("AGREGANDO:",X,y)
-        
-        
 
         Xy=torch.cat((X,y), dim=1)
         self._update_block_arrangement(Xy)
@@ -271,8 +268,11 @@ class AdaptativePartitionManager(BlockManager):
         self.blocks = test_blocks
         self.kdtree = test_kdtree
         y = y.unsqueeze(1)
-        self.add_points(X, y)
-
+        Xy=torch.cat((X,y), dim=1)
+        self._update_block_arrangement(Xy)
+        self._map_points(X, y)
+        self._vectorized_normalization(self.blocks) # Normalize X coords in each block
+        self._configure_blocks(init_h=False) # Normalize y value and initialize h in each block 
         # Retrieved mapped test blocks and return to usual blocks
         test_active_blocks = self.retrieve_active_blocks()
         self.blocks = temp_current_blocks

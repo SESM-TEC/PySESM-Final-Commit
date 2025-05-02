@@ -155,7 +155,16 @@ def test_init_ista_per_block():
     T = torch.tensor([2, 2], device='cpu')
     n_functions = 2
     initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], device='cpu')
-    manager = UniformPartitionManager(logger, T, n_functions, initial_bounds, device_manager=device_manager)
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    manager = AdaptativePartitionManager(logger, n_functions, initial_bounds, device_manager=device_manager)
 
     X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
     y = torch.tensor([[1.0], [2.0]], device='cpu')
@@ -183,3 +192,85 @@ def test_init_ista_per_block():
             assert isinstance(block.ista_layer, ISTALayer)
             assert block.ista_layer.alpha == 0.01
             assert block.ista_layer.lambd == 0.1
+
+    for leaf in manager.kdtree.get_leaves():
+        assert hasattr(leaf.block, 'ista_layer')
+        assert isinstance(block.ista_layer, ISTALayer)
+        assert leaf.block.ista_layer is not None
+        assert leaf.block.ista_layer.alpha == 0.01
+        assert leaf.block.ista_layer.lambd == 0.1
+
+def test_retrieve_active_blocks():
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+
+    n_features=5
+    X1 = torch.randn(500, n_features)
+    y = torch.randn(500, 1)
+    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+    partitionManager.add_points(X1, y)
+    activeBlocks=partitionManager.retrieve_active_blocks()
+    
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert not (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is None
+
+def test_retrieve_test_active_blocks():
+    logger=setup_logger()
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+
+    n_features=5
+    X1 = torch.randn(500, n_features)
+    y = torch.randn(500, 1)
+    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+    partitionManager.add_points(X1, y)
+    activeBlocks=partitionManager.retrieve_active_blocks()
+    
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert not (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is None
+    def dummy_eval_func(x, y):
+        return torch.sum(x - y)
+
+    def dummy_optimizer(params, lr):
+        return torch.optim.Adam(params, lr=lr)
+    partitionManager.init_ista_per_block(
+        n_functions=2,
+        ista_alpha=0.01,
+        ista_lambd=0.1,
+        evaluation_func=dummy_eval_func,
+        ista_optimizer=dummy_optimizer
+    )
+    Xt = torch.randn(50, n_features)
+    yt = torch.randn(50, 1)
+    yt = yt.squeeze(1)
+    activeBlocks=partitionManager.retrieve_active_blocks()
+    activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is not None
+    for block in activeTestBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert not (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is None
