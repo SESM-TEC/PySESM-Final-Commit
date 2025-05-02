@@ -9,6 +9,7 @@ License:
 '''
 
 from pysesm.blocks.PartitionBlock import PartitionBlock
+from pysesm.models.ISTALayer import ISTAConfig
 
 from abc import ABC, abstractmethod
 from typing import Union, Callable, Iterator
@@ -145,11 +146,7 @@ class BlockManager(ABC):
     @abstractmethod
     def init_ista_per_block(
         self,
-        n_functions: int,
-        ista_alpha: float,
-        ista_lambd: float,
-        evaluation_func: Callable[[Tensor, Tensor], Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
+        ista_config: ISTAConfig
     ):
         pass
 

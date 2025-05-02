@@ -1,6 +1,6 @@
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.models.ISTALayer import ISTALayer
+from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
 from copy import deepcopy
 from typing import Union, Callable, Iterator, Dict
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
@@ -231,12 +231,7 @@ class UniformPartitionManager(BlockManager):
 
     def init_ista_per_block(
         self,
-        n_functions: int,
-        ista_alpha: float,
-        ista_lambd: float,
-        evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer],
-        initial_h: torch.Tensor = None
+        ista_config: ISTAConfig
     ):
 
         """
@@ -251,17 +246,11 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             block.ista_layer = ISTALayer(
-                n_functions=n_functions,
-                alpha=ista_alpha,
-                lambd=ista_lambd,
-                evaluation_func=evaluation_func,
+                ista_config,
                 logger=self.logger,
-                optimizer=ista_optimizer,
+                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
-                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
             )
-            if initial_h is not None:
-                block.ista_layer.setup(initial_h) 
 
     def retrieve_active_blocks(self):
         """

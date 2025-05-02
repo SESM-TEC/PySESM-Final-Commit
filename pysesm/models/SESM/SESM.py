@@ -18,7 +18,7 @@ from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
 from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
-from pysesm.models.ISTALayer import ISTALayer
+from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.hooks_manager.HookManager import HookType
 
@@ -51,18 +51,8 @@ class SESM(torch.nn.Module):
         ista_epochs (int):
             The number of epochs dedicated specifically to training the ISTA layer, focusing on the sparse encoding.
 
-        ista_alpha (float):
-            The learning rate for the ISTA layer, controlling how much to adjust the sparse encodings during training.
-
-        ista_lambd (float):
-            The shrinkage threshold used in the ISTA layer, if the absolute value of an entry in h is below this,
-            then that entry is forced to zero, which promotes sparsity.
-
-        ista_optimizer (torch.optim.Optimizer):
-            A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
-            receives the parameters to be iteratively optimized.
-            Example:
-            ista_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
+        ista_config (ISTAConfig):
+            Configuration of the ISTA layer
 
         dictionary_alpha (float):
             The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
@@ -111,8 +101,7 @@ class SESM(torch.nn.Module):
     n_features: int
     model_epochs: int
     ista_epochs: int
-    ista_alpha: float
-    ista_lambd: float
+    ista_config: ISTAConfig
     dictionary_alpha: float
     seed: int
     debug: bool
@@ -125,7 +114,6 @@ class SESM(torch.nn.Module):
     mu_epochs: int
     rho_epochs: int
     dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
-    ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
 
     # Constant class attributes
     evaluation_func_registry: dict[
@@ -143,8 +131,7 @@ class SESM(torch.nn.Module):
             psi: Union[SurrogateFunction, SurrogateFunctionEnum],
             model_epochs: int,
             ista_epochs: int,
-            ista_alpha: float,
-            ista_lambd: float,
+            ista_config: ISTAConfig,
             dictionary_alpha: float,
             mu_epochs: int,
             rho_epochs: int,
@@ -153,7 +140,6 @@ class SESM(torch.nn.Module):
             debug: bool = False,
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
-            ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
             device_manager=None,
             hook_manager=None,
             **kwargs
@@ -185,19 +171,9 @@ class SESM(torch.nn.Module):
             ista_epochs (int):
                 The number of epochs dedicated specifically to training the ISTA layer, focusing on the sparse encoding.
 
-            ista_alpha (float):
-                The learning rate for the ISTA layer, controlling how much to adjust the sparse encodings during training.
-
-            ista_lambd (float):
-                The shrinkage threshold used in the ISTA layer, if the absolute value of an entry in h is below this,
-                then that entry is forced to zero, which promotes sparsity.
-
-            ista_optimizer (torch.optim.Optimizer):
-                A "factory" for an optimizer.  The provided callable is expected to construct the optimizer and 
-                receives the parameters to be iteratively optimized.
-                Example:
-                ista_opt_factory = lambda params, lr: torch.optim.NAdam(params, lr=lr, betas=(0.9, 0.999))
-
+            ista_config (ISTAConfig):
+                Configuration for ISTA layers.
+        
             dictionary_alpha (float):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
                 training.
@@ -237,10 +213,8 @@ class SESM(torch.nn.Module):
         self.n_features = n_features
         self.n_functions = n_functions
         self.model_epochs = model_epochs
-        self.ista_alpha = ista_alpha
-        self.ista_optimizer = ista_optimizer
+        self.ista_config = ista_config
         self.ista_epochs = ista_epochs
-        self.ista_lambd = ista_lambd
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
@@ -251,7 +225,6 @@ class SESM(torch.nn.Module):
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
         self.device_manager = device_manager
         self.dictionary_optimizer = dictionary_optimizer
-        self.ista_optimizer = ista_optimizer
         self.hook_manager = hook_manager
 
         if self.seed is not None and self.seed != "None":
@@ -267,15 +240,16 @@ class SESM(torch.nn.Module):
         }
         #NOTE: We use the ISTA Layer that come from UniformPartitionManager
         # Instantiate ISTA Layer
+
+        # Ensure configuration consistency
+        self.ista_config.n_functions = n_functions
+        self.ista_config.evaluation_func = self.evaluation_func
+        
         self.ista_layer = ISTALayer(
-            n_functions=n_features,
-            alpha=self.ista_alpha,
-            lambd=self.ista_lambd,
-            evaluation_func=self.evaluation_func,
-            optimizer = ista_optimizer,
-            device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+            config=self.ista_config,
             logger=logger,
             parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
+            device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
         )
 
         # Instantiate Dictionary Layer

@@ -19,6 +19,7 @@ from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_on
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.enums.HookTypeEnum import HookType
+from pysesm.models.ISTALayer import ISTAConfig, StepSizeMethod
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -116,22 +117,28 @@ class JensenShannonLossWrapper(torch.nn.Module):
 
     
 # SESM CONFIGURATION
+n_functions=10
 experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 10,
+    "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.15,
-    "ista_lambd": 0.005,
+    "ista_config": ISTAConfig(
+        alpha=0.15,
+        lambd=0.005,
+        step_size_method=StepSizeMethod.POWER_ITERATION,
+        power_iterations=10,
+        n_functions=n_functions,
+        criterion=JensenShannonLossWrapper(),
+        evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    ),
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
     ##"dictionary_criterion": KLDivLossWrapper(),
     "dictionary_criterion": JensenShannonLossWrapper(), 
-    "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
     "model_epochs": 5000,
@@ -151,7 +158,7 @@ experiment = {
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    "use_wandb": True,
+    "use_wandb": False,
     "active_hooks": [HookType.ISTALAYER],
     "project_name": "sesm-test"
 }
@@ -174,6 +181,9 @@ def show_data(X,y,c,marker,label,ax=None):
     plt.show(block=False)
     return ax
 
+# Ensure consistency
+assert(experiment["ista_config"].n_functions == experiment["n_functions"])
+
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
 
@@ -195,7 +205,7 @@ try:
     for model in [ssesm_model]: # bsesm_model
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
-        model.partial_fit(X_train, y_train,initial_h=torch.tensor([[1.25],[0.5],[0.75]]))
+        model.partial_fit(X_train, y_train)
         y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
