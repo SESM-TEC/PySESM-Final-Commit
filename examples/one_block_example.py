@@ -143,7 +143,7 @@ experiment = {
     "mu_epochs": 10,
     "model_epochs": 5000,
     "dict_epochs": 10,
-    "ista_epochs": 100,
+    "ista_epochs": 500,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
