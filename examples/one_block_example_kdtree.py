@@ -1,4 +1,4 @@
-'''
+'''    
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
 Trivial example with one single block trying to represent three gaussians
@@ -7,7 +7,6 @@ Authors: The SESM Team
 
 License: 
 '''
-
 
 import logging
 import torch
@@ -18,7 +17,6 @@ from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -118,7 +116,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
 # SESM CONFIGURATION
 experiment = {
     "hyp_set": 1,
-    "n_samples": 50,
+    "n_samples": 500,
     "n_features": 2,
     "n_functions": 10,
     "eig_range": [0.05, 0.2],
@@ -134,26 +132,25 @@ experiment = {
     "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 10,
+    "model_epochs": 2000,
     "dict_epochs": 10,
     "ista_epochs": 10,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
+    "partition_manager": "Adaptative",
+    "maxNodeSize": 100,
     "permutation_times": 1,
     "seed": 45,
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
     "device_map": {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.GLOBAL: "cpu",              # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",          # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",   # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    },
-    "use_wandb": False,
-    "active_hooks": [HookType.ISTALAYER],
-    "project_name": "sesm-test"
+    }
 }
 
 def show_data(X,y,c,marker,label,ax=None):

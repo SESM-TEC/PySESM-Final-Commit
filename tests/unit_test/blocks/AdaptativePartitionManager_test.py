@@ -23,7 +23,7 @@ def test_update_block_arrangement():
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
-    partitionManager=AdaptativePartitionManager(logger,6,device_manager=device_manager)
+    partitionManager=AdaptativePartitionManager(logger,6, maxNodeSize=5, device_manager=device_manager)
     partitionManager._update_block_arrangement(X1)
 
     for block in partitionManager.blocks:
@@ -41,7 +41,7 @@ def test_configure_blocks():
     T = torch.tensor([2, 2], device='cpu')
     n_functions = 2
     logger=setup_logger()
-    manager = AdaptativePartitionManager(logger, n_functions)
+    manager = AdaptativePartitionManager(logger, n_functions, maxNodeSize=5)
 
     X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
     y = torch.tensor([[1.0], [2.0]], device='cpu')
@@ -65,9 +65,11 @@ def test_map_points():
     y = torch.randn(192, 1)
     Xy=torch.cat((X,y),dim=1)
     logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features)
+    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5)
     partitionManager._update_block_arrangement(Xy)
-    partitionManager._map_points(X, y)
+    X1 = torch.randn(500, n_features)
+    y1 = torch.randn(500, 1)
+    partitionManager._map_points(X1, y1)
     nodes=partitionManager.kdtree.get_leaves()
     in_blocks=[]
     in_blocks_y=[]
@@ -78,6 +80,8 @@ def test_map_points():
             in_blocks.append(x)
         for yi in node.block.y:
             in_blocks_y.append(yi)
+    for block in partitionManager.blocks:
+        assert block.X !=[]
     in_blocks = torch.stack(in_blocks, dim=0)
     in_blocks_y = torch.stack(in_blocks_y, dim=0)
     in_blocks, _ =torch.sort(in_blocks,0)
@@ -103,7 +107,7 @@ def test_add_points():
     X1 = torch.randn(500, n_features)
 
     logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
 
     y = torch.randn(500, 1)
 
@@ -164,7 +168,7 @@ def test_init_ista_per_block():
     }
     device_manager=DeviceManager(logger,device_map=device_map)
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-    manager = AdaptativePartitionManager(logger, n_functions, initial_bounds, device_manager=device_manager)
+    manager = AdaptativePartitionManager(logger, n_functions,5, initial_bounds, device_manager=device_manager)
 
     X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
     y = torch.tensor([[1.0], [2.0]], device='cpu')
@@ -214,7 +218,7 @@ def test_retrieve_active_blocks():
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
     partitionManager.add_points(X1, y)
     activeBlocks=partitionManager.retrieve_active_blocks()
     
@@ -238,7 +242,7 @@ def test_retrieve_test_active_blocks():
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=AdaptativePartitionManager(logger,n_features, device_manager=device_manager)
+    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
     partitionManager.add_points(X1, y)
     activeBlocks=partitionManager.retrieve_active_blocks()
     
@@ -264,6 +268,13 @@ def test_retrieve_test_active_blocks():
     yt = yt.squeeze(1)
     activeBlocks=partitionManager.retrieve_active_blocks()
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
+    partitionManager.init_ista_per_block(
+        n_functions=2,
+        ista_alpha=0.01,
+        ista_lambd=0.1,
+        evaluation_func=dummy_eval_func,
+        ista_optimizer=dummy_optimizer
+    )
     for block in activeBlocks:
         assert block.X!=[]
         assert block.y!=[]
@@ -272,5 +283,5 @@ def test_retrieve_test_active_blocks():
     for block in activeTestBlocks:
         assert block.X!=[]
         assert block.y!=[]
-        assert not (isinstance(block.ista_layer, ISTALayer))
-        assert block.ista_layer is None
+        assert (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is not None

@@ -7,12 +7,12 @@ from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager
 
 import torch
-import logging
+from pysesm.utils.loggers import setup_logger
 import numpy as np
 
 # Config for logger
-logger = logging.getLogger("test")
-logger.setLevel(logging.DEBUG)
+logger = setup_logger()
+#logger.setLevel()
 
 # Define device_map
 device_map = {
@@ -224,6 +224,61 @@ def test_squeeze_factor():
     factor_small = squeeze_factor(y_small)
     assert abs(factor_small - 1.0) < 1e-6
 
+
+def test_retrieve_test_active_blocks():
+
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
+        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    }
+    device_manager=DeviceManager(logger,device_map=device_map)
+    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    T = torch.tensor([2, 2], device='cpu')
+    n_features=2
+    X1 = torch.randn(500, n_features)
+    y = torch.randn(500,1)
+    initial_bounds = torch.tensor([[-10, -10], [10, 10]], dtype=torch.float32)
+    partitionManager=UniformPartitionManager(logger,T, n_features, initial_bounds, device_manager=device_manager)
+    partitionManager.add_points(X1, y)
+    activeBlocks=partitionManager.retrieve_active_blocks()
+    
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert not (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is None
+    def dummy_eval_func(x, y):
+        return torch.sum(x - y)
+
+    def dummy_optimizer(params, lr):
+        return torch.optim.Adam(params, lr=lr)
+    partitionManager.init_ista_per_block(
+        n_functions=2,
+        ista_alpha=0.01,
+        ista_lambd=0.1,
+        evaluation_func=dummy_eval_func,
+        ista_optimizer=dummy_optimizer
+    )
+    Xt = torch.randn(50, n_features)
+    yt = torch.randn(50, 1)
+    yt = yt.squeeze(0)
+    activeBlocks=partitionManager.retrieve_active_blocks()
+    activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
+
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert (isinstance(block.ista_layer, ISTALayer))
+        assert block.ista_layer is not None
+    for block in activeTestBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert isinstance(block.ista_layer, ISTALayer)
+        assert block.ista_layer is not None
+
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
     print_pytest_instructions()
+

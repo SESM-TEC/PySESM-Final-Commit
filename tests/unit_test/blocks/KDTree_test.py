@@ -121,7 +121,7 @@ def test_add_point():
     torch.manual_seed(42) 
     X = torch.randn(500, n_features+1)
     logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features+1)
+    partitionManager=AdaptativePartitionManager(logger,n_features+1, maxNodeSize=5)
     partitionManager._update_block_arrangement(X)
     kd=partitionManager.kdtree
     for _ in range(kd.maxNodeSize):

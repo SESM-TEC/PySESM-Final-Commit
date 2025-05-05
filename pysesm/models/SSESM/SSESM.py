@@ -16,6 +16,7 @@ import numpy as np
 import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
+from pysesm.blocks import AdaptativePartitionManager
 from pysesm.enums import EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
 from typing import Callable, Iterator
@@ -51,6 +52,8 @@ class SSESM(SESM):
         ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,        
         iter: int = 0,
         initial_bounds=None,
+        partition_manager = "Uniform",
+        maxNodeSize = 100,
         debug=True,
         device_map=None, 
         **kwargs
@@ -90,12 +93,22 @@ class SSESM(SESM):
         self.device_manager = DeviceManager(logger,device_map=device_map)
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
-        self.partition_manager = UniformPartitionManager(
-            logger, kwargs.get("T"), 
-            n_functions=n_functions, 
-            initial_bounds=initial_bounds,
-            device_manager=self.device_manager
-        )
+        if partition_manager=="Adaptative":
+            self.partition_manager = AdaptativePartitionManager(
+                logger, 
+                n_functions=n_functions,
+                maxNodeSize= maxNodeSize,  
+                initial_bounds=initial_bounds,
+                device_manager=self.device_manager
+            )
+
+        else:
+            self.partition_manager = UniformPartitionManager(
+                logger, kwargs.get("T"), 
+                n_functions=n_functions, 
+                initial_bounds=initial_bounds,
+                device_manager=self.device_manager
+            )
 
         super().__init__(
             n_features=n_features,
