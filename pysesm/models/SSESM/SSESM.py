@@ -16,13 +16,12 @@ import numpy as np
 import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
-from pysesm.blocks import AdaptativePartitionManager
+from pysesm.enums import EvaluationFuncEnum
 from pysesm.models.SESM.SESM import SESM
-from typing import Callable, Iterator, Optional
+from typing import Callable, Iterator
 from sklearn.metrics import mean_squared_error
 from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.hooks_manager.HookManager import HookManager, HookType
-
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 class SSESM(SESM):
     """
@@ -54,9 +53,6 @@ class SSESM(SESM):
         initial_bounds=None,
         debug=True,
         device_map=None, 
-        use_wandb: bool = False,  # Add W&B flag
-        active_hooks: Optional[list[HookType]] = None,  # List of hooks to activate
-        project_name: str=None,
         **kwargs
     ):
         """
@@ -92,19 +88,13 @@ class SSESM(SESM):
             **kwargs: Additional keyword arguments passed to the base class.
         """
         self.device_manager = DeviceManager(logger,device_map=device_map)
-        self.hook_manager = HookManager(use_wandb=use_wandb,
-                                        project_name=project_name,
-                                        active_hooks=active_hooks,
-                                        logger=logger)
-
         self.permutation_times = permutation_times
         self.dfngroup = dfngroup
-        self.partition_manager = AdaptativePartitionManager(
-            logger, 
+        self.partition_manager = UniformPartitionManager(
+            logger, kwargs.get("T"), 
             n_functions=n_functions, 
             initial_bounds=initial_bounds,
-            device_manager=self.device_manager#,
-            #hook_manager=self.hook_manager,  # Pass HookManager
+            device_manager=self.device_manager
         )
 
         super().__init__(
@@ -124,7 +114,6 @@ class SSESM(SESM):
             ista_optimizer=ista_optimizer,
             debug=debug,
             device_manager=self.device_manager,
-            hook_manager=self.hook_manager,
             **kwargs
         )
 
@@ -148,7 +137,6 @@ class SSESM(SESM):
             y = y.unsqueeze(-1)
 
         self.partition_manager.add_points(X, y)
-        print("Listo AQUI???????????????????????????????????????????")
         self.partition_manager.init_ista_per_block(
             n_functions=self.n_functions,
             ista_alpha=self.ista_alpha,
