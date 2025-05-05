@@ -56,21 +56,6 @@ class KDTree():
         
         self._splitDataInNodes(node.left)
         self._splitDataInNodes(node.right)
-    
-    def _set_children_bounds(self, node) -> None:
-        """
-        Defines the bounds of child nodes based on parent bounds
-        """
-        if node.bounds == None:
-            upperBounds, _ = torch.max(node.data, dim=0)
-            lowerBounds, _ = torch.min(node.data, dim=0)
-            bounds = torch.stack((upperBounds,lowerBounds),dim=0)
-            node.bounds=bounds
-
-        node.left.bounds=node.bounds.clone()
-        node.right.bounds=node.bounds.clone()
-        node.left.bounds[0, node.dim]=node.split_point
-        node.right.bounds[1, node.dim]=node.split_point
 
     def _find_node(self, x : torch.Tensor, node = None) -> Node:
         """
@@ -78,7 +63,7 @@ class KDTree():
 
         x: one-dimensional tensor
         """
-        if node == None:
+        if node is None:
             node=self.root
         if node.data is None:
             if x[node.dim].item() >= node.split_point:
@@ -156,15 +141,3 @@ class KDTree():
         if node.right is not None:
             leaves = self.get_leaves(leaves, node.right)
         return leaves
-    
-    #def get_bounds():
-
-        
-
-
-    
-        
-    
-
-
-

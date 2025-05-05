@@ -50,7 +50,6 @@ class PartitionBlock:
         self.X.append(point_x)
         self.y.append(point_y)
         self.positions.append(pos)
-        print("Final:",self.X)
 
     def clear_points(self):
         """Remove all points"""
