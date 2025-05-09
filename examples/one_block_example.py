@@ -8,21 +8,18 @@ Authors: The SESM Team
 License: 
 '''
 
-
 import logging
 import torch
-
+import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
-from pysesm.models.ISTALayer import ISTAConfig, StepSizeMethod
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
+from pysesm.utils.metric_loggers import *
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -115,7 +112,9 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
-    
+# LOGGER INSTANCE
+logger = setup_logger()
+
 # SESM CONFIGURATION
 n_functions=10
 experiment = {
@@ -152,15 +151,19 @@ experiment = {
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
+    "ista_layer_type": ISTALayerEnum.CLASSIC,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
         DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
     },
-    "use_wandb": False,
-    "active_hooks": [],
-    "project_name": "sesm-test"
+    
+    #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
+    #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
+    #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
+    #"ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
+    #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
 
 def show_data(X,y,c,marker,label,ax=None):

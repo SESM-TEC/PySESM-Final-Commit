@@ -2,12 +2,14 @@ from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
 from copy import deepcopy
-from typing import Union, Callable, Iterator, Dict
+from typing import Union, Callable, Iterator, Dict, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
+from pysesm.customization_factories.ISTALayerFactory import ISTALayerFactory
+from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 import logging
 import numpy as np
 import torch
+
 DEFAULT_BLOCKS_PER_DIM = 4
 
 def squeeze_factor(y: np.ndarray):
@@ -81,14 +83,8 @@ class UniformPartitionManager(BlockManager):
         self.y = None
         self.device_manager = device_manager
         self.hook_manager = hook_manager
+
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
-    
-    def _ista_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        if self.hook_manager:
-            self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -125,7 +121,7 @@ class UniformPartitionManager(BlockManager):
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
         elif type(self.T) is int:
-            self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
+            self.T = torch.tensor([self.T for _ in range(X.size(dim=1))], device=device)
 
         # When no points and no blocks have been created
         if self.blocks is None:
@@ -229,10 +225,7 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks() # Normalize y value and initialize h in each block
 
 
-    def init_ista_per_block(
-        self,
-        ista_config: ISTAConfig
-    ):
+    def init_ista_per_block(self,sparsecoding_config: SparseCodingConfig):
 
         """
         Initializes an ISTA layer for each block.
@@ -245,11 +238,12 @@ class UniformPartitionManager(BlockManager):
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
-            block.ista_layer = ISTALayer(
-                ista_config,
+            block.ista_layer = SparseCodingFactory.create(
+                kind=ista_layer_type,
+                config=sparsecoding_config
                 logger=self.logger,
-                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+                parameter_hook=ista_layer_hook
             )
 
     def retrieve_active_blocks(self):
