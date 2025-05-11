@@ -17,7 +17,7 @@ import torch
 from typing import Callable, Iterator, Optional
 from enum import Enum, auto
 from dataclasses import dataclass, field
-from SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 
 class StepSizeMethod(Enum):
     """Enumeration of methods for determining the ISTA step size."""

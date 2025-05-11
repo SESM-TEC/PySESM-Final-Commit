@@ -21,7 +21,7 @@ class PartitionBlock:
         block_size: torch.Tensor,
         amplitude: int = 1,
         h=None,
-        ista_layer=None,
+        sparse_coding_layer=None,
         device=None
     ):
         self.block_index = block_index
@@ -43,7 +43,7 @@ class PartitionBlock:
         self.positions = []
         self.target = []
         self.predicted_output = []
-        self.ista_layer = ista_layer
+        self.sparse_coding_layer = sparse_coding_layer
 
     def new_point(self, point_x, point_y, pos):
         point_x = point_x.to(self.device)
@@ -93,7 +93,7 @@ class PartitionBlock:
         cloned_block.positions = []
         cloned_block.target = []
         cloned_block.predicted_output = []
-        cloned_block.ista_layer = self.ista_layer
+        cloned_block.sparse_coding_layer = self.sparse_coding_layer
         cloned_block.device = self.device 
         return cloned_block
 

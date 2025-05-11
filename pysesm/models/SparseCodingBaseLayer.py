@@ -9,12 +9,13 @@ Authors: The SESM Team
 
 License: 
 '''
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TypeVar,Generic, Type, Callable, Iterator, Optional
+import logging
 
 import torch
-
 
 @dataclass
 class SparseCodingConfig:

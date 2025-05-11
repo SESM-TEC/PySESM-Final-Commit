@@ -1,11 +1,11 @@
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from copy import deepcopy
 from typing import Union, Callable, Iterator, Dict, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.customization_factories.ISTALayerFactory import ISTALayerFactory
-from pysesm.enums.ISTALayerEnum import ISTALayerEnum
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+
 import logging
 import numpy as np
 import torch
@@ -225,7 +225,8 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks() # Normalize y value and initialize h in each block
 
 
-    def init_ista_per_block(self,sparsecoding_config: SparseCodingConfig):
+    def init_sparse_coding_per_block(self,
+                                     config: SparseCodingConfig):
 
         """
         Initializes an ISTA layer for each block.
@@ -238,11 +239,10 @@ class UniformPartitionManager(BlockManager):
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
-            block.ista_layer = SparseCodingFactory.create(
-                kind=ista_layer_type,
-                config=sparsecoding_config
-                logger=self.logger,
-                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+            block.sparse_coding_layer = SparseCodingFactory.create(
+                config = config,
+                logger = self.logger,
+                device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
                 parameter_hook=ista_layer_hook
             )
 
