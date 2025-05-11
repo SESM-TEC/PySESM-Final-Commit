@@ -219,7 +219,7 @@ class SparseCodingFactory:
         if 'solver_id' in kwargs:
             solver_id = kwargs.pop('solver_id')
             return cls.create_from_id(solver_id, **kwargs)
-        elif 'config' in kwargs and isinstance(kwargs['config'], SparseCodingBaseConfig):
+        elif 'config' in kwargs and isinstance(kwargs['config'], SparseCodingConfig):
             return cls.create_from_config(**kwargs)
             
         raise ValueError(

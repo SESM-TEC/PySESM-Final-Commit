@@ -13,7 +13,7 @@ import torch
 import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
-from pysesm.models import ISTALayer, ISTAConfig
+from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
@@ -126,7 +126,7 @@ experiment = {
     "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_config": ISTAConfig(
+    "sparse_coding_config": ISTAConfig(
         alpha=0.10,
         lambd=0.00001,
         step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -144,7 +144,7 @@ experiment = {
     "mu_epochs": 10,
     "model_epochs": 10000,
     "dict_epochs": 10,
-    "ista_epochs": 50,
+    "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
@@ -153,7 +153,6 @@ experiment = {
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
-    "ista_layer_type": ISTALayerEnum.CLASSIC,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en GPU 0
@@ -187,7 +186,7 @@ def show_data(X,y,c,marker,label,ax=None):
     return ax
 
 # Ensure consistency
-assert(experiment["ista_config"].n_functions == experiment["n_functions"])
+assert(experiment["sparse_coding_config"].n_functions == experiment["n_functions"])
 
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)

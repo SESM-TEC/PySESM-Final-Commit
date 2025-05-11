@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Union, Callable, Iterator, Dict, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.device_manager.DeviceManager import DeviceManager
 
 import logging
 import numpy as np
@@ -47,6 +48,7 @@ class UniformPartitionManager(BlockManager):
             - The second row contains the upper bounds.
             If not provided, it is automatically calculated from the input data.
         threshold (float, optional): Threshold for determining block activity (default is 0).
+        device_manager: 
     """
 
     def __init__(
@@ -56,8 +58,8 @@ class UniformPartitionManager(BlockManager):
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
-        device_manager=None,
-        hook_manager=None
+        device_manager: Optional[DeviceManager] = None,
+        sparse_coding_layer_hook=None
     ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
@@ -82,7 +84,7 @@ class UniformPartitionManager(BlockManager):
         self.X = None
         self.y = None
         self.device_manager = device_manager
-        self.hook_manager = hook_manager
+        self.sparse_coding_layer_hook = sparse_coding_layer_hook
 
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
 
@@ -232,10 +234,7 @@ class UniformPartitionManager(BlockManager):
         Initializes an ISTA layer for each block.
 
         Args:
-            n_functions (int): Number of functions or features for the ISTA layer.
-            ista_alpha (float): Learning rate for the ISTA layer.
-            ista_lambd (float): Regularization parameter for the ISTA layer.
-            evaluation_func (Callable): Function for evaluating the ISTA layer.
+            config (SparseCodingConfig): Configuration for sparse coding.
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
@@ -243,7 +242,7 @@ class UniformPartitionManager(BlockManager):
                 config = config,
                 logger = self.logger,
                 device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
-                parameter_hook=ista_layer_hook
+                parameter_hook=self.sparse_coding_layer_hook
             )
 
     def retrieve_active_blocks(self):

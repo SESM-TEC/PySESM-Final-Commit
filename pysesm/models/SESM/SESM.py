@@ -251,9 +251,9 @@ class SESM(torch.nn.Module):
         self.sparse_coding_config.evaluation_func = self.evaluation_func
         
         self.sparse_coding_layer = SparseCodingFactory.create(
-            config=self.sparse_config,
+            config=self.sparse_coding_config,
             logger=logger,
-            parameter_hook=self._sparse_coding_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
+            parameter_hook=self.sparse_coding_layer_hook,
             device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
         )
 
@@ -267,7 +267,7 @@ class SESM(torch.nn.Module):
             logger=logger,
             device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             psi=psi,
-            parameter_hook=self._dictlayer_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.DICTLAYER] else None,
+            parameter_hook=self.dict_layer_hook,
             **kwargs
         )
     

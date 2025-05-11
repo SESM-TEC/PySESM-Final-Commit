@@ -1,5 +1,8 @@
 import copy
 import torch
+
+from pysesm.models.SparseCodingBaseLayer import SparseCodingConfig
+
 class PartitionBlock:
     """
     Represents a sub-block in a 2D grid.

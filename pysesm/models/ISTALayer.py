@@ -18,6 +18,7 @@ from typing import Callable, Iterator, Optional
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
 
 class StepSizeMethod(Enum):
     """Enumeration of methods for determining the ISTA step size."""
@@ -52,7 +53,8 @@ class ISTAConfig(SparseCodingConfig):
     early_stopping: bool = False
     early_stopping_tol: float = 1e-6
 
-# Define the ISTA layer - here's the important part    
+# Define the ISTA layer - here's the important part
+@SparseCodingFactory.register("classic_ista") 
 class ISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
