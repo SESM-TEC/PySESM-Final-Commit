@@ -13,15 +13,15 @@ def test_partition_block_initialization():
     block_size = torch.tensor([1.0, 1.0], device='cpu')
     amplitude = 1
     h = None
-    ista_layer = None
+    sparse_coding_layer = None
 
-    block = PartitionBlock(space_bound, block_index, block_size, amplitude, h, ista_layer, device='cpu')
+    block = PartitionBlock(space_bound, block_index, block_size, amplitude, h, sparse_coding_layer, device='cpu')
 
     assert block.block_index == block_index
     assert torch.allclose(block.block_size, block_size)
     assert block.amplitude == amplitude
     assert block.h == h
-    assert block.ista_layer == ista_layer
+    assert block.sparse_coding_layer == sparse_coding_layer
     assert len(block.X) == 0
     assert len(block.y) == 0
     assert len(block.positions) == 0
@@ -130,7 +130,7 @@ def test_clone_test():
     assert torch.allclose(cloned_block.block_scope, block.block_scope)
     assert cloned_block.h == block.h
     assert cloned_block.amplitude == block.amplitude
-    assert cloned_block.ista_layer == block.ista_layer
+    assert cloned_block.sparse_coding_layer == block.sparse_coding_layer
     assert len(cloned_block.X) == 0
     assert len(cloned_block.y) == 0
     assert cloned_block.normalized_X is None
@@ -157,7 +157,7 @@ def test_deepcopy():
     assert torch.allclose(cloned_block.block_scope, block.block_scope)
     assert cloned_block.h == block.h
     assert cloned_block.amplitude == block.amplitude
-    assert cloned_block.ista_layer == block.ista_layer
+    assert cloned_block.sparse_coding_layer == block.sparse_coding_layer
     assert len(cloned_block.X) == 0
     assert len(cloned_block.y) == 0
     assert cloned_block.normalized_X is None
@@ -198,16 +198,16 @@ def test_normalize_extreme_block_sizes():
     
     assert torch.allclose(block_large.normalized_X, expected_normalized_large, rtol=1e-5, atol=1e-8)
 
-def test_ista_layer_interaction():
-    """Test interaction with ista_layer."""
+def test_sparse_coding_layer_interaction():
+    """Test interaction with sparse_coding_layer."""
     space_bound = torch.tensor([0.0, 0.0], device='cpu')
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device='cpu')
-    ista_layer = torch.nn.Linear(2, 2).to('cpu')
-    block = PartitionBlock(space_bound, block_index, block_size, ista_layer=ista_layer, device='cpu')
+    sparse_coding_layer = torch.nn.Linear(2, 2).to('cpu')
+    block = PartitionBlock(space_bound, block_index, block_size, sparse_coding_layer=sparse_coding_layer, device='cpu')
 
     block.new_point(torch.tensor([0.5, 0.5], device='cpu'), torch.tensor([1.0], device='cpu'), 0)
-    assert isinstance(block.ista_layer, torch.nn.Linear)
+    assert isinstance(block.sparse_coding_layer, torch.nn.Linear)
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
