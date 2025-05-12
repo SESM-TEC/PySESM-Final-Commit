@@ -46,8 +46,8 @@ class AdaptativePartitionManager(BlockManager):
         self,
         logger: logging.Logger,
         n_functions,
-        initial_bounds: np.ndarray = None,
-        threshold: float = 0,
+        maxNodeSize: int,
+        maxSplits: int = 5,
         device_manager=None
     ):
         """
@@ -62,11 +62,11 @@ class AdaptativePartitionManager(BlockManager):
             threshold (float, optional): Threshold for determining block activity.
         """
         super().__init__()
-
+        
         self.n_functions = n_functions
-        self.initial_bounds = initial_bounds
-        self.threshold = threshold
         self.logger = logger
+        self.maxNodeSize = maxNodeSize
+        self.maxSplits = maxSplits
         self.blocks = []
         self.X = None
         self.y = None
@@ -83,7 +83,7 @@ class AdaptativePartitionManager(BlockManager):
         Finds the block corresponding to a given point.
 
         Args:
-            X (torch.Tensor): A point in the input space.
+            x (torch.Tensor): A point in the input space.
 
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
@@ -105,37 +105,49 @@ class AdaptativePartitionManager(BlockManager):
         """
         X=X.to(self.device)
         if self.kdtree is None:
-
-            self.kdtree = KDTree(X, device=self.device)
+            self.splits=0
+            self.kdtree = KDTree(X, self.maxNodeSize, device=self.device)
             X=X[:,:-1]
             treeNodes=self.kdtree.get_leaves()
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  
 
-            for index in range(len(treeNodes)):
-                 block_size=treeNodes[index].bounds[0]-treeNodes[index].bounds[1]
+            for i, node in enumerate(treeNodes):
+                 block_size=node.bounds[0]-node.bounds[1]
                  self.total_blocks+=1
-                 self.blocks[(index,)] = PartitionBlock(
-                    treeNodes[index].bounds[1],  
-                    (index,), 
+                 self.blocks[(i,)] = PartitionBlock(
+                    node.bounds[1],  
+                    (i,), 
                     block_size,
                     device=self.device
                  )
 
-                 treeNodes[index].block=self.blocks[(index,)] #Define node blocks
+                 node.block=self.blocks[(i,)] #Define node blocks
 
-        else:  #logic to add points to the tree
+        else:  #logic to add points to the existing tree
             for row in X:
                 self.kdtree.add_point(row[:-1],row[-1:])
             treeNodes=self.kdtree.get_leaves()
             if len(treeNodes)>self.total_blocks:    #If a node was split, update self.blocks
+                self.splits=len(treeNodes)-self.total_blocks    #How many nodes were split
                 self.blocks = np.empty(len(treeNodes), dtype=object)  
                 
-                for index in range(len(treeNodes)):
-                    treeNodes[index].block.block_index=(index,)
-                    self.blocks[(index,)]=treeNodes[index].block
+                for i, node in enumerate(treeNodes):
+                    node.block.block_index=(i,)
+                    self.blocks[(i,)]=node.block
                 self.total_blocks=len(treeNodes)
-
+        if self.splits > self.maxSplits:
+            treeNodes=self.kdtree.get_leaves()
+            X=torch.Tensor()
+            y=torch.Tensor()
+            for node in treeNodes: 
+                print("X",node.data)
+                X=torch.cat((X,node.data),dim=0)
+                y=torch.cat((y,node.y),dim=0)
+            Xy=torch.cat((X,y), dim=1)
+            self.kdtree = None
+            self.splits = 0
+            self._update_block_arrangement(Xy)
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -159,9 +171,9 @@ class AdaptativePartitionManager(BlockManager):
 
                     block.h.data /= block.h.data.sum()
 
-                    self.logger.debug(
-                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
-                    )
+                   # self.logger.debug(
+                    #    f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                   # )
 
                 block.target = torch.stack([value * block.amplitude for value in block.y])
                 if block.target.dim() == 1:
@@ -177,11 +189,11 @@ class AdaptativePartitionManager(BlockManager):
             y (np.ndarray): Target data corresponding to the input points.
         """
         treeNodes=self.kdtree.get_leaves()
-        for i in range(len(treeNodes)):
-            if all(torch.equal(a, b) for a, b in zip(treeNodes[i].block.X,list(treeNodes[i].data.unbind(dim=0)))): 
-                treeNodes[i].block.X=list(treeNodes[i].data.unbind(dim=0))
-            if all(torch.equal(a, b) for a, b in zip(treeNodes[i].block.X,list(treeNodes[i].data.unbind(dim=0)))): 
-                treeNodes[i].block.y=list(treeNodes[i].y.unbind(dim=0))
+        for node in treeNodes:
+            if all(torch.equal(a, b) for a, b in zip(node.block.X,list(node.data.unbind(dim=0)))): 
+                node.block.X=list(node.data.unbind(dim=0))
+            if all(torch.equal(a, b) for a, b in zip(node.block.X,list(node.data.unbind(dim=0)))): 
+                node.block.y=list(node.y.unbind(dim=0))
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
@@ -200,13 +212,13 @@ class AdaptativePartitionManager(BlockManager):
 
     def init_ista_per_block(
         self,
-        n_functions: int,
+        n_functions: int,       # self._update_block_arrangement(Xy)
+
         ista_alpha: float,
         ista_lambd: float,
         evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer]
     ):
-
         """
         Initializes an ISTA layer for each block.
 
@@ -267,15 +279,17 @@ class AdaptativePartitionManager(BlockManager):
         temp_current_kdtree = self.kdtree
         self.blocks = test_blocks
         self.kdtree = test_kdtree
-        y = y.unsqueeze(1)
-        Xy=torch.cat((X,y), dim=1)
-        self._update_block_arrangement(Xy)
+        #y = y.unsqueeze(0)
+       # Xy=torch.cat((X,y), dim=1)
+       # self._update_block_arrangement(Xy)
         self._map_points(X, y)
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
         self._configure_blocks(init_h=False) # Normalize y value and initialize h in each block 
+        
         # Retrieved mapped test blocks and return to usual blocks
         test_active_blocks = self.retrieve_active_blocks()
         self.blocks = temp_current_blocks
         self.kdtree = temp_current_kdtree
+        assert self.kdtree.total_nodes==test_kdtree.total_nodes 
 
         return test_active_blocks
