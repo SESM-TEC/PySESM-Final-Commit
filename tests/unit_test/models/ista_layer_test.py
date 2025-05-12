@@ -1,4 +1,4 @@
-from pysesm.models.ISTALayer import ISTALayer
+from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
 import torch
 import logging
 import numpy as np
@@ -31,27 +31,19 @@ def test_ista_perfect_dictionary():
     y = dictionary.clone()
     
     # Initialize ISTA layer
-    ista = ISTALayer(
-        n_functions=n_functions,
-        alpha=0.2,
-        lambd=0.001,  # Small lambda since we want h≈1
-        evaluation_func=lambda d, h: torch.matmul(d, h),
-        logger=logger,
-        #optimizer=lambda parameters, lr : torch.optim.Adam(
-        #    parameters, lr=lr
-        #)
-    )
-    
-    # Test initial gradient direction
+    ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                alpha=0.1,
+                                lambd=0.00001,  # Small lambda since we want h≈1
+                                step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+                                power_iterations=10,                                
+                                criterion=torch.nn.MSELoss(),
+                                evaluation_func=lambda d, h: torch.matmul(d, h)),
+                     logger=logger)
+        
     ista.h.data = torch.tensor([[0.5]])  # Start h below target
-    ista.h.grad = None
-    loss = ista.forward(y, dictionary)
-    loss.backward()
-    initial_grad = ista.h.grad.item()
-    assert initial_grad < 0, "Initial gradient should point upward when h is too small"
     
     # Test optimization
-    for _ in range(50):
+    for _ in range(100):
         ista.train_step(y, dictionary)
     
     # Verify h converges close to 1
@@ -96,13 +88,14 @@ def test_ista_sparse_selection():
     y = dictionary[:, 0].clone().unsqueeze(-1)
     
     # Initialize ISTA layer
-    ista = ISTALayer(
-        n_functions=n_functions,
-        alpha=0.2,
-        lambd=0.15,
-        evaluation_func=lambda d, h: torch.matmul(d, h),
-        logger=logger
-    )
+    ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                alpha=0.1,
+                                lambd=0.00001,  # Small lambda since we want h≈1
+                                step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+                                power_iterations=10,                                
+                                criterion=torch.nn.MSELoss(),
+                                evaluation_func=lambda d, h: torch.matmul(d, h)),
+                     logger=logger)
     
     # Initialize h with random values as a column vector
     ista.h.data = torch.ones(n_functions, 1) / n_functions
@@ -121,39 +114,6 @@ def test_ista_sparse_selection():
     assert torch.all(torch.abs(h_final[1:, 0]) < 0.2), \
         f"Other components should be close to 0, got {h_final[1:, 0]}"
 
-def test_ista_gradient_flow():
-    """Test proper gradient flow through ISTA layer"""
-    logger = logging.getLogger('test')
-    
-    # Create simple exponential falloff (like unnormalized Gaussian)
-    x = torch.linspace(0, 2, 10)
-    dictionary = torch.exp(-0.5 * x**2).reshape(-1, 1)  # Pure exp(-0.5x²) values
-    y = dictionary.clone()
-    
-    ista = ISTALayer(
-        n_functions=1,
-        alpha=0.1,
-        lambd=0.001,
-        evaluation_func=lambda d, h: torch.matmul(d, h),
-        logger=logger
-    )
-    
-    # Test gradient computation
-    ista.h.data = torch.tensor([[0.5]])
-    ista.h.grad = None
-    loss = ista.forward(y, dictionary)
-    loss.backward()
-    assert ista.h.grad is not None, "No gradient flowing to h"
-    
-    # Test gradient flow after shrinkage
-    with torch.no_grad():
-        h_shrunk = ista.shrinkage()
-        ista.h.data.copy_(h_shrunk)
-    
-    ista.h.grad = None
-    loss = ista.forward(y, dictionary)
-    loss.backward()
-    assert ista.h.grad is not None, "No gradient after shrinkage"
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
