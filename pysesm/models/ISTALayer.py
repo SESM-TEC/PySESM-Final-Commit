@@ -17,6 +17,8 @@ import torch
 from typing import Callable, Iterator, Optional
 from enum import Enum, auto
 from dataclasses import dataclass, field
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
 
 class StepSizeMethod(Enum):
     """Enumeration of methods for determining the ISTA step size."""
@@ -26,7 +28,7 @@ class StepSizeMethod(Enum):
     FROBENIUS = auto()     # Frobenius norm upper bound (fast but conservative)
 
 @dataclass
-class ISTAConfig:
+class ISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the ISTA algorithm.
     
@@ -42,11 +44,6 @@ class ISTAConfig:
         power_iterations (int): Number of iterations for power method (if used).
         early_stopping (bool): Whether to enable early stopping based on loss convergence.
         early_stopping_tol (float): Tolerance threshold for early stopping.
-        n_functions (int): Number of words in the dictionary, i.e. dimension of h. It MUST be given.
-        initial_h: Initial h value of dimension n_functions x 1.
-        evaluation_func (Callable): Function that computes predictions from a dictionary and sparse vector.
-                                    Should have signature: f(dictionary, h) -> predictions.
-        criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
 
     """
     alpha: float = 0.1
@@ -55,13 +52,10 @@ class ISTAConfig:
     power_iterations: int = 10
     early_stopping: bool = False
     early_stopping_tol: float = 1e-6
-    n_functions: int = None  # Required, no default
-    initial_h: Optional[torch.Tensor] = None  # Initial sparse vector (optional)
-    evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
-    criterion: Optional[torch.nn.Module]  = None
 
-    
-class ISTALayer(torch.nn.Module):
+# Define the ISTA layer - here's the important part
+@SparseCodingFactory.register("classic_ista") 
+class ISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
 
@@ -94,14 +88,15 @@ class ISTALayer(torch.nn.Module):
             Computes the current loss without updating parameters.
     """
 
+    CONFIG_CLASS = ISTAConfig
+    
     def __init__(
             self,
             config: ISTAConfig,
             logger: logging.Logger,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
-            device = None
-    ):
+            device = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
@@ -113,23 +108,17 @@ class ISTALayer(torch.nn.Module):
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
             device: Device to run computations on.
         """
-        super(ISTALayer, self).__init__()
-        self.config = config
+        super().__init__(config=config,
+                         logger=logger,
+                         debug=debug,
+                         parameter_hook=parameter_hook,
+                         device=device)
+
         self.losses = []
-        self.device = device
-        self.to(self.device) # Move the layer to the assigned device for ISTA_LAYER
-        self.logger = logger
-        self.debug = debug
-        self.parameter_hook = parameter_hook
+               
         self.last_eigenvector = None  # For warm starting LOBPCG
  
-        if self.config.criterion is None:
-            self.criterion = torch.nn.MSELoss()
-        else:
-            self.criterion = self.config.criterion
-            
-        self.setup(config.initial_h)
-        self.to(self.device)
+        
 
     def setup(self, h: torch.Tensor = None) -> None:
         """

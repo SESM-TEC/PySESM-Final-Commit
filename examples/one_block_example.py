@@ -8,20 +8,19 @@ Authors: The SESM Team
 License: 
 '''
 
-
 import logging
 import torch
-
+import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
+from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
+from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
-from pysesm.models.ISTALayer import ISTAConfig, StepSizeMethod
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
 
 
 class KLDivLossWrapper(torch.nn.Module):
@@ -115,7 +114,9 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
-    
+# LOGGER INSTANCE
+logger = setup_logger()
+
 # SESM CONFIGURATION
 n_functions=10
 experiment = {
@@ -125,7 +126,7 @@ experiment = {
     "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_config": ISTAConfig(
+    "sparse_coding_config": ISTAConfig(
         alpha=0.10,
         lambd=0.00001,
         step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -141,9 +142,9 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 15000,
+    "model_epochs": 10000
     "dict_epochs": 10,
-    "ista_epochs": 50,
+    "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
@@ -154,13 +155,16 @@ experiment = {
     "debug": True,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"     # Partition Manager en CPU
     },
-    "use_wandb": False,
-    "active_hooks": [],
-    "project_name": "sesm-test"
+    
+    #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
+    #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
+    #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
+    #"ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
+    #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
 
 def show_data(X,y,c,marker,label,ax=None):
@@ -182,7 +186,7 @@ def show_data(X,y,c,marker,label,ax=None):
     return ax
 
 # Ensure consistency
-assert(experiment["ista_config"].n_functions == experiment["n_functions"])
+assert(experiment["sparse_coding_config"].n_functions == experiment["n_functions"])
 
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)

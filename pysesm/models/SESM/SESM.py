@@ -18,9 +18,9 @@ from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
 from pysesm.validation import validate_sesm_partial_fit
 from pysesm.functions import SurrogateFunction
 from pysesm.models.DictLayer import DictLayer
-from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer,SparseCodingConfig
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.hooks_manager.HookManager import HookType
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
 
 class SESM(torch.nn.Module):
     """
@@ -32,7 +32,7 @@ class SESM(torch.nn.Module):
     Algorithm) and dictionary learning techniques.
 
     Attributes:
-        ista_layer (ISTALayer):
+        sparse_coding_layer (ISTALayer):
             A PyTorch module responsible for managing and adjusting sparse representations through the ISTA algorithm.
             This layer is crucial for learning the sparse encodings during training.
 
@@ -48,10 +48,10 @@ class SESM(torch.nn.Module):
             The number of epochs used for training the overall SESM model, including both dictionary learning and sparse
             representation adjustments.
 
-        ista_epochs (int):
-            The number of epochs dedicated specifically to training the ISTA layer, focusing on the sparse encoding.
+        sparse_coding_epochs (int):
+            The number of epochs dedicated specifically to training the sparse coding layer (e.g. ISTA).
 
-        ista_config (ISTAConfig):
+        sparse_coding_config (SparseCodingConfig):
             Configuration of the ISTA layer
 
         dictionary_alpha (float):
@@ -96,12 +96,12 @@ class SESM(torch.nn.Module):
             how well the dictionary represents the data.
     """
     # Type hints for instance attributes: (not class attributes)
-    ista_layer: ISTALayer
+    sparse_coding_layer: SparseCodingBaseLayer
     dictionary_layer: DictLayer
     n_features: int
     model_epochs: int
-    ista_epochs: int
-    ista_config: ISTAConfig
+    sparse_coding_epochs: int
+    sparse_coding_config: SparseCodingConfig
     dictionary_alpha: float
     seed: int
     debug: bool
@@ -130,8 +130,8 @@ class SESM(torch.nn.Module):
             n_functions: int,
             psi: Union[SurrogateFunction, SurrogateFunctionEnum],
             model_epochs: int,
-            ista_epochs: int,
-            ista_config: ISTAConfig,
+            sparse_coding_epochs: int,
+            sparse_coding_config: SparseCodingConfig,
             dictionary_alpha: float,
             mu_epochs: int,
             rho_epochs: int,
@@ -141,7 +141,9 @@ class SESM(torch.nn.Module):
             evaluation_func: EvaluationFuncEnum = EvaluationFuncEnum.DEFAULT,
             dictionary_optimizer: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] = None,
             device_manager=None,
-            hook_manager=None,
+            dict_layer_hook: Optional[Callable[[dict], None]] = None,
+            sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,  
+            sesm_hook: Optional[Callable[[dict], None]] = None,
             **kwargs
     ):
         """
@@ -168,11 +170,11 @@ class SESM(torch.nn.Module):
                 The number of epochs used for training the overall SESM model, including both dictionary learning and sparse
                 representation adjustments.
 
-            ista_epochs (int):
+            sparse_coding_epochs (int):
                 The number of epochs dedicated specifically to training the ISTA layer, focusing on the sparse encoding.
 
-            ista_config (ISTAConfig):
-                Configuration for ISTA layers.
+            sparse_coding_config (ISTAConfig):
+                Configuration for sparse coding layers.
         
             dictionary_alpha (float):
                 The learning rate for the dictionary layer, which influences how the dictionary parameters are updated during
@@ -213,8 +215,8 @@ class SESM(torch.nn.Module):
         self.n_features = n_features
         self.n_functions = n_functions
         self.model_epochs = model_epochs
-        self.ista_config = ista_config
-        self.ista_epochs = ista_epochs
+        self.sparse_coding_config = sparse_coding_config
+        self.sparse_coding_epochs = sparse_coding_epochs
         self.mu_epochs = mu_epochs
         self.rho_epochs = rho_epochs
         self.dictionary_alpha = dictionary_alpha
@@ -225,7 +227,10 @@ class SESM(torch.nn.Module):
         self.evaluation_func = self.evaluation_func_registry[evaluation_func]
         self.device_manager = device_manager
         self.dictionary_optimizer = dictionary_optimizer
-        self.hook_manager = hook_manager
+        
+        self.sesm_hook = sesm_hook
+        self.dict_layer_hook = dict_layer_hook
+        self.sparse_coding_layer_hook = sparse_coding_layer_hook
 
         if self.seed is not None and self.seed != "None":
             torch.manual_seed(self.seed)
@@ -238,18 +243,18 @@ class SESM(torch.nn.Module):
             "loss_max": [],
             "loss_min": [],
         }
-        #NOTE: We use the ISTA Layer that come from UniformPartitionManager
-        # Instantiate ISTA Layer
+        #NOTE: We use the sparse coding layer that come from UniformPartitionManager
+        # Instantiate sparse coding Layer
 
         # Ensure configuration consistency
-        self.ista_config.n_functions = n_functions
-        self.ista_config.evaluation_func = self.evaluation_func
+        self.sparse_coding_config.n_functions = n_functions
+        self.sparse_coding_config.evaluation_func = self.evaluation_func
         
-        self.ista_layer = ISTALayer(
-            config=self.ista_config,
+        self.sparse_coding_layer = SparseCodingFactory.create(
+            config=self.sparse_coding_config,
             logger=logger,
-            parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
-            device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER)
+            parameter_hook=self.sparse_coding_layer_hook,
+            device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
         )
 
         # Instantiate Dictionary Layer
@@ -262,11 +267,11 @@ class SESM(torch.nn.Module):
             logger=logger,
             device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             psi=psi,
-            parameter_hook=self._dictlayer_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.DICTLAYER] else None,
+            parameter_hook=self.dict_layer_hook,
             **kwargs
         )
     
-    def _ista_hook(self, info: Dict) -> None:
+    def _sparse_coding_hook(self, info: Dict) -> None:
         """
         Hook for ISTALayer to log or store data.
         """
@@ -279,9 +284,9 @@ class SESM(torch.nn.Module):
         self.hook_manager.log_hook_data(HookType.DICTLAYER, info)
 
     @property
-    def ista_layer_losses(self):
+    def sparse_coding_layer_losses(self):
         """Returns the losses for the ISTA layer and acts as an attribute due to the @property decorator."""
-        return self.ista_layer.losses
+        return self.sparse_coding_layer.losses
 
     @property
     def dictionary_layer_losses(self):
@@ -304,7 +309,7 @@ class SESM(torch.nn.Module):
         """
 
         self.dictionary_layer.setup(X)
-        self.ista_layer.setup(h)
+        self.sparse_coding_layer.setup(h)
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -317,7 +322,7 @@ class SESM(torch.nn.Module):
             logging.info(
                 "Epoch {} - Fit: Loss ISTA Layer: {:.6f}, Loss Dictionary Layer: {:.6f}".format(
                     epoch + 1,
-                    self.ista_layer_losses[-1],
+                    self.sparse_coding_layer_losses[-1],
                     self.dictionary_layer_losses[-1],
                 )
             )
@@ -350,8 +355,8 @@ class SESM(torch.nn.Module):
         validate_sesm_partial_fit(self, X, y)
         self.dictionary_layer.setup(X)
         # Add shape validation here before the training loop
-        assert self.ista_layer.h.dim() == 2, \
-            f"ISTA layer h parameter must be 2D tensor, got {self.ista_layer.h.shape}"
+        assert self.sparse_coding_layer.h.dim() == 2, \
+            f"ISTA layer h parameter must be 2D tensor, got {self.sparse_coding_layer.h.shape}"
 
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
@@ -363,7 +368,7 @@ class SESM(torch.nn.Module):
             logging.info(
                 "Epoch {} - Partial Fit: Loss ISTA: {:.6f}, Loss Dictionary: {:.6f}".format(
                     epoch + 1,
-                    self.ista_layer_losses[-1],
+                    self.sparse_coding_layer_losses[-1],
                     self.dictionary_layer_losses[-1],
                 )
             )
@@ -388,7 +393,7 @@ class SESM(torch.nn.Module):
         """
 
         # Detach h before dictionary optimization to prevent unwanted gradient flows
-        h_detached = self.ista_layer.h.clone().detach()
+        h_detached = self.sparse_coding_layer.h.clone().detach()
 
         SPLIT_MU_RHO = True
         
@@ -428,13 +433,13 @@ class SESM(torch.nn.Module):
 
          # Detach dictionary before passing to ISTA layer
         dictionary_for_ista = self.dictionary_layer.dictionary.detach()
-        self.ista_layer.partial_fit(
+        self.sparse_coding_layer.partial_fit(
             y=y, 
-            epochs=self.ista_epochs, 
+            epochs=self.sparse_coding_epochs, 
             dictionary=dictionary_for_ista
         )
         # DEBUG: TODO: make a hook to use W&B and other stuff like this
-        # print(self.ista_layer.h.detach().numpy().flatten())
+        # print(self.sparse_coding_layer.h.detach().numpy().flatten())
 
     def predict(
             self,
@@ -464,7 +469,7 @@ class SESM(torch.nn.Module):
             self.dictionary_layer.dictionary = self.dictionary_layer.forward(X, dictionary_shape)
 
         dictionary = self.dictionary_layer.dictionary.to(device)
-        h = custom_h if custom_h is not None else self.ista_layer.h
+        h = custom_h if custom_h is not None else self.sparse_coding_layer.h
         h = h.to(device)
         return self.evaluation_func(dictionary, h)
 

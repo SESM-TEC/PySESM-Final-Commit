@@ -17,9 +17,9 @@ logger.setLevel(logging.DEBUG)
 # Define device_map
 device_map = {
     DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-    DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en CPU
+    DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en CPU
     DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-    DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    DeviceTarget.PARTITION_MANAGER: "cpu"     # Partition Manager en CPU
 }
 
 # Inicializa DeviceManager para los tests

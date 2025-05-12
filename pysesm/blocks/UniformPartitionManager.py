@@ -1,13 +1,16 @@
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.models.ISTALayer import ISTALayer,ISTAConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from copy import deepcopy
-from typing import Union, Callable, Iterator, Dict
+from typing import Union, Callable, Iterator, Dict, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.HookTypeEnum import HookType
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.device_manager.DeviceManager import DeviceManager
+
 import logging
 import numpy as np
 import torch
+
 DEFAULT_BLOCKS_PER_DIM = 4
 
 def squeeze_factor(y: np.ndarray):
@@ -45,6 +48,7 @@ class UniformPartitionManager(BlockManager):
             - The second row contains the upper bounds.
             If not provided, it is automatically calculated from the input data.
         threshold (float, optional): Threshold for determining block activity (default is 0).
+        device_manager: 
     """
 
     def __init__(
@@ -54,8 +58,8 @@ class UniformPartitionManager(BlockManager):
         n_functions,
         initial_bounds: np.ndarray = None,
         threshold: float = 0,
-        device_manager=None,
-        hook_manager=None
+        device_manager: Optional[DeviceManager] = None,
+        sparse_coding_layer_hook=None
     ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
@@ -80,15 +84,9 @@ class UniformPartitionManager(BlockManager):
         self.X = None
         self.y = None
         self.device_manager = device_manager
-        self.hook_manager = hook_manager
+        self.sparse_coding_layer_hook = sparse_coding_layer_hook
+
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
-    
-    def _ista_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        if self.hook_manager:
-            self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -125,7 +123,7 @@ class UniformPartitionManager(BlockManager):
         if self.T is None:
             self.T = torch.tensor([DEFAULT_BLOCKS_PER_DIM for _ in range(X.dim())], device=device)
         elif type(self.T) is int:
-            self.T = torch.tensor([self.T for _ in range(X.dim())], device=device)
+            self.T = torch.tensor([self.T for _ in range(X.size(dim=1))], device=device)
 
         # When no points and no blocks have been created
         if self.blocks is None:
@@ -229,27 +227,22 @@ class UniformPartitionManager(BlockManager):
         self._configure_blocks() # Normalize y value and initialize h in each block
 
 
-    def init_ista_per_block(
-        self,
-        ista_config: ISTAConfig
-    ):
+    def init_sparse_coding_per_block(self,
+                                     config: SparseCodingConfig):
 
         """
         Initializes an ISTA layer for each block.
 
         Args:
-            n_functions (int): Number of functions or features for the ISTA layer.
-            ista_alpha (float): Learning rate for the ISTA layer.
-            ista_lambd (float): Regularization parameter for the ISTA layer.
-            evaluation_func (Callable): Function for evaluating the ISTA layer.
+            config (SparseCodingConfig): Configuration for sparse coding.
         """
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
-            block.ista_layer = ISTALayer(
-                ista_config,
-                logger=self.logger,
-                parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None,
-                device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
+            block.sparse_coding_layer = SparseCodingFactory.create(
+                config = config,
+                logger = self.logger,
+                device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                parameter_hook=self.sparse_coding_layer_hook
             )
 
     def retrieve_active_blocks(self):

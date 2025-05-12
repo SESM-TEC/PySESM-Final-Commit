@@ -9,7 +9,7 @@ License:
 '''
 
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.models.ISTALayer import ISTAConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 
 from abc import ABC, abstractmethod
 from typing import Union, Callable, Iterator
@@ -144,9 +144,9 @@ class BlockManager(ABC):
         pass
 
     @abstractmethod
-    def init_ista_per_block(
+    def init_sparse_coding_per_block(
         self,
-        ista_config: ISTAConfig
+        config: SparseCodingConfig
     ):
         pass
 

@@ -1,0 +1,145 @@
+'''
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+
+Base class for all sparse coding layers
+
+Provides the abstract definitions required for all sparse coding layers like ISTA, FISTA, etc.
+
+Authors: The SESM Team 
+
+License: 
+'''
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TypeVar,Generic, Type, Callable, Iterator, Optional
+import logging
+
+import torch
+
+@dataclass
+class SparseCodingConfig:
+    """
+    Configuration parameters for all sparse coding algorithms.
+    
+    This class encapsulates all configuration parameters for the sparse coding algorithms a clean
+    interface and easier parameter management.
+    
+    Attributes:
+        n_functions (int): Number of words in the dictionary, i.e. dimension of h. It MUST be given.
+        initial_h: Initial h value of dimension n_functions x 1.
+        evaluation_func (Callable): Function that computes predictions from a dictionary and sparse vector.
+                                    Should have signature: f(dictionary, h) -> predictions.
+        criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
+
+    """
+    n_functions: int = None  # Required, no default
+    initial_h: Optional[torch.Tensor] = None  # Initial sparse vector (optional)
+    evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
+    criterion: Optional[torch.nn.Module]  = None
+
+T_Config = TypeVar('T_Config', bound=SparseCodingConfig)
+
+class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
+    """
+    Abstract base class for ISTA algorithm implementations.
+    Inherits from torch.nn.Module for PyTorch integration and ABC for abstract functionality.
+    
+    All concrete implementations (ISTALayer, FISTALayer, etc.) must inherit from this class
+    and implement the abstract methods.
+    """
+    
+    # Class variable to store the expected config class
+    CONFIG_CLASS: Type[SparseCodingConfig] = SparseCodingConfig
+
+    @abstractmethod
+    def __init__(self,
+                 config: T_Config,
+                 logger: Optional[logging.Logger] = None,
+                 debug: bool = False,
+                 parameter_hook: Optional[Callable] = None,
+                 device: Optional[torch.device] = None):
+        """
+        Base initialization. Child classes must call super().__init__()
+        """
+        super().__init__()
+
+	# Type check for config
+        if not isinstance(config, self.CONFIG_CLASS):
+            raise TypeError(f"Expected config of type {self.CONFIG_CLASS.__name__}, "
+                           f"got {type(config).__name__}")
+        
+        self.config = config
+
+        self.device = device
+        self.logger = logger
+        self.debug = debug
+        self.parameter_hook = parameter_hook
+
+        if self.config.criterion is None:
+            self.criterion = torch.nn.MSELoss()
+        else:
+            self.criterion = self.config.criterion
+            
+        self.setup(config.initial_h)
+        self.to(self.device)        
+        
+    @abstractmethod
+    def setup(self, h: torch.Tensor = None) -> None:
+        """
+        Initializes the sparse vector h.
+        
+        Args:
+            h (torch.Tensor, optional): Initial value for the sparse vector. 
+                   If None, it will be randomly initialized.
+        """
+        pass
+    
+    @abstractmethod
+    def forward(self, y: torch.Tensor, dictionary: torch.Tensor, 
+                log_losses: bool = True) -> torch.Tensor:
+        """
+        Performs the forward pass.
+        
+        Args:
+            y (torch.Tensor): Target/ground truth vector
+            dictionary (torch.Tensor): Dictionary matrix for prediction
+            log_losses (bool): If True, logs the computed losses
+            
+        Returns:
+            torch.Tensor: Computed loss
+        """
+        pass
+    
+    @abstractmethod
+    def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, 
+                   log_losses: bool = True) -> torch.Tensor:
+        """
+        Performs a complete training step (forward + backward + optimization).
+        
+        Args:
+            y (torch.Tensor): Target/ground truth vector
+            dictionary (torch.Tensor): Dictionary matrix for prediction
+            log_losses (bool): If True, logs the computed losses
+            
+        Returns:
+            torch.Tensor: Computed loss
+        """
+        pass
+    
+    @abstractmethod
+    def partial_fit(self, y: torch.Tensor, epochs: int, 
+                    dictionary: torch.Tensor, log_losses: bool = True) -> None:
+        """
+        Performs multiple train steps (the given number of epochs)
+        
+        Args:
+            y (torch.Tensor): Target/ground truth vector
+            dictionary (torch.Tensor): Dictionary matrix for prediction
+            log_losses (bool): If True, logs the computed losses
+            
+        Returns:
+            torch.Tensor: Computed loss
+        """
+        pass
+    

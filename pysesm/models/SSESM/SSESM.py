@@ -17,11 +17,11 @@ import torch
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import UniformPartitionManager
 from pysesm.models.SESM.SESM import SESM
-from pysesm.models.ISTALayer import ISTAConfig
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from typing import Callable, Iterator, Optional
 from sklearn.metrics import mean_squared_error
 from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.hooks_manager.HookManager import HookManager, HookType
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory, SparseCodingConfig
 
 
 class SSESM(SESM):
@@ -37,10 +37,10 @@ class SSESM(SESM):
         n_features: int,
         n_functions: int,
         model_epochs: int,
-        ista_epochs: int,
+        sparse_coding_epochs: int,
         rho_epochs: int,
         mu_epochs: int,
-        ista_config: ISTAConfig,
+        sparse_coding_config: SparseCodingConfig,
         dictionary_alpha: float,
         psi: SurrogateFunction,
         permutation_times: int,
@@ -52,9 +52,9 @@ class SSESM(SESM):
         initial_bounds=None,
         debug=True,
         device_map=None, 
-        use_wandb: bool = False,  # Add W&B flag
-        active_hooks: Optional[list[HookType]] = None,  # List of hooks to activate
-        project_name: str=None,
+        dict_layer_hook: Optional[Callable[[dict], None]] = None,
+        sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,
+        sesm_hook: Optional[Callable[[dict], None]] = None,
         **kwargs
     ):
         """
@@ -73,7 +73,7 @@ class SSESM(SESM):
             ista_epochs (int): Number of epochs for training the ISTA layer.
             rho_epochs (int): Number of epochs for adjusting the rho parameter.
             mu_epochs (int): Number of epochs for adjusting the mu parameter.
-            ista_config (ISTAConfig): Learning rate for the ISTA layer.
+            sparse_coding_config (SparseCodingConfig): Configuration for the sparse coding.
             dictionary_alpha (float): Learning rate for the dictionary layer.
             surrogate_function (SurrogateFunction): Function used to create the dictionary for modeling.
             permutation_times (int): Number of times to permute the dataset for training.
@@ -87,21 +87,6 @@ class SSESM(SESM):
             debug (bool, optional): Enables or disables debug mode (default: True).
             **kwargs: Additional keyword arguments passed to the base class.
         """
-        self.device_manager = DeviceManager(logger,device_map=device_map)
-        self.hook_manager = HookManager(use_wandb=use_wandb,
-                                        project_name=project_name,
-                                        active_hooks=active_hooks,
-                                        logger=logger)
-
-        self.permutation_times = permutation_times
-        self.dfngroup = dfngroup
-        self.partition_manager = UniformPartitionManager(
-            logger, kwargs.get("T"), 
-            n_functions=n_functions, 
-            initial_bounds=initial_bounds,
-            device_manager=self.device_manager,
-            hook_manager=self.hook_manager,  # Pass HookManager
-        )
 
         super().__init__(
             n_features=n_features,
@@ -109,18 +94,33 @@ class SSESM(SESM):
             psi=psi,
             seed=seed,
             model_epochs=model_epochs,
-            ista_epochs=ista_epochs,
-            ista_config=ista_config,
+            sparse_coding_epochs=sparse_coding_epochs,
+            sparse_coding_config=sparse_coding_config,
             dictionary_alpha=dictionary_alpha,
             mu_epochs=mu_epochs,
             rho_epochs=rho_epochs,
             logger=logger,
             dictionary_optimizer=dictionary_optimizer,
             debug=debug,
-            device_manager=self.device_manager,
-            hook_manager=self.hook_manager,
+            device_manager=DeviceManager(logger, device_map=device_map),
+            sesm_hook = sesm_hook,
+            dict_layer_hook = dict_layer_hook,
+            sparse_coding_layer_hook = sparse_coding_layer_hook,
             **kwargs
         )
+
+        self.permutation_times = permutation_times
+        self.dfngroup = dfngroup
+
+        # TODO: This has to be created with a factory of partition managers
+        self.partition_manager = UniformPartitionManager(
+            logger, kwargs.get("T"), 
+            n_functions=n_functions, 
+            initial_bounds=initial_bounds,
+            device_manager=self.device_manager,
+            sparse_coding_layer_hook=self.sparse_coding_layer_hook)
+
+        
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
         """
@@ -143,14 +143,14 @@ class SSESM(SESM):
             y = y.unsqueeze(-1)
 
         self.partition_manager.add_points(X, y)
-        self.partition_manager.init_ista_per_block(ista_config=self.ista_config)
+        self.partition_manager.init_sparse_coding_per_block(config=self.sparse_coding_config)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         for _ in range(self.permutation_times):
             selected_indices = np.random.permutation(len(active_blocks))
             permuted_list_sub_blocks = [active_blocks[i] for i in selected_indices]
             for block in permuted_list_sub_blocks:
-                self.ista_layer = block.ista_layer
+                self.sparse_coding_layer = block.sparse_coding_layer
 
                 # DEBUG: Checking state of optimizer here
                 # print("Optimizer state:", [p.shape for p in self.ista_layer.optimizer.param_groups[0]['params']])
@@ -182,7 +182,7 @@ class SSESM(SESM):
         for block in active_blocks:
             X_torch = block.normalized_X.clone().detach()
             # super().predict does linear combination of dict and h.  anti-squeeze needed.
-            block_pred = super().predict(X_torch, custom_h=block.ista_layer.h)/block.amplitude
+            block_pred = super().predict(X_torch, custom_h=block.sparse_coding_layer.h)/block.amplitude
             for i, pos in enumerate(block.positions):
                 y_pred_per_block[pos] = block_pred[i]
 
