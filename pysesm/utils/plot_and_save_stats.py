@@ -27,7 +27,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
 
     # Total epochs = 6 [2 * ( 3 permutaciones )] * 16 bloques
     ax1 = fig.add_subplot(231)
-    ax1.scatter(range(len(model.ista_layer_losses)), model.ista_layer_losses)
+    ax1.scatter(range(len(model.sparse_coding_layer_losses)), model.sparse_coding_layer_losses)
     ax1.set_xlabel("Total epochs")
     ax1.set_ylabel("ISTA loss")
     ax1.set_title("ISTA Loss (Model epochs)")
