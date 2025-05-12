@@ -27,15 +27,30 @@ class KDTree():
         
         self._splitDataInNodes(self.root)
         
-    def _splitDataInNodes(self, node: Node) -> None:
+    def _splitDataInNodes(self, node: Node, test_data: torch.Tensor = None) -> None:
         """
         Splits data based on the median of the greatest variance dimension. 
-        It stops when the children nodes have 5 points or less
+        It stops when the children nodes have maxNodeSize points or less
         """
         if node is None or node.data.size()[0] <= self.maxNodeSize:
             return      
 
-        assert(self.maxNodeSize>0)
+        if self.maxNodeSize==0:     #maxNodeSize==0 means kdtree is being used for testing purposes
+            mask = test_data[:, node.dim] >= node.split_point
+            
+            node.right.test_data = test_data[mask][:,:-1]
+            node.right.y = test_data[mask][:,-1:]
+
+            node.left.test_data = test_data[~mask][:,:-1]
+            node.left.y = test_data[~mask][:,-1:]
+            
+            node.test_data = None
+            node.test_y = None
+
+            self._splitDataInNodes(node.left, test_data[~mask])
+            self._splitDataInNodes(node.right, test_data[mask])
+            
+            return
 
         # Calculate median only for the dimension we need
         node.split_point = torch.median(node.data[:,node.dim]).item()

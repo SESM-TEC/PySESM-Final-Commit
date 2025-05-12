@@ -11,7 +11,7 @@ Author: Hender Valdivia
 import torch
 
 class Node():
-    def __init__(self, Data : torch.Tensor, bounds: torch.tensor=None):
+    def __init__(self, Data : torch.Tensor):
         """
         This is a node of a tree, it has standard node attributes:
             data: Dataset holding all but the last columns of the given Data
@@ -30,6 +30,8 @@ class Node():
         self.right=None 
         self.split_point=None
         self.block=None
+        self.test_data=None
+        self.test_y=None
         self._updateBounds()
         self.dim=self.greatestVarDim()
     
