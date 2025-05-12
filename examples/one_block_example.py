@@ -142,7 +142,7 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 10000
+    "model_epochs": 10000,
     "dict_epochs": 10,
     "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
