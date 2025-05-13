@@ -71,6 +71,7 @@ class AdaptativePartitionManager(BlockManager):
         self.X = None
         self.y = None
         self.total_blocks=0
+        self.splits=0
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize())
         self.kdtree=None
         self.device_manager=device_manager
@@ -141,7 +142,6 @@ class AdaptativePartitionManager(BlockManager):
             X=torch.Tensor()
             y=torch.Tensor()
             for node in treeNodes: 
-                print("X",node.data)
                 X=torch.cat((X,node.data),dim=0)
                 y=torch.cat((y,node.y),dim=0)
             Xy=torch.cat((X,y), dim=1)
@@ -270,26 +270,51 @@ class AdaptativePartitionManager(BlockManager):
         X = X.to(device)
         y = y.to(device)
 
-        # Copy blocks without X and y, nor their normalized versions, positions, etc.
-        test_blocks = deepcopy(self.blocks) # "deepcopy" is not that deep...
-        test_kdtree = deepcopy(self.kdtree) # "deepcopy" is not that deep...
- 
-        # Save temporarily current blocks
-        temp_current_blocks = self.blocks
-        temp_current_kdtree = self.kdtree
-        self.blocks = test_blocks
-        self.kdtree = test_kdtree
-        #y = y.unsqueeze(0)
-       # Xy=torch.cat((X,y), dim=1)
-       # self._update_block_arrangement(Xy)
-        self._map_points(X, y)
-        self._vectorized_normalization(self.blocks) # Normalize X coords in each block
-        self._configure_blocks(init_h=False) # Normalize y value and initialize h in each block 
+        #Set kdtree in test mode (maxNodeSize=0)
+        maxNodeSize = self.kdtree.maxNodeSize
+        self.kdtree.maxNodeSize=0
+        assert maxNodeSize!=0
+
+        #Configures test data and starts splitting the data without changing the tree
+        self.kdtree.root.test_data=X
+        self.kdtree.root.test_data=y
+        self.kdtree._splitDataInNodes(self.kdtree.root)
+        treeLeaves=self.kdtree.get_leaves()
+        test_blocks = np.empty(len(treeLeaves), dtype=object)  
+
+        #Clone blocks and map test data to each test_block
+        for i, node in enumerate(treeLeaves):
+            test_blocks[(i,)] = node.block.clone_test() #Clone
+            if node.test_data is not None:
+                test_blocks[(i,)].X = list(node.test_data.unbind(dim=0))
+                test_blocks[(i,)].y = list(node.test_y.unbind(dim=0))
         
-        # Retrieved mapped test blocks and return to usual blocks
-        test_active_blocks = self.retrieve_active_blocks()
-        self.blocks = temp_current_blocks
-        self.kdtree = temp_current_kdtree
-        assert self.kdtree.total_nodes==test_kdtree.total_nodes 
+        test_blocks = [
+            test_blocks[index]
+            for index in np.ndindex(test_blocks.shape)
+            if test_blocks[index].is_active #this checks X!=[]
+            ]
+        #Normalizes test data
+        print("TBlocks",test_blocks)
+        self._vectorized_normalization(test_blocks)
+        print("After vectorization")
+        #Configure blocks:
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            if len(block.y) != 0:
+                block.target = torch.stack([value * block.amplitude for value in block.y])
+                if block.target.dim() == 1:
+                    block.target = block.target.unsqueeze(-1)
+                block.target = block.target.detach()
+
+        #retrieve_active_test_blocks
+        test_active_blocks = [
+            test_blocks[index]
+            for index in np.ndindex(test_blocks.shape)
+            if test_blocks[index].is_active
+            ]
+
+        #Resets kdtree to normal mode:
+        self.kdtree.maxNodeSize=maxNodeSize
 
         return test_active_blocks

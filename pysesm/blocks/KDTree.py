@@ -27,28 +27,31 @@ class KDTree():
         
         self._splitDataInNodes(self.root)
         
-    def _splitDataInNodes(self, node: Node, test_data: torch.Tensor = None) -> None:
+    def _splitDataInNodes(self, node: Node) -> None:
         """
         Splits data based on the median of the greatest variance dimension. 
         It stops when the children nodes have maxNodeSize points or less
         """
-        if node is None or node.data.size()[0] <= self.maxNodeSize:
+        if node is None or node.data is None or node.data.size()[0] <= self.maxNodeSize:
             return      
 
         if self.maxNodeSize==0:     #maxNodeSize==0 means kdtree is being used for testing purposes
-            mask = test_data[:, node.dim] >= node.split_point
             
-            node.right.test_data = test_data[mask][:,:-1]
-            node.right.y = test_data[mask][:,-1:]
+            test_Data=torch.cat((node.test_data,node.test_y),dim=0)
 
-            node.left.test_data = test_data[~mask][:,:-1]
-            node.left.y = test_data[~mask][:,-1:]
+            mask = test_Data[:, node.dim] >= node.split_point
+
+            node.right.test_data = test_Data[mask][:,:-1]
+            node.right.y = test_Data[mask][:,-1:]
+
+            node.left.test_data = test_Data[~mask][:,:-1]
+            node.left.y = test_Data[~mask][:,-1:]
             
             node.test_data = None
             node.test_y = None
 
-            self._splitDataInNodes(node.left, test_data[~mask])
-            self._splitDataInNodes(node.right, test_data[mask])
+            self._splitDataInNodes(node.left)
+            self._splitDataInNodes(node.right)
             
             return
 
