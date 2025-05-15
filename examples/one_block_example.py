@@ -7,18 +7,22 @@ Authors: The SESM Team
 
 License: 
 '''
+
 import logging
 import torch
 import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
+from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
+from pysesm.models.FISTALayer import *
 from pysesm.utils.loggers import setup_logger
-from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
+from pysesm.utils_dataset.generate_dataset import *
+from pysesm.utils_dataset.distribution_functions import *
 from pysesm.utils.plot_and_save_stats import plot_surface
+from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from mpl_toolkits.mplot3d import Axes3D
-from pysesm.utils.metric_loggers import *
-from pysesm.enums.ISTALayerEnum import ISTALayerEnum
+
 
 class KLDivLossWrapper(torch.nn.Module):
     def __init__(self, reduction='mean', log_input=False):
@@ -115,41 +119,55 @@ class JensenShannonLossWrapper(torch.nn.Module):
 logger = setup_logger()
 
 # SESM CONFIGURATION
+n_functions=10
 experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "n_features": 2,
-    "n_functions": 10,
+    "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "ista_alpha": 0.15,
-    "ista_lambd": 0.005,
+    # "sparse_coding_config": ISTAConfig(
+    #     alpha=0.10,
+    #     lambd=0.00001,
+    #     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    #     power_iterations=10,
+    #     n_functions=n_functions,
+    #     criterion=torch.nn.MSELoss(),
+    #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    # ),
+    "sparse_coding_config": FISTAConfig(
+        alpha=0.10,
+        lambd=0.00001,
+        step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+        power_iterations=10,
+        n_functions=n_functions,
+        criterion=torch.nn.MSELoss(),
+        evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    ),
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
     ##"dictionary_criterion": KLDivLossWrapper(),
     "dictionary_criterion": JensenShannonLossWrapper(), 
-    "ista_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    "ista_criterion": torch.nn.MSELoss(),
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 10,
+    "model_epochs": 10000, #10000
     "dict_epochs": 10,
-    "ista_epochs": 10,
+    "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
-    "T": 2,
+    "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "permutation_times": 1,
     "seed": 45,
     "dfngroup": 1,
     "iter": 0,
     "debug": True,
-    "ista_layer_type": ISTALayerEnum.CLASSIC,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
+        DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en GPU 0
         DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+        DeviceTarget.PARTITION_MANAGER: "cpu"     # Partition Manager en CPU
     },
     
     #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
@@ -177,8 +195,35 @@ def show_data(X,y,c,marker,label,ax=None):
     plt.show(block=False)
     return ax
 
-# DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
+# Ensure consistency
+assert(experiment["sparse_coding_config"].n_functions == experiment["n_functions"])
+
+# # Dataset con funciones
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_custom_function_dataset(
+    n_samples=500,
+    function=sinusoidal,
+    function_params={'a': 1.2, 'freq': 1, "phase":1},
+    limits=(-2, 2),
+    mesh_divisions=50
+)
+# print("Claves disponibles:", list(trainDataset.keys()))
+
+# trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_custom_nd_function_dataset(
+#     n_samples=500,
+#     n_dimensions=3,
+#     function=nd_paraboloid,
+#     function_params={"a": 1.0, "c": 0.0},
+#     mesh_divisions=50
+# )
+
+# trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(
+#     n_samples=500,
+#     means=[(1, 1), (1, -1), (-1, -1)],
+#     variances=[0.15, 0.2, 0.3],
+#     weights=[1.25, 0.5, 0.75],
+#     limits=(-2, 2),
+#     mesh_divisions=50
+# )
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)
@@ -186,6 +231,8 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
 
+# LOGGER INSTANCE
+logger = setup_logger()
 
 # INSTANTIATE THE MODELS
 ssesm_model = SSESM(**experiment,logger=logger)

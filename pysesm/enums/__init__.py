@@ -4,13 +4,11 @@ from pysesm.enums.PredictionTypeEnum import PredictionTypeEnum
 from pysesm.enums.SurrogateFunctionEnum import SurrogateFunctionEnum
 from pysesm.enums.EvaluationFuncEnum import EvaluationFuncEnum
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.enums.ISTALayerEnum import ISTALayerEnum
 __all__ = [
     "LossFunctionEnum",
     "NormalizationEnum",
     "PredictionTypeEnum",
     "SurrogateFunctionEnum",
     "EvaluationFuncEnum",
-    "DeviceTarget",
-    "ISTALayerEnum"
+    "DeviceTarget"
 ]

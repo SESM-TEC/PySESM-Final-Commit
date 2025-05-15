@@ -180,7 +180,10 @@ class DictLayer(torch.nn.Module):
             )
 
             # y_pred = torch.bmm(self.dictionary, h).squeeze(-1).flatten()
-            y_pred = self.evaluation_func(self.dictionary, h)
+            # Calculate prediction using the current dictionary and h.
+            # IMPORTANT: Detach h here to prevent gradients from flowing back to h
+            # from this loss computation. This avoids conflicts with ISTA's manual update.
+            y_pred = self.evaluation_func(self.dictionary, h.detach()) 
 
             loss = self.criterion(y_pred, y)
             loss.backward(retain_graph=False)

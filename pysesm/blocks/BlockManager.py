@@ -9,6 +9,7 @@ License:
 '''
 
 from pysesm.blocks.PartitionBlock import PartitionBlock
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 
 from abc import ABC, abstractmethod
 from typing import Union, Callable, Iterator
@@ -143,13 +144,9 @@ class BlockManager(ABC):
         pass
 
     @abstractmethod
-    def init_ista_per_block(
+    def init_sparse_coding_per_block(
         self,
-        n_functions: int,
-        ista_alpha: float,
-        ista_lambd: float,
-        evaluation_func: Callable[[Tensor, Tensor], Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
+        config: SparseCodingConfig
     ):
         pass
 

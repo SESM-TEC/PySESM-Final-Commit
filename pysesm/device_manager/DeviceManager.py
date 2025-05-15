@@ -28,7 +28,7 @@ class DeviceManager:
             default_device (str, optional): Default device to use when no specific assignment exists.
                                             Si no se proporciona, se usa "cpu".
             device_map (Dict, optional): Mapping from DeviceTarget to device string.
-                                        Example: {DeviceTarget.ISTA_LAYER: "cuda:0", 
+                                        Example: {DeviceTarget.SPARSE_CODING_LAYER: "cuda:0", 
                                                   DeviceTarget.DICTIONARY_LAYER: "cpu"}
         """
         self.default_device = default_device if default_device is not None else "cpu"

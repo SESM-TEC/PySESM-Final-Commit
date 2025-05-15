@@ -14,155 +14,297 @@ License:
 
 import logging
 import torch
-from pysesm.models.BaseISTALayer import BaseISTALayer
-class ISTALayer(BaseISTALayer):
+from typing import Callable, Iterator, Optional
+from enum import Enum, auto
+from dataclasses import dataclass, field
+from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+
+class StepSizeMethod(Enum):
+    """Enumeration of methods for determining the ISTA step size."""
+    MANUAL = auto()        # Use fixed alpha value provided by user
+    EXACT = auto()         # Use LOBPCG to find largest eigenvalue of D^T D (accurate but slow)
+    POWER_ITERATION = auto()  # Power iteration approximation (balanced)
+    FROBENIUS = auto()     # Frobenius norm upper bound (fast but conservative)
+
+@dataclass
+class ISTAConfig(SparseCodingConfig):
+    """
+    Configuration parameters for the ISTA algorithm.
+    
+    This class encapsulates all configuration parameters for the Iterative
+    Shrinkage-Thresholding Algorithm (ISTA) to provide a cleaner interface
+    and easier parameter management.
+    
+    Attributes:
+        alpha (float): Learning rate for parameter updates. If step_size_method is MANUAL,
+                     this value is used directly as the fixed step size.
+        lambd (float): Regularization parameter controlling sparsity (L1 penalty strength).
+        step_size_method (StepSizeMethod): Method to determine step size during ISTA iterations.
+        power_iterations (int): Number of iterations for power method (if used).
+        early_stopping (bool): Whether to enable early stopping based on loss convergence.
+        early_stopping_tol (float): Tolerance threshold for early stopping.
+
+    """
+    alpha: float = 0.1
+    lambd: float = 0.01
+    step_size_method: StepSizeMethod = StepSizeMethod.POWER_ITERATION
+    power_iterations: int = 10
+    early_stopping: bool = False
+    early_stopping_tol: float = 1e-6
+
+# Define the ISTA layer - here's the important part
+@SparseCodingFactory.register("classic_ista") 
+class ISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
 
-    This layer is designed for tasks such as surrogate modeling and function approximation,
-    integrating sparsity through shrinkage operations and custom regularization techniques.
+    This layer implements the Iterative Shrinkage-Thresholding Algorithm (ISTA) for sparse coding.
+    ISTA is used to find a sparse representation (vector h) that linearly combines elements from 
+    a dictionary to approximate a target function with L1 regularization for sparsity.
 
     Attributes:
-        n_functions (int): Number of basis functions or components in the sparse vector.
-        alpha (float): Learning rate for parameter updates.
-        lambd (float): Regularization parameter controlling the strength of shrinkage operations.
-        criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
-        optimizer (torch.optim.Optimizer): Optimizer builder (default: None (uses SGD)).
+        config (ISTAConfig): Configuration parameters for the ISTA algorithm.
         h (torch.nn.Parameter): Sparse vector maintained and updated by the layer.
         losses (list): List storing the computed losses during training.
-        evaluation_func (callable): Function to compute predictions from input and parameters.
-        threshold (float): Threshold for custom regularization (default: 10.0).
-        penalty_weight (float): Weight of the penalty term in custom regularization (default: 0.01).
+        logger (logging.Logger): Logger for recording debug information.
+        debug (bool): Whether to enable detailed debug logging.
+        parameter_hook (Callable): Optional callback function to monitor internal state.
+        device: Device to run computations on.
+        last_eigenvector (torch.Tensor): Last computed eigenvector for warm-starting LOBPCG.
 
     Methods:
         setup(h: torch.Tensor) -> None:
             Initializes the sparse vector `h` as a learnable parameter.
-        get_custom_regularization() -> torch.Tensor:
-            Computes a custom regularization term for parameters exceeding the threshold.
-        shrinkage() -> torch.Tensor:
-            Applies the shrinkage operation (soft thresholding) to enforce sparsity in `h`.
-        partial_fit(y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
-            Performs a partial fit over a specified number of epochs, updating `h`.
-        forward(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
-            Executes a forward pass, computes the total loss (including regularization),
-            and updates parameters using backpropagation.
+        calculate_step_size(dictionary: torch.Tensor) -> float:
+            Calculates the optimal step size based on the chosen method.
+        soft_threshold(x: torch.Tensor, threshold: float) -> torch.Tensor:
+            Applies soft thresholding operation for L1 proximal mapping.
+        train_step(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool) -> torch.Tensor:
+            Performs a single ISTA iteration.
+        partial_fit(y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool) -> None:
+            Performs multiple ISTA iterations for fitting.
+        forward(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool) -> torch.Tensor:
+            Computes the current loss without updating parameters.
     """
 
+    CONFIG_CLASS = ISTAConfig
+    
     def __init__(
             self,
-            n_functions: int,
-            alpha: float,
-            lambd: float,
-            evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+            config: ISTAConfig,
             logger: logging.Logger,
             debug: bool = False,
-            criterion=None,
-            optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None,
             parameter_hook: Optional[Callable[[dict], None]] = None,
-            device = None
-    ):
+            device = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
         Args:
-            n_functions (int): Number of basis functions or components in the sparse vector.
-            alpha (float): Learning rate for parameter updates.
-            lambd (float): Regularization parameter for shrinkage operations.
+            config (ISTAConfig): Configuration parameters for the ISTA algorithm.
+            logger (logging.Logger): Logger for recording debug information.
+            debug (bool): Whether to enable detailed debug logging.
             criterion (torch.nn.Module, optional): Loss function used for training (default: MSELoss).
-            optimizer (torch.optim.Optimizer, optional): Optimizer for parameter updates (default: SGD).
-            h (torch.Tensor, optional): Initial sparse vector. If not provided, it is initialized randomly.
-            calculate_y_pred (callable, optional): Function to compute predictions (default: None).
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
+            device: Device to run computations on.
         """
-        super(ISTALayer, self).__init__()
-        self.h = None
-        self.n_functions = n_functions
-        self.alpha = alpha
-        self.lambd = lambd
-        self.evaluation_func = evaluation_func
+        super().__init__(config=config,
+                         logger=logger,
+                         debug=debug,
+                         parameter_hook=parameter_hook,
+                         device=device)
+
         self.losses = []
-        self.device = device
-        self.to(self.device) # Move the layer to the assigned device for ISTA_LAYER
-        self.logger = logger
-        self.debug = debug
-        self.parameter_hook = parameter_hook
-        self.setup()
-
-        if criterion is None:
-            # self.criterion = torch.nn.L1Loss()  # L1 to promote sparsity
-            self.criterion = torch.nn.MSELoss()
-        else:
-            self.criterion = criterion
-
-        # It is particularly dangerous to activate weight decay with ISTA, because then
-        # h will be enforce to be closer to zero, and that goes against all the logic.
-        # A previous bug tought us to better enforce weight_decay=0 here, no matter what.
-        if optimizer is None:
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=alpha, weight_decay=0)
-        else:
-            self.optimizer = optimizer(self.parameters(), lr=alpha)
-
-        # TODO: add this in the arguments too.  These are used in the custom regularization
-        self.threshold = 11
-        self.penalty_weight = 0 # 0.05  # Deactivated for now
+        self.last_eigenvector = None  # For warm starting LOBPCG
 
     def setup(self, h: torch.Tensor = None) -> None:
         """
-        Initializes the sparse vector `h` as a learnable parameter.
-
-        If an initial value for `h` is provided, it is used directly. Otherwise, `h` is randomly
-        initialized with values normalized to sum to one.
-
+        Initializes the sparse vector `h`.
+        
         Args:
-            h (torch.Tensor): Optional initial value for the sparse vector. If not provided, 
-            a random vector of size `n_functions` is created.
-
-        Returns:
-            None
+            h (torch.Tensor, optional): Initial value for the sparse vector.
+                If not provided, initialized with zeros.
         """
         if h is not None:
             # Ensure h is 2D
             if h.dim() != 2:
-                h = h.reshape(-1, 1)  # Default to column vector if reshaping needed
+                h = h.reshape(-1, 1)
+
+            if h.shape[0] != self.config.n_functions:
+                raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
+                #raise ValueError(f"Dimension mismatch: h has {h_to_use.shape[0]} rows but n_functions is {self.config.n_functions}")
+                
             self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
         else:
-            # Initialize h as 2D
+            # Initialize h as zeros (common for ISTA)
             self.h = torch.nn.Parameter(
-                torch.rand(self.n_functions, 1).to(self.device), 
+                torch.zeros(self.config.n_functions, 1).to(self.device), 
                 requires_grad=True
             )
-            self.h.data /= self.h.data.sum()
 
+    def calculate_step_size(self, dictionary: torch.Tensor) -> float:
+        """
+        Calculates the step size for ISTA iterations based on the selected method.
         
-
-    def get_custom_regularization(self) -> float:
-        """
-        Computes the custom regularization term to penalize parameters exceeding the defined threshold.
-
-        This term encourages sparsity and controls the magnitude of parameters by penalizing their
-        values when they exceed `self.threshold`.
-
+        The method used for calculation depends on config.step_size_method:
+        - MANUAL: Simply returns the fixed alpha value provided in the config
+        - EXACT: Computes the largest eigenvalue of D^T D using LOBPCG
+        - POWER_ITERATION: Uses power iteration to approximate the largest eigenvalue
+        - FROBENIUS: Uses the Frobenius norm as an upper bound
+        
+        Args:
+            dictionary (torch.Tensor): The dictionary matrix.
+            
         Returns:
-            torch.Tensor: The computed regularization penalty.
+            float: The calculated step size.
         """
-        params = torch.cat([p.view(-1) for p in self.parameters()])
-        penalty = torch.relu(torch.abs(params) - self.threshold)
-        return self.penalty_weight * torch.sum(penalty ** 2)
+        with torch.no_grad():
+            # For MANUAL method, just return the fixed alpha value from config
+            if self.config.step_size_method == StepSizeMethod.MANUAL:
+                return self.config.alpha
+                
+            L_estimate = 0.0
+            
+            if self.config.step_size_method == StepSizeMethod.EXACT:
+                # Compute D^T D (gram matrix)
+                gram = torch.matmul(dictionary.T, dictionary)
+                
+                # Create initial guess vector or use previous eigenvector for warm start
+                k = 1  # We only want the largest eigenvalue
+                n = gram.shape[0]
+                
+                if self.last_eigenvector is not None:
+                    # Use warm start if we have a previous eigenvector
+                    X = self.last_eigenvector.clone()
+                else:
+                    # Otherwise, use random initialization
+                    X = torch.randn(n, k, device=self.device)
+                    X = X / torch.norm(X)
+                
+                # Compute largest eigenvalue using LOBPCG
+                eigenvalues, eigenvectors = torch.lobpcg(A=gram, k=1, X=X, largest=True)
+                
+                # Store eigenvector for warm starting next time
+                self.last_eigenvector = eigenvectors
+                
+                L_estimate = eigenvalues[0].item()
+                
+            elif self.config.step_size_method == StepSizeMethod.POWER_ITERATION:
+                # Transpose for matrix multiplication
+                d_t = dictionary.T
+                
+                # Initialize vector - use warm start if available
+                if hasattr(self, 'last_power_vector') and self.last_power_vector is not None:
+                    v = self.last_power_vector.clone()
+                else:
+                    v = torch.randn(dictionary.shape[1], 1, device=self.device)
+                    v = v / torch.norm(v)
+                
+                # Power iteration
+                for _ in range(self.config.power_iterations):
+                    v = torch.matmul(d_t, torch.matmul(dictionary, v))
+                    v_norm = torch.norm(v)
+                    if v_norm > 0:
+                        v = v / v_norm
+                
+                # Store vector for warm starting next time
+                self.last_power_vector = v.clone()
+                
+                # Compute Rayleigh quotient
+                L_estimate = torch.matmul(v.T, torch.matmul(torch.matmul(d_t, dictionary), v)).item()                
 
-    def shrinkage(self) -> torch.Tensor:
+            elif self.config.step_size_method == StepSizeMethod.FROBENIUS:
+                # Frobenius norm upper bound (fastest but less tight)
+                # For MSE loss, L <= 2 * ||D||_F^2
+                frob_norm_squared = torch.sum(dictionary * dictionary)
+                L_estimate = 2.0 * frob_norm_squared
+            
+            # Step size should be <= 1/L for convergence
+            alpha = 1.0 / (L_estimate + 1e-8)  # Adding small constant for stability
+            
+            if self.debug:
+                self.logger.debug(f"Calculated alpha: {alpha}, Lipschitz estimate: {L_estimate}, Method: {self.config.step_size_method.name}")
+                
+        return alpha
+
+    def soft_threshold(self, x: torch.Tensor, threshold: float) -> torch.Tensor:
         """
-        Applies soft thresholding: zeros out elements below lambda threshold,
-        leaves other elements unchanged
+        Applies soft thresholding operation (proximal operator for L1 norm).
+        
+        This implements the operation: S_λ(x) = sign(x) * max(|x| - λ, 0)
+        
+        Args:
+            x (torch.Tensor): Input tensor.
+            threshold (float): Threshold value λ.
+            
+        Returns:
+            torch.Tensor: Soft thresholded tensor.
         """
-        return torch.where(
-            torch.abs(self.h) < self.lambd,
-            torch.zeros_like(self.h, device=self.device),
-            self.h
+        return torch.sign(x) * torch.maximum(
+            torch.abs(x) - threshold,
+            torch.zeros_like(x, device=self.device)
         )
+
+    def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
+        """
+        Performs a single ISTA iteration.
+        
+        This implements one step of the iterative shrinkage-thresholding algorithm:
+        1. Calculate the gradient of the loss function
+        2. Take a gradient step: h' = h - α * ∇L(h)
+        3. Apply soft thresholding: h_new = S_{αλ}(h')
+        
+        Args:
+            y (torch.Tensor): Target vector.
+            dictionary (torch.Tensor): Dictionary matrix.
+            log_losses (bool): Whether to log losses.
+            
+        Returns:
+            torch.Tensor: The current loss.
+        """
+        # Move tensors to correct device
+        y = y.to(self.device)
+        dictionary = dictionary.to(self.device)
+        
+        # Calculate step size based on selected method
+        step_size = self.calculate_step_size(dictionary)
+        
+        # Manual ISTA update
+        with torch.no_grad():
+            # Forward pass
+            y_pred = self.config.evaluation_func(dictionary, self.h)
+            
+            # Compute loss
+            loss = self.criterion(y_pred, y)
+            if log_losses:
+                self.losses.append(loss.item())
+            
+            # Compute gradient for MSE: 2 * D^T * (y_pred - y)
+            error = y_pred - y
+            gradient = 2 * torch.matmul(dictionary.T, error)
+            
+            # ISTA update: h = soft_threshold(h - alpha * gradient, alpha * lambda)
+            h_update = self.h - step_size * gradient
+            h_new = self.soft_threshold(h_update, step_size * self.config.lambd)
+            
+            # Update h parameter
+            self.h.data = h_new
+            
+            # Call parameter hook if provided
+            if self.parameter_hook is not None:
+                hook_info = {
+                    'h': self.h.detach().clone(),
+                    'gradient': gradient.detach().clone(),
+                    'loss': loss.item(),
+                    'alpha': step_size
+                }
+                self.parameter_hook(hook_info)
+            
+        return loss
 
     def forward(self, y, dictionary, log_losses=True):
         """
-        Performs a forward pass 
+        Performs a forward pass without updating parameters.
 
         Args:
             y (torch.Tensor): Ground truth or target vector.
@@ -172,68 +314,45 @@ class ISTALayer(BaseISTALayer):
         Returns:
             torch.Tensor: Estimated loss after forward step
         """
-
         # Ensure all tensors are on the right device
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
 
         # Combine the words in the dictionary using self.h
-        y_pred = self.evaluation_func(dictionary, self.h)
-        assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
-        
-        loss = self.criterion(y, y_pred)
-        # reg_loss = self.get_custom_regularization() ## Temporarily removed
-        total_loss = loss # + reg_loss
-
-        if log_losses:
-            self.losses.append(total_loss.item())
-
-        return total_loss
-
-    def train_step(self, y, dictionary, log_losses=True):
-        """
-        Performs a single training step: forward, backward, and optimization.
-        """
-        # Move input tensors to the ISTA_LAYER device
-        y = y.to(self.device)
-        dictionary = dictionary.to(self.device)
-
-        self.optimizer.zero_grad()
-        loss = self.forward(y, dictionary, log_losses)
-        loss.backward()
-        self.optimizer.step()
-
         with torch.no_grad():
-            self.h.data = self.shrinkage()
-        # Call the parameter hook if provided
-        if self.parameter_hook is not None:
-            hook_info = {
-                'h': self.h.clone().detach(),
-                'h_grad': self.h.grad.clone().detach() if self.h.grad is not None else None,
-                'loss': loss.item(),
-            }
-            self.parameter_hook(hook_info)
+            y_pred = self.config.evaluation_func(dictionary, self.h)
+            assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
+            
+            loss = self.criterion(y_pred, y)
+
+            if log_losses:
+                self.losses.append(loss.item())
+
         return loss
     
-    def partial_fit(self, y, epochs, dictionary, log_losses=True) -> None:
+    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
-        Performs a partial fit, iteratively updating the sparse vector `h` over a specified number of epochs.
-
-        During training, the method logs the total loss, including both the prediction error
-        and the regularization penalty, for each epoch.
-
+        Performs multiple ISTA iterations.
+        
+        This method runs the ISTA algorithm for the specified number of epochs,
+        effectively optimizing the sparse vector h to minimize the loss while
+        maintaining sparsity through the soft thresholding operation.
+        
         Args:
-            y (torch.Tensor): Ground truth or target vector.
-            epochs (int): Number of epochs to train.
-            dictionary (torch.Tensor): Input matrix or dictionary used to compute predictions.
-            log_losses (bool, optional): Whether to log the computed losses during training (default: True).
-
-        Returns:
-            None
+            y (torch.Tensor): Target vector.
+            epochs (int): Number of iterations.
+            dictionary (torch.Tensor): Dictionary matrix.
+            log_losses (bool): Whether to log losses.
         """
-        y = y.to(self.device)
-        dictionary = dictionary.to(self.device)
-        for _ in range(epochs):
-            self.train_step(y, dictionary, log_losses)
-
-
+        for epoch in range(epochs):
+            loss = self.train_step(y, dictionary, log_losses)
+            
+            if self.debug and (epoch == 0 or (epoch + 1) % 100 == 0 or epoch == epochs - 1):
+                self.logger.debug(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.6f}")
+                
+            # Optional early stopping if enabled and has converged
+            if self.config.early_stopping and epoch > 0 and len(self.losses) >= 2:
+                if abs(self.losses[-1] - self.losses[-2]) < self.config.early_stopping_tol:
+                    if self.debug:
+                        self.logger.debug(f"Early stopping at epoch {epoch + 1}, loss converged within tolerance {self.config.early_stopping_tol}")
+                    break
