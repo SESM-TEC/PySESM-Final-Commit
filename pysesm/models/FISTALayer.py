@@ -28,7 +28,11 @@ class RestartStrategy(Enum):
     ADAPTIVE = auto()  # Restart when monotonicity is violated
     FIXED = auto()     # Restart after fixed number of iterations
 
-
+class MomentumScheme(Enum):
+    """Enumeration of momentum update schemes for FISTA algorithm."""
+    ORIGINAL = auto()   # Standard FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
+    MONOTONIC = auto()  # Alternative scheme for better stability: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
+    
 @dataclass
 class FISTAConfig(SparseCodingConfig):
     """
@@ -47,7 +51,7 @@ class FISTAConfig(SparseCodingConfig):
         early_stopping_tol (float): Tolerance threshold for early stopping.
         restart_strategy (RestartStrategy): Strategy for restarting momentum in FISTA.
         restart_period (int): Number of iterations between restarts for FIXED strategy.
-        momentum_scheme (str): Scheme for computing momentum parameter ('original' or 'monotonic').
+        momentum_scheme (MomentumScheme): Scheme for computing momentum parameter (ORIGINAL or MONOTONIC).
     """
     alpha: float = 0.1
     lambd: float = 0.01
@@ -57,7 +61,7 @@ class FISTAConfig(SparseCodingConfig):
     early_stopping_tol: float = 1e-6
     restart_strategy: RestartStrategy = RestartStrategy.NONE
     restart_period: int = 50
-    momentum_scheme: str = "original"  # Options: "original" or "monotonic"
+    momentum_scheme: MomentumScheme = MomentumScheme.ORIGINAL  
 
 
 @SparseCodingFactory.register("fista")
@@ -186,10 +190,10 @@ class FISTALayer(SparseCodingBaseLayer):
             self.t = 1.0
             return
             
-        if self.config.momentum_scheme == "original":
+        if self.config.momentum_scheme == MomentumScheme.ORIGINAL:
             # Original FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
             self.t = (1.0 + torch.sqrt(1.0 + 4.0 * self.t**2)) / 2.0
-        elif self.config.momentum_scheme == "monotonic":
+        elif self.config.momentum_scheme == MomentumScheme.MONOTONIC:
             # Alternative scheme that ensures monotonic decrease in objective
             # This is more stable in some cases: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
             self.t = (1.0 + torch.sqrt(1.0 + 8.0 * self.t**2)) / 4.0

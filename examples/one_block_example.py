@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
 from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
+from pysesm.models.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
@@ -126,14 +127,25 @@ experiment = {
     "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    "sparse_coding_config": ISTAConfig(
-        alpha=0.10,
-        lambd=0.00001,
-        step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-        power_iterations=10,
-        n_functions=n_functions,
-        criterion=torch.nn.MSELoss(),
-        evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    # "sparse_coding_config": ISTAConfig(
+    #     alpha=0.10,
+    #     lambd=0.00001,
+    #     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    #     power_iterations=10,
+    #     n_functions=n_functions,
+    #     criterion=torch.nn.MSELoss(),
+    #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    # ),
+    "sparse_coding_config": FISTAConfig(
+        alpha = 0.10,
+        lambd = 0.00001,
+        step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+        power_iterations = 10,
+        n_functions = n_functions,
+        restart_strategy = RestartStrategy.NONE,
+        momentum_scheme = MomentumScheme.ORIGINAL,
+        criterion = torch.nn.MSELoss(),
+        evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
     ),
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
@@ -142,7 +154,7 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 10000,
+    "model_epochs": 1000,
     "dict_epochs": 10,
     "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
