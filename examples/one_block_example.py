@@ -150,7 +150,7 @@ experiment = {
     # ),
     "sparse_coding_config": ADMMConfig(
         rho = 0.1,            # Penalty parameter
-        alpha = 1,            # Relaxation parameter (>1.0 for over-relaxation)
+        alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
         lambda_scaling = 1.0, # Lambda scaling factor
         lambd = 0.00001,      # L1 regularization strength
         abs_tol = 1e-4,       # Absolute tolerance
@@ -168,7 +168,7 @@ experiment = {
     "mu_epochs": 10,
     "model_epochs": 5000,
     "dict_epochs": 10,
-    "sparse_coding_epochs": 20,
+    "sparse_coding_epochs": 30,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
