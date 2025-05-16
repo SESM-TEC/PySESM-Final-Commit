@@ -16,6 +16,7 @@ import torch
 from dataclasses import dataclass
 from typing import Callable, Optional
 from enum import Enum, auto
+from math import sqrt
 
 from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
@@ -119,8 +120,6 @@ class FISTALayer(SparseCodingBaseLayer):
         
         # FISTA-specific variables
         self.t = 1.0  # Initial momentum parameter
-        self.z = None  # Auxiliary variable for momentum
-        self.prev_h = None  # Previous iterate
         self.iter_count = 0  # For fixed restart strategy
         self.prev_loss = float('inf')  # For adaptive restart strategy
  
@@ -192,11 +191,11 @@ class FISTALayer(SparseCodingBaseLayer):
             
         if self.config.momentum_scheme == MomentumScheme.ORIGINAL:
             # Original FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
-            self.t = (1.0 + torch.sqrt(1.0 + 4.0 * self.t**2)) / 2.0
+            self.t = (1.0 + sqrt(1.0 + 4.0 * self.t**2)) / 2.0
         elif self.config.momentum_scheme == MomentumScheme.MONOTONIC:
             # Alternative scheme that ensures monotonic decrease in objective
             # This is more stable in some cases: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
-            self.t = (1.0 + torch.sqrt(1.0 + 8.0 * self.t**2)) / 4.0
+            self.t = (1.0 + sqrt(1.0 + 8.0 * self.t**2)) / 4.0
 
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
