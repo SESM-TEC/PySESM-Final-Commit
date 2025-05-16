@@ -137,13 +137,13 @@ experiment = {
     #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
     # ),
     "sparse_coding_config": FISTAConfig(
-        alpha = 0.10,
+        alpha = 0.020,
         lambd = 0.00001,
         step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
         power_iterations = 10,
         n_functions = n_functions,
-        restart_strategy = RestartStrategy.NONE,
-        momentum_scheme = MomentumScheme.ORIGINAL,
+        restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+        momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
         criterion = torch.nn.MSELoss(),
         evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
     ),
@@ -154,7 +154,7 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 1000,
+    "model_epochs": 5000,
     "dict_epochs": 10,
     "sparse_coding_epochs": 50,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
