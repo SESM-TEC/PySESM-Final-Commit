@@ -31,6 +31,7 @@ class ADMMConfig(SparseCodingConfig):
     to control its behavior and convergence properties.
     
     Attributes:
+        lambd (float): L1 regularization parameter that controls sparsity.
         rho (float): Penalty parameter for the augmented Lagrangian. Controls the 
                     weight of the constraint violation in the objective function.
         alpha (float): Relaxation parameter for the updates (typically between 1.0 and 1.8).
@@ -40,13 +41,13 @@ class ADMMConfig(SparseCodingConfig):
         max_admm_iter (int): Maximum number of ADMM iterations within each training step.
         lambda_scaling (float): Scaling factor for the L1 regularization to make it independent of rho.
     """
+    lambd: float = 0.01      # L1 regularization parameter
     rho: float = 1.0         # Penalty parameter
     alpha: float = 1.0       # Relaxation parameter (1.0 = standard ADMM, >1.0 = over-relaxation)
     abs_tol: float = 1e-4    # Absolute tolerance for stopping criteria
     rel_tol: float = 1e-2    # Relative tolerance for stopping criteria
     max_admm_iter: int = 50  # Maximum ADMM iterations within each training step
     lambda_scaling: float = 1.0  # Scaling factor for lambda to make it independent of rho
-
 
 @SparseCodingFactory.register("admm")
 class ADMMLayer(SparseCodingBaseLayer):

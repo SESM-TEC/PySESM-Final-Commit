@@ -15,6 +15,7 @@ from pysesm.enums import SurrogateFunctionEnum
 from pysesm.models import BSESM, SSESM, SESM
 from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.models.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
+from pysesm.models.ADMMLayer import ADMMLayer, ADMMConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
@@ -136,17 +137,29 @@ experiment = {
     #     criterion=torch.nn.MSELoss(),
     #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
     # ),
-    "sparse_coding_config": FISTAConfig(
-        alpha = 0.020,
-        lambd = 0.00001,
-        step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-        power_iterations = 10,
+    # "sparse_coding_config": FISTAConfig(
+    #     alpha = 0.020,
+    #     lambd = 0.00001,
+    #     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    #     power_iterations = 10,
+    #     n_functions = n_functions,
+    #     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+    #     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+    #     criterion = torch.nn.MSELoss(),
+    #     evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
+    # ),
+    "sparse_coding_config": ADMMConfig(
+        rho = 0.1,            # Penalty parameter
+        alpha = 1,            # Relaxation parameter (>1.0 for over-relaxation)
+        lambda_scaling = 1.0, # Lambda scaling factor
+        lambd = 0.00001,      # L1 regularization strength
+        abs_tol = 1e-4,       # Absolute tolerance
+        rel_tol = 1e-2,       # Relative tolerance
+        max_admm_iter = 1,    # Maximum ADMM iterations per step
         n_functions = n_functions,
-        restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
-        momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
         criterion = torch.nn.MSELoss(),
         evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
-    ),
+    ),    
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
@@ -156,7 +169,7 @@ experiment = {
     "mu_epochs": 10,
     "model_epochs": 5000,
     "dict_epochs": 10,
-    "sparse_coding_epochs": 50,
+    "sparse_coding_epochs": 20,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
