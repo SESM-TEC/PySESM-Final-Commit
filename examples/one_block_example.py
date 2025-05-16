@@ -155,7 +155,6 @@ experiment = {
         lambd = 0.00001,      # L1 regularization strength
         abs_tol = 1e-4,       # Absolute tolerance
         rel_tol = 1e-2,       # Relative tolerance
-        max_admm_iter = 1,    # Maximum ADMM iterations per step
         n_functions = n_functions,
         criterion = torch.nn.MSELoss(),
         evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)

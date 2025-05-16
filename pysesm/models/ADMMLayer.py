@@ -38,7 +38,6 @@ class ADMMConfig(SparseCodingConfig):
                       Values > 1.0 can accelerate convergence through over-relaxation.
         abs_tol (float): Absolute tolerance for the stopping criteria.
         rel_tol (float): Relative tolerance for the stopping criteria.
-        max_admm_iter (int): Maximum number of ADMM iterations within each training step.
         lambda_scaling (float): Scaling factor for the L1 regularization to make it independent of rho.
     """
     lambd: float = 0.01      # L1 regularization parameter
@@ -46,7 +45,6 @@ class ADMMConfig(SparseCodingConfig):
     alpha: float = 1.0       # Relaxation parameter (1.0 = standard ADMM, >1.0 = over-relaxation)
     abs_tol: float = 1e-4    # Absolute tolerance for stopping criteria
     rel_tol: float = 1e-2    # Relative tolerance for stopping criteria
-    max_admm_iter: int = 50  # Maximum ADMM iterations within each training step
     lambda_scaling: float = 1.0  # Scaling factor for lambda to make it independent of rho
 
 @SparseCodingFactory.register("admm")
@@ -287,122 +285,83 @@ class ADMMLayer(SparseCodingBaseLayer):
                 if self.debug:
                     self.logger.debug(f"Decreased rho to {self.config.rho:.6f}")
 
+
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
-        Performs a single ADMM iteration (which contains multiple ADMM steps).
-        
-        This implements the full ADMM algorithm for solving the sparse coding problem:
+        Performs a single ADMM iteration step.
+
+        This implements one step of the ADMM algorithm:
         1. h-update: Solve linear system
         2. z-update: Apply soft thresholding
         3. u-update: Update dual variable
-        4. Check convergence criteria
-        
+
         Args:
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
-            
+
         Returns:
             torch.Tensor: The current loss.
         """
         # Move tensors to correct device
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
-        
+
         # Ensure z and u are initialized
         if not hasattr(self, 'z') or self.z is None:
             self.z = torch.zeros_like(self.h.data, device=self.device)
         if not hasattr(self, 'u') or self.u is None:
             self.u = torch.zeros_like(self.h.data, device=self.device)
-        
-        # Reset iteration counter
-        self.iter_count = 0
-        
-        # Initial loss calculation
-        y_pred = self.config.evaluation_func(dictionary, self.h)
-        initial_loss = self.criterion(y_pred, y).item()
-        
-        # Manual ADMM update loop
+
+        # Initialize factorization if needed
+        if self.cached_factorization is None:
+            self.cached_factorization = self._factorize_system_matrix(dictionary)
+
+        # Perform a single ADMM iteration
         with torch.no_grad():
-            for iteration in range(self.config.max_admm_iter):
-                self.iter_count = iteration
-                
-                # 1. Update h by solving the linear system
-                h_new = self._update_h(y, dictionary)
-                
-                # 2. Apply relaxation and update z with soft thresholding
-                h_relaxed = self.config.alpha * h_new + (1 - self.config.alpha) * self.z
-                h_tilde = h_relaxed + self.u
-                z_new = self._update_z(h_tilde)
-                
-                # 3. Update the dual variable u
-                self.u = self.u + h_relaxed - z_new
-                
-                # 4. Compute residuals for convergence check
-                primal_residual, dual_residual = self._compute_residuals(h_new, z_new)
-                
-                # 5. Check stopping criteria
-                converged = self._check_stopping_criteria(primal_residual, dual_residual, h_new, z_new)
-                
-                # 6. Optionally update rho based on residuals (adaptive penalty)
-                # self._update_rho(primal_residual, dual_residual)
-                
-                # 7. Update variables for next iteration
-                self.h.data = h_new
-                self.z = z_new
-                
-                # Debug logging
-                if self.debug and (iteration == 0 or 
-                                  (iteration + 1) % 10 == 0 or 
-                                  iteration == self.config.max_admm_iter - 1 or
-                                  converged):
-                    # Compute current loss for logging
-                    y_pred = self.config.evaluation_func(dictionary, self.h)
-                    current_loss = self.criterion(y_pred, y).item()
-                    
-                    self.logger.debug(
-                        f"ADMM Iteration {iteration + 1}/{self.config.max_admm_iter}, "
-                        f"Loss: {current_loss:.6f}, "
-                        f"Primal residual: {primal_residual:.6e}, "
-                        f"Dual residual: {dual_residual:.6e}"
-                    )
-                
-                # Early termination if converged
-                if converged:
-                    if self.debug:
-                        self.logger.debug(f"ADMM converged after {iteration + 1} iterations")
-                    break
-            
-            # Final loss calculation
+            # 1. Update h by solving the linear system
+            h_new = self._update_h(y, dictionary)
+
+            # 2. Apply relaxation and update z with soft thresholding
+            h_relaxed = self.config.alpha * h_new + (1 - self.config.alpha) * self.z
+            h_tilde = h_relaxed + self.u
+            z_new = self._update_z(h_tilde)
+
+            # 3. Update the dual variable u
+            self.u = self.u + h_relaxed - z_new
+
+            # 4. Compute residuals for monitoring (but don't use for stopping here)
+            primal_residual, dual_residual = self._compute_residuals(h_new, z_new)
+
+            # 5. Update variables for next iteration
+            self.h.data = h_new
+            self.z = z_new
+
+            # Compute current loss for tracking
             y_pred = self.config.evaluation_func(dictionary, self.h)
             loss = self.criterion(y_pred, y)
-            
+
             if log_losses:
                 self.losses.append(loss.item())
-                
-            # Calculate L1 norm for logging
-            l1_norm = torch.norm(self.h.data, p=1).item()
-            sparsity_ratio = torch.sum(torch.abs(self.h.data) > 1e-6).item() / self.h.data.numel()
-                
+
             # Call parameter hook if provided
             if self.parameter_hook is not None:
+                # Create info dictionary with relevant iteration data
                 hook_info = {
                     'h': self.h.detach().clone(),
                     'z': self.z.detach().clone(),
                     'u': self.u.detach().clone(),
                     'loss': loss.item(),
-                    'initial_loss': initial_loss,
-                    'improvement': initial_loss - loss.item(),
-                    'iterations': self.iter_count + 1,
-                    'converged': converged,
                     'primal_residual': primal_residual,
                     'dual_residual': dual_residual,
-                    'l1_norm': l1_norm,
-                    'sparsity_ratio': sparsity_ratio
+                    'l1_norm': torch.norm(self.h.data, p=1).item(),
+                    'sparsity_ratio': torch.sum(torch.abs(self.h.data) > 1e-6).item() / self.h.data.numel()
                 }
                 self.parameter_hook(hook_info)
-            
+
         return loss
+
+    
 
     def forward(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
@@ -431,39 +390,74 @@ class ADMMLayer(SparseCodingBaseLayer):
                 self.losses.append(loss.item())
 
         return loss
+
     
     def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple ADMM iterations.
-        
+
         This method runs the ADMM algorithm for the specified number of epochs,
-        effectively optimizing the sparse vector h to minimize the loss while
-        maintaining sparsity.
-        
+        with each epoch performing a single ADMM iteration step.
+
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of outer iterations (each containing multiple ADMM steps).
+            epochs (int): Number of ADMM iterations to perform.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        # Initialize cached factorization for efficiency across iterations
+        self.cached_factorization = self._factorize_system_matrix(dictionary)
+
+        # Track convergence metrics
+        converged = False
+        best_loss = float('inf')
+        best_h = None
+        no_improvement_count = 0
+
         for epoch in range(epochs):
+            # Perform a single ADMM iteration
             loss = self.train_step(y, dictionary, log_losses)
-            
+
+            # Debug logging
             if self.debug and (epoch == 0 or (epoch + 1) % 10 == 0 or epoch == epochs - 1):
                 h_nnz = torch.sum(torch.abs(self.h.data) > 1e-6).item()
                 sparsity = h_nnz / self.h.data.numel() * 100
                 self.logger.debug(
-                    f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.6f}, "
+                    f"ADMM Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.6f}, "
                     f"Non-zeros: {h_nnz}/{self.h.data.numel()} ({sparsity:.1f}%)"
                 )
-                
-            # Optional early stopping if enabled and converged
+
+            # Track best solution (optional)
+            if loss < best_loss:
+                best_loss = loss
+                best_h = self.h.data.clone()
+                no_improvement_count = 0
+            else:
+                no_improvement_count += 1
+
+            # Check convergence using residuals
+            if epoch > 0:  # Skip first iteration
+                # Compute primal and dual residuals
+                primal_residual, dual_residual = self._compute_residuals(self.h.data, self.z)
+
+                # Check if converged
+                converged = self._check_stopping_criteria(primal_residual, dual_residual, self.h.data, self.z)
+                if converged and self.debug:
+                    self.logger.debug(f"ADMM converged after {epoch + 1} iterations")
+                    break
+
+            # Optional early stopping if enabled
             if hasattr(self.config, 'early_stopping') and self.config.early_stopping:
-                if epoch > 0 and len(self.losses) >= 2:
-                    if abs(self.losses[-1] - self.losses[-2]) < getattr(self.config, 'early_stopping_tol', 1e-6):
-                        if self.debug:
-                            self.logger.debug(
-                                f"Early stopping at epoch {epoch + 1}, loss converged "
-                                f"within tolerance {getattr(self.config, 'early_stopping_tol', 1e-6)}"
-                            )
-                        break
+                if no_improvement_count >= 10:  # No improvement for 10 consecutive iterations
+                    if self.debug:
+                        self.logger.debug(f"Early stopping at epoch {epoch + 1}, no improvement for 10 iterations")
+                    break
+
+        # Use best solution if tracking was enabled and a better solution was found
+        if best_h is not None and best_loss < loss.item():
+            self.h.data = best_h
+            if self.debug:
+                self.logger.debug(f"Using best solution with loss {best_loss:.6f}")
+
+        # Clean up cached factorization to free memory
+        self.cached_factorization = None
