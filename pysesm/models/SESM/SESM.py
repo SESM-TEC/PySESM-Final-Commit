@@ -271,18 +271,6 @@ class SESM(torch.nn.Module):
             **kwargs
         )
     
-    def _sparse_coding_hook(self, info: Dict) -> None:
-        """
-        Hook for ISTALayer to log or store data.
-        """
-        self.hook_manager.log_hook_data(HookType.ISTALAYER, info)
-
-    def _dictlayer_hook(self, info: Dict) -> None:
-        """
-        Hook for DictLayer to log or store data.
-        """
-        self.hook_manager.log_hook_data(HookType.DICTLAYER, info)
-
     @property
     def sparse_coding_layer_losses(self):
         """Returns the losses for the ISTA layer and acts as an attribute due to the @property decorator."""

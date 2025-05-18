@@ -1,7 +1,7 @@
 from pysesm.blocks import UniformPartitionManager
 from pysesm.blocks.UniformPartitionManager import squeeze_factor
 from pysesm.blocks import PartitionBlock
-from pysesm.models.ISTALayer import ISTALayer
+from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 from pysesm.device_manager.DeviceManager import DeviceManager
@@ -17,9 +17,9 @@ logger.setLevel(logging.DEBUG)
 # Define device_map
 device_map = {
     DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-    DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en CPU
+    DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en CPU
     DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-    DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
+    DeviceTarget.PARTITION_MANAGER: "cpu"     # Partition Manager en CPU
 }
 
 # Inicializa DeviceManager para los tests
@@ -159,7 +159,7 @@ def test_add_points():
 
     assert points_found > 0, "No points were mapped to blocks"
 
-def test_init_ista_per_block():
+def test_init_sparse_coding_per_block():
     """Test that init_ista_per_block correctly initializes ISTA layers."""
     T = torch.tensor([2, 2], device='cpu')
     n_functions = 2
@@ -178,20 +178,19 @@ def test_init_ista_per_block():
     def dummy_optimizer(params, lr):
         return torch.optim.Adam(params, lr=lr)
 
-    manager.init_ista_per_block(
-        n_functions=2,
-        ista_alpha=0.01,
-        ista_lambd=0.1,
-        evaluation_func=dummy_eval_func,
-        ista_optimizer=dummy_optimizer
-    )
+
+
+    manager.init_sparse_coding_per_block(config=ISTAConfig(n_functions=2,
+                                                           alpha=0.01,
+                                                           lambd=0.1,
+                                                           evaluation_func=dummy_eval_func))
 
     for block in manager.blocks.flat:
         if hasattr(block, 'X') and len(block.X) > 0:
-            assert hasattr(block, 'ista_layer')
-            assert isinstance(block.ista_layer, ISTALayer)
-            assert block.ista_layer.alpha == 0.01
-            assert block.ista_layer.lambd == 0.1
+            assert hasattr(block, 'sparse_coding_layer')
+            assert isinstance(block.sparse_coding_layer, ISTALayer)
+            assert block.sparse_coding_layer.config.alpha == 0.01
+            assert block.sparse_coding_layer.config.lambd == 0.1
 
 def test_uniform_partition_block_assignment():
     """Test that blocks are correctly assigned during partition."""

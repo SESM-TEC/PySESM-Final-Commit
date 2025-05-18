@@ -212,8 +212,7 @@ class SparseCodingFactory:
             first_arg = args[0]
             if isinstance(first_arg, str):
                 return cls.create_from_id(*args, **kwargs)
-            #elif isinstance(first_arg, SparseCodingBaseConfig):
-            elif isinstance(first_arg, SparseCodingConfig):
+            elif isinstance(first_arg, SparseCodingBaseConfig):
                 return cls.create_from_config(*args, **kwargs)
                 
         # If no positional args or can't determine, check kwargs

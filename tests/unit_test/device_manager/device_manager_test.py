@@ -36,8 +36,8 @@ def test_invalid_cuda_device_index(mock_cuda_available, mock_device_count):
 def test_get_device_with_default():
     """Test getting device assignments with a default fallback."""
     logger = MagicMock()
-    manager = DeviceManager(logger=logger, device_map={DeviceTarget.ISTA_LAYER: "cpu"})
-    assert manager.get_device(DeviceTarget.ISTA_LAYER) == "cpu"
+    manager = DeviceManager(logger=logger, device_map={DeviceTarget.SPARSE_CODING_LAYER: "cpu"})
+    assert manager.get_device(DeviceTarget.SPARSE_CODING_LAYER) == "cpu"
     assert manager.get_device("custom_component") != "cuda:0"  #c Default fallback
 
 

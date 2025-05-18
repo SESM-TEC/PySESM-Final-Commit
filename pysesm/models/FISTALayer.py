@@ -3,9 +3,8 @@ Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
 FISTA Layer Class
 
-Provides the layer implementing Fast Iterative Shrinkage-Thresholding Algorithm (FISTA)
-for finding h, the sparse vector that chooses words in a dictionary to build a surrogate 
-function. FISTA provides accelerated convergence compared to standard ISTA.
+Provides an implementation of the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA)
+for solving L1-regularized least squares problems more efficiently than standard ISTA.
 
 Authors: The SESM Team 
 
@@ -14,21 +13,34 @@ License:
 
 import logging
 import torch
-import math
-from typing import Callable, Optional
 from dataclasses import dataclass
+from typing import Callable, Optional
+from enum import Enum, auto
+from math import sqrt
+
 from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.ISTALayer import StepSizeMethod
+from pysesm.models.sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
 
+
+class RestartStrategy(Enum):
+    """Enumeration of restart strategies for FISTA algorithm."""
+    NONE = auto()      # No restart
+    ADAPTIVE = auto()  # Restart when monotonicity is violated
+    FIXED = auto()     # Restart after fixed number of iterations
+
+class MomentumScheme(Enum):
+    """Enumeration of momentum update schemes for FISTA algorithm."""
+    ORIGINAL = auto()   # Standard FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
+    MONOTONIC = auto()  # Alternative scheme for better stability: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
+    
 @dataclass
 class FISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the FISTA algorithm.
     
-    This class encapsulates all configuration parameters for the Fast Iterative
-    Shrinkage-Thresholding Algorithm (FISTA) to provide a cleaner interface
-    and easier parameter management.
+    This class extends the base SparseCodingConfig with FISTA-specific parameters
+    to control its behavior and convergence properties.
     
     Attributes:
         alpha (float): Learning rate for parameter updates. If step_size_method is MANUAL,
@@ -38,6 +50,9 @@ class FISTAConfig(SparseCodingConfig):
         power_iterations (int): Number of iterations for power method (if used).
         early_stopping (bool): Whether to enable early stopping based on loss convergence.
         early_stopping_tol (float): Tolerance threshold for early stopping.
+        restart_strategy (RestartStrategy): Strategy for restarting momentum in FISTA.
+        restart_period (int): Number of iterations between restarts for FIXED strategy.
+        momentum_scheme (MomentumScheme): Scheme for computing momentum parameter (ORIGINAL or MONOTONIC).
     """
     alpha: float = 0.1
     lambd: float = 0.01
@@ -45,50 +60,55 @@ class FISTAConfig(SparseCodingConfig):
     power_iterations: int = 10
     early_stopping: bool = False
     early_stopping_tol: float = 1e-6
+    restart_strategy: RestartStrategy = RestartStrategy.NONE
+    restart_period: int = 50
+    momentum_scheme: MomentumScheme = MomentumScheme.ORIGINAL  
 
-@SparseCodingFactory.register("classic_fista")
+
+@SparseCodingFactory.register("fista")
 class FISTALayer(SparseCodingBaseLayer):
     """
-    A custom PyTorch module implementing FISTA (Fast Iterative Shrinkage-Thresholding Algorithm).
-
-    This layer implements an accelerated version of ISTA for sparse coding, which converges faster
-    by using momentum. FISTA finds a sparse representation (vector h) that linearly combines elements 
-    from a dictionary to approximate a target function with L1 regularization for sparsity.
-
+    A custom PyTorch module implementing the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA).
+    
+    FISTA accelerates the convergence of ISTA by incorporating a momentum term,
+    achieving a convergence rate of O(1/k²) compared to ISTA's O(1/k). This implementation
+    also supports various restart strategies to improve convergence in practice.
+    
     Attributes:
         config (FISTAConfig): Configuration parameters for the FISTA algorithm.
         h (torch.nn.Parameter): Sparse vector maintained and updated by the layer.
-        z (torch.Tensor): Auxiliary variable for momentum updates.
-        t (float): FISTA momentum parameter.
         losses (list): List storing the computed losses during training.
         logger (logging.Logger): Logger for recording debug information.
         debug (bool): Whether to enable detailed debug logging.
         parameter_hook (Callable): Optional callback function to monitor internal state.
         device: Device to run computations on.
-        last_eigenvector (torch.Tensor): Last computed eigenvector for warm-starting LOBPCG.
-
-    Methods:
-        setup(h: torch.Tensor) -> None:
-            Initializes the sparse vector `h` as a learnable parameter.
-        calculate_step_size(dictionary: torch.Tensor) -> float:
-            Calculates the optimal step size based on the chosen method.
-        soft_threshold(x: torch.Tensor, threshold: float) -> torch.Tensor:
-            Applies soft thresholding operation for L1 proximal mapping.
-        train_step(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool) -> torch.Tensor:
-            Performs a single FISTA iteration.
-        partial_fit(y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool) -> None:
-            Performs multiple FISTA iterations for fitting.
-        forward(y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool) -> torch.Tensor:
-            Computes the current loss without updating parameters.
+        t (float): Momentum parameter for FISTA.
+        z (torch.Tensor): Auxiliary variable for momentum acceleration.
+        prev_h (torch.Tensor): Previous iteration's sparse vector.
+        iter_count (int): Iteration counter for fixed restart strategy.
+        last_eigenvector (torch.Tensor): Last computed eigenvector for warm-starting calculations.
+        prev_loss (float): Previous iteration's loss value for adaptive restart.
     """
+
     CONFIG_CLASS = FISTAConfig
+    
     def __init__(
             self,
             config: FISTAConfig,
-            logger: logging.Logger,
+            logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
-            device=None):
+            device = None):
+        """
+        Initializes the FISTALayer with the specified hyperparameters and components.
+
+        Args:
+            config (FISTAConfig): Configuration parameters for the FISTA algorithm.
+            logger (logging.Logger, optional): Logger for recording debug information.
+            debug (bool, optional): Whether to enable detailed debug logging.
+            parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
+            device: Device to run computations on.
+        """
         super().__init__(config=config,
                          logger=logger,
                          debug=debug,
@@ -96,196 +116,228 @@ class FISTALayer(SparseCodingBaseLayer):
                          device=device)
 
         self.losses = []
-        self.last_eigenvector = None
-        self.h_prev = None
-        self.t_prev = 1.0
-
+        self.last_eigenvector = None  # For warm starting calculations
+        
+        # FISTA-specific variables
+        self.t = 1.0  # Initial momentum parameter
+        self.iter_count = 0  # For fixed restart strategy
+        self.prev_loss = float('inf')  # For adaptive restart strategy
+ 
     def setup(self, h: torch.Tensor = None) -> None:
         """
-        Initialize the sparse vector h as a learnable parameter.
-
+        Initializes the sparse vector `h` and auxiliary variables for FISTA.
+        
         Args:
             h (torch.Tensor, optional): Initial value for the sparse vector.
-                If None, initialized to zeros. Defaults to None.
-
-        Raises:
-            ValueError: If h dimensions don't match configuration.
+                If not provided, initialized with zeros.
         """
         if h is not None:
+            # Ensure h is 2D
             if h.dim() != 2:
                 h = h.reshape(-1, 1)
+
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
+                
             self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
         else:
+            # Initialize h as zeros (common for ISTA/FISTA)
             self.h = torch.nn.Parameter(
-                torch.zeros(self.config.n_functions, 1).to(self.device),
+                torch.zeros(self.config.n_functions, 1).to(self.device), 
                 requires_grad=True
             )
-        self.h_prev = self.h.clone().detach()
-
-    def calculate_step_size(self, dictionary: torch.Tensor) -> float:
-        """
-        Calculates the step size for FISTA iterations based on the selected method.
         
-        The method used for calculation depends on config.step_size_method:
-        - MANUAL: Simply returns the fixed alpha value provided in the config
-        - EXACT: Computes the largest eigenvalue of D^T D using LOBPCG
-        - POWER_ITERATION: Uses power iteration to approximate the largest eigenvalue
-        - FROBENIUS: Uses the Frobenius norm as an upper bound
+        # Initialize auxiliary variables for FISTA
+        self.z = self.h.clone().detach()
+        self.prev_h = self.h.clone().detach()
+
+    def _check_restart_condition(self, loss: float) -> bool:
+        """
+        Determines whether to restart the momentum based on the configured strategy.
         
         Args:
-            dictionary (torch.Tensor): The dictionary matrix.
+            loss (float): Current loss value.
             
         Returns:
-            float: The calculated step size.
+            bool: True if momentum should be restarted, False otherwise.
         """
-        with torch.no_grad():
-            if self.config.step_size_method == StepSizeMethod.MANUAL:
-                return self.config.alpha
-
-            L_estimate = 0.0
-            if self.config.step_size_method == StepSizeMethod.EXACT:
-                gram = torch.matmul(dictionary.T, dictionary)
-                n = gram.shape[0]
-                X = self.last_eigenvector if self.last_eigenvector is not None else torch.randn(n, 1, device=self.device)
-                X = X / torch.norm(X)
-                eigenvalues, eigenvectors = torch.lobpcg(A=gram, k=1, X=X, largest=True)
-                self.last_eigenvector = eigenvectors
-                L_estimate = eigenvalues[0].item()
-
-            elif self.config.step_size_method == StepSizeMethod.POWER_ITERATION:
-                d_t = dictionary.T
-                v = getattr(self, 'last_power_vector', torch.randn(dictionary.shape[1], 1, device=self.device))
-                v = v / torch.norm(v)
-                for _ in range(self.config.power_iterations):
-                    v = torch.matmul(d_t, torch.matmul(dictionary, v))
-                    v = v / torch.norm(v)
-                self.last_power_vector = v.clone()
-                L_estimate = torch.matmul(v.T, torch.matmul(torch.matmul(d_t, dictionary), v)).item()
-
-            elif self.config.step_size_method == StepSizeMethod.FROBENIUS:
-                frob_norm_squared = torch.sum(dictionary * dictionary)
-                L_estimate = 2.0 * frob_norm_squared
-
-            return 1.0 / (L_estimate + 1e-8)
-
-    def soft_threshold(self, x: torch.Tensor, threshold: float) -> torch.Tensor:
+        if self.config.restart_strategy == RestartStrategy.NONE:
+            return False
+            
+        if self.config.restart_strategy == RestartStrategy.FIXED:
+            # Restart every restart_period iterations
+            restart = (self.iter_count > 0) and (self.iter_count % self.config.restart_period == 0)
+            self.iter_count += 1
+            return restart
+            
+        if self.config.restart_strategy == RestartStrategy.ADAPTIVE:
+            # Restart when loss increases (monotonicity violated)
+            restart = loss > self.prev_loss
+            self.prev_loss = loss
+            return restart
+            
+        return False
+        
+    def _update_momentum_parameter(self, restart: bool = False) -> None:
         """
-        Apply soft thresholding operation (proximal operator for L1 norm).
-
-        Implements the operation: S_λ(x) = sign(x) * max(|x| - λ, 0)
-
+        Updates the momentum parameter t based on the selected scheme.
+        
         Args:
-            x (torch.Tensor): Input tensor.
-            threshold (float): Threshold value λ.
-
-        Returns:
-            torch.Tensor: Soft-thresholded tensor.
+            restart (bool): Whether to restart momentum (set t=1).
         """
-        return torch.sign(x) * torch.maximum(
-            torch.abs(x) - threshold,
-            torch.zeros_like(x, device=self.device)
-        )
+        if restart:
+            self.t = 1.0
+            return
+            
+        if self.config.momentum_scheme == MomentumScheme.ORIGINAL:
+            # Original FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
+            self.t = (1.0 + sqrt(1.0 + 4.0 * self.t**2)) / 2.0
+        elif self.config.momentum_scheme == MomentumScheme.MONOTONIC:
+            # Alternative scheme that ensures monotonic decrease in objective
+            # This is more stable in some cases: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
+            self.t = (1.0 + sqrt(1.0 + 8.0 * self.t**2)) / 4.0
 
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
-        Perform a single FISTA iteration.
-
+        Performs a single FISTA iteration.
+        
         This implements one step of the Fast Iterative Shrinkage-Thresholding Algorithm:
-        1. Calculate momentum point y_momentum based on previous iterations
-        2. Evaluate gradient at the momentum point
-        3. Take a gradient step from the momentum point
-        4. Apply soft thresholding to enforce sparsity
-        5. Update momentum parameter and prepare for next iteration
-
+        1. Compute gradient at current auxiliary point z
+        2. Take a gradient step: h_new = soft_threshold(z - α * ∇L(z), αλ)
+        3. Update momentum parameter t
+        4. Update auxiliary variable: z = h_new + ((t_{k-1} - 1)/t_k) * (h_new - h_prev)
+        
         Args:
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
-            log_losses (bool, optional): Whether to record loss values. Defaults to True.
-
+            log_losses (bool): Whether to log losses.
+            
         Returns:
-            torch.Tensor: Current loss value.
+            torch.Tensor: The current loss.
         """
+        # Move tensors to correct device
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
-        step_size = self.calculate_step_size(dictionary)
-
-        if self.h_prev is None:
-            self.h_prev = self.h.clone().detach()
-
+        
+        # Calculate step size based on selected method
+        step_size, self.last_eigenvector = calculate_step_size(
+            dictionary, 
+            self.config.step_size_method,
+            self.config.alpha,
+            self.config.power_iterations,
+            self.last_eigenvector,
+            self.debug,
+            self.logger
+        )
+        
+        # Manual FISTA update
         with torch.no_grad():
-            # FISTA acceleration: compute momentum step
-            t_next = (1 + math.sqrt(1 + 4 * self.t_prev ** 2)) / 2
-            momentum = ((self.t_prev - 1) / t_next)
-            y_momentum = self.h + momentum * (self.h - self.h_prev)
-
-            y_pred = self.config.evaluation_func(dictionary, y_momentum)
-            loss = self.criterion(y_pred, y)
+            # Forward pass using the auxiliary point z
+            z_pred = self.config.evaluation_func(dictionary, self.z)
+            
+            # Compute loss
+            loss = self.criterion(z_pred, y)
             if log_losses:
                 self.losses.append(loss.item())
-
-            error = y_pred - y
+            
+            # Check if we should restart the momentum
+            restart = self._check_restart_condition(loss.item())
+            if restart and self.debug:
+                self.logger.debug(f"Restarting FISTA momentum (t=1) at iteration {self.iter_count}")
+            
+            # Compute gradient at z: 2 * D^T * (z_pred - y)
+            error = z_pred - y
             gradient = 2 * torch.matmul(dictionary.T, error)
-
-            h_update = y_momentum - step_size * gradient
-            h_new = self.soft_threshold(h_update, step_size * self.config.lambd)
-
-            self.h_prev = self.h.clone().detach()
+            
+            # Store previous h for momentum calculation
+            self.prev_h = self.h.clone()
+            
+            # FISTA update: h = soft_threshold(z - alpha * gradient, alpha * lambda)
+            h_update = self.z - step_size * gradient
+            h_new = soft_threshold(h_update, step_size * self.config.lambd, self.device)
+            
+            # Update h parameter
             self.h.data = h_new
-            self.t_prev = t_next
-
+            
+            # Update momentum parameter
+            old_t = self.t
+            self._update_momentum_parameter(restart)
+            
+            # Update auxiliary variable z with momentum
+            # z = h_new + ((old_t - 1) / new_t) * (h_new - h_prev)
+            momentum_factor = (old_t - 1) / self.t if not restart else 0.0
+            self.z = h_new + momentum_factor * (h_new - self.prev_h)
+            
+            # Call parameter hook if provided
             if self.parameter_hook is not None:
-                self.parameter_hook({
+                hook_info = {
                     'h': self.h.detach().clone(),
+                    'z': self.z.detach().clone(),
+                    't': self.t,
                     'gradient': gradient.detach().clone(),
                     'loss': loss.item(),
-                    'alpha': step_size
-                })
-
+                    'alpha': step_size,
+                    'restart': restart
+                }
+                self.parameter_hook(hook_info)
+            
         return loss
 
-    def forward(self, y, dictionary, log_losses=True):
+    def forward(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
-        Compute loss without updating parameters.
+        Performs a forward pass without updating parameters.
 
         Args:
-            y (torch.Tensor): Target vector.
-            dictionary (torch.Tensor): Dictionary matrix.
-            log_losses (bool, optional): Whether to record loss values. Defaults to True.
+            y (torch.Tensor): Ground truth or target vector.
+            dictionary (torch.Tensor): Input dictionary for predictions.
+            log_losses (bool): Whether to log the computed losses (default: True).
 
         Returns:
-            torch.Tensor: Current loss value.
+            torch.Tensor: Estimated loss after forward step
         """
+        # Ensure all tensors are on the right device
         y = y.to(self.device)
         dictionary = dictionary.to(self.device)
+
+        # Combine the words in the dictionary using self.h
         with torch.no_grad():
             y_pred = self.config.evaluation_func(dictionary, self.h)
+            assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
+            
             loss = self.criterion(y_pred, y)
+
             if log_losses:
                 self.losses.append(loss.item())
-        return loss
 
+        return loss
+    
     def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
-        Perform multiple FISTA iterations to find optimal sparse coding.
-
-        This runs the FISTA algorithm for a specified number of epochs,
-        updating the sparse vector h to minimize reconstruction error
-        while maintaining sparsity.
-
+        Performs multiple FISTA iterations.
+        
+        This method runs the FISTA algorithm for the specified number of epochs,
+        effectively optimizing the sparse vector h to minimize the loss while
+        maintaining sparsity through the soft thresholding operation.
+        
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of iterations to perform.
+            epochs (int): Number of iterations.
             dictionary (torch.Tensor): Dictionary matrix.
-            log_losses (bool, optional): Whether to record loss values. Defaults to True.
+            log_losses (bool): Whether to log losses.
         """
+        # Reset iteration counter for fixed restart strategy
+        self.iter_count = 0
+        self.prev_loss = float('inf')
+        
         for epoch in range(epochs):
             loss = self.train_step(y, dictionary, log_losses)
+            
             if self.debug and (epoch == 0 or (epoch + 1) % 100 == 0 or epoch == epochs - 1):
-                self.logger.debug(f"[FISTA] Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.6f}")
+                self.logger.debug(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.6f}")
+                
+            # Optional early stopping if enabled and has converged
             if self.config.early_stopping and epoch > 0 and len(self.losses) >= 2:
                 if abs(self.losses[-1] - self.losses[-2]) < self.config.early_stopping_tol:
                     if self.debug:
-                        self.logger.debug(f"[FISTA] Early stopping at epoch {epoch + 1}")
+                        self.logger.debug(f"Early stopping at epoch {epoch + 1}, loss converged within tolerance {self.config.early_stopping_tol}")
                     break
