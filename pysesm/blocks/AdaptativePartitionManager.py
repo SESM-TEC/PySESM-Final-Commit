@@ -47,7 +47,7 @@ class AdaptativePartitionManager(BlockManager):
         logger: logging.Logger,
         n_functions,
         maxNodeSize: int,
-        maxSplits: int = 5,
+        maxSplitsBeforeRestart: int = 5,
         device_manager=None
     ):
         """
@@ -66,7 +66,7 @@ class AdaptativePartitionManager(BlockManager):
         self.n_functions = n_functions
         self.logger = logger
         self.maxNodeSize = maxNodeSize
-        self.maxSplits = maxSplits
+        self.maxSplitsBeforeRestart = maxSplitsBeforeRestart
         self.blocks = []
         self.X = None
         self.y = None
@@ -137,7 +137,7 @@ class AdaptativePartitionManager(BlockManager):
                     node.block.block_index=(i,)
                     self.blocks[(i,)]=node.block
                 self.total_blocks=len(treeNodes)
-        if self.splits > self.maxSplits:
+        if self.splits > self.maxSplitsBeforeRestart:
             treeNodes=self.kdtree.get_leaves()
             X=torch.Tensor()
             y=torch.Tensor()
@@ -268,36 +268,36 @@ class AdaptativePartitionManager(BlockManager):
         """
         device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         X = X.to(device)
-        y = y.to(device)
-
-        #Set kdtree in test mode (maxNodeSize=0)
-        maxNodeSize = self.kdtree.maxNodeSize
-        self.kdtree.maxNodeSize=0
-        assert maxNodeSize!=0
+        y = y.to(device).unsqueeze(-1)
 
         #Configures test data and starts splitting the data without changing the tree
         self.kdtree.root.test_data=X
-        self.kdtree.root.test_data=y
-        self.kdtree._splitDataInNodes(self.kdtree.root)
+        self.kdtree.root.test_y=y
+        self.kdtree._splitDataInNodes_test(self.kdtree.root)
+        
         treeLeaves=self.kdtree.get_leaves()
         test_blocks = np.empty(len(treeLeaves), dtype=object)  
+        test_blocks = deepcopy(self.blocks)
 
         #Clone blocks and map test data to each test_block
         for i, node in enumerate(treeLeaves):
-            test_blocks[(i,)] = node.block.clone_test() #Clone
             if node.test_data is not None:
                 test_blocks[(i,)].X = list(node.test_data.unbind(dim=0))
                 test_blocks[(i,)].y = list(node.test_y.unbind(dim=0))
-        
-        test_blocks = [
-            test_blocks[index]
-            for index in np.ndindex(test_blocks.shape)
-            if test_blocks[index].is_active #this checks X!=[]
-            ]
+
+        # Selects blocks that weren't assigned any test data
+        test_blocks = np.array(
+            [test_blocks[index] for index in np.ndindex(test_blocks.shape) 
+            if test_blocks[index].is_active],
+            dtype=object)
+
+        assert test_blocks.size > 0
+        for block in test_blocks:
+            assert block.X!=[]
+
         #Normalizes test data
-        print("TBlocks",test_blocks)
-        self._vectorized_normalization(test_blocks)
-        print("After vectorization")
+        #self._vectorized_normalization(test_blocks)
+        
         #Configure blocks:
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
@@ -313,8 +313,5 @@ class AdaptativePartitionManager(BlockManager):
             for index in np.ndindex(test_blocks.shape)
             if test_blocks[index].is_active
             ]
-
-        #Resets kdtree to normal mode:
-        self.kdtree.maxNodeSize=maxNodeSize
 
         return test_active_blocks

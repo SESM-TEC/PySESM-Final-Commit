@@ -98,7 +98,6 @@ class SSESM(SESM):
                 logger, 
                 n_functions=n_functions,
                 maxNodeSize= maxNodeSize,  
-                initial_bounds=initial_bounds,
                 device_manager=self.device_manager
             )
 

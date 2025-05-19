@@ -32,29 +32,10 @@ class KDTree():
         Splits data based on the median of the greatest variance dimension. 
         It stops when the children nodes have maxNodeSize points or less
         """
-        if node is None or node.data is None or node.data.size()[0] <= self.maxNodeSize:
+        
+        if node is None or node.data.size()[0] <= self.maxNodeSize:
             return      
-
-        if self.maxNodeSize==0:     #maxNodeSize==0 means kdtree is being used for testing purposes
-            
-            test_Data=torch.cat((node.test_data,node.test_y),dim=0)
-
-            mask = test_Data[:, node.dim] >= node.split_point
-
-            node.right.test_data = test_Data[mask][:,:-1]
-            node.right.y = test_Data[mask][:,-1:]
-
-            node.left.test_data = test_Data[~mask][:,:-1]
-            node.left.y = test_Data[~mask][:,-1:]
-            
-            node.test_data = None
-            node.test_y = None
-
-            self._splitDataInNodes(node.left)
-            self._splitDataInNodes(node.right)
-            
-            return
-
+        
         # Calculate median only for the dimension we need
         node.split_point = torch.median(node.data[:,node.dim]).item()
 
@@ -159,3 +140,23 @@ class KDTree():
         if node.right is not None:
             leaves = self.get_leaves(leaves, node.right)
         return leaves
+
+    def _splitDataInNodes_test(self,node : Node):
+        if node.test_data is None or node.data is not None:
+            return
+        test_Data=torch.cat((node.test_data,node.test_y),dim=1)
+        mask = test_Data[:, node.dim] >= node.split_point
+
+        node.right.test_data = test_Data[mask][:,:-1]
+        node.right.test_y = test_Data[mask][:,-1:]
+
+        node.left.test_data = test_Data[~mask][:,:-1]
+        node.left.test_y = test_Data[~mask][:,-1:]
+
+        node.test_data = None
+        node.test_y = None
+        
+        self._splitDataInNodes_test(node.left)
+        self._splitDataInNodes_test(node.right)
+        
+        return

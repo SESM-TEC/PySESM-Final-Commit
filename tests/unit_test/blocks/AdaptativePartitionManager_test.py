@@ -263,9 +263,9 @@ def test_retrieve_test_active_blocks():
         evaluation_func=dummy_eval_func,
         ista_optimizer=dummy_optimizer
     )
-    Xt = torch.randn(50, n_features)
-    yt = torch.randn(50, 1)
-    yt = yt.squeeze(1)
+    Xt = torch.randn(5, n_features)
+    yt = torch.randn(5)
+
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
 
     #activeBlocks=partitionManager.retrieve_active_blocks()

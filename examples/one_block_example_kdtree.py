@@ -139,7 +139,7 @@ experiment = {
     "T": 1,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     "partition_manager": "Adaptative",
-    "maxNodeSize": 100,
+    "maxNodeSize": 500,
     "permutation_times": 1,
     "seed": 45,
     "dfngroup": 1,
