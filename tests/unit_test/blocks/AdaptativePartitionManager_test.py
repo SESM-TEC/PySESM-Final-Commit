@@ -135,7 +135,6 @@ def test_map_points():
             in_blocks_y.append(yi)
     for block in partitionManager.blocks:
         assert block.X !=[]
-    print("cont",contador)
     X_added=torch.cat((X1,X2))
     assert len(in_blocks)==X_added.shape[0]
     y_added=torch.cat((y2,y1))
@@ -209,9 +208,6 @@ def test_add_points():
     X_added=torch.cat((X1,X2))
     X_added=X_added.to(device)
     sortX_added, _ = torch.sort(X_added,0)
-    print("X1 + X2 shape:", sortX_added.shape)
-    print("Retrieved from tree shape:", sortX.shape)
-    print("Max difference:", (sortX_added - sortX).abs().max())
     assert torch.equal(sortX_added,sortX)
 
 def test_init_ista_per_block():

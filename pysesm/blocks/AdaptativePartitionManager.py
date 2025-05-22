@@ -137,18 +137,17 @@ class AdaptativePartitionManager(BlockManager):
                     node.block.block_index=(i,)
                     self.blocks[(i,)]=node.block
                 self.total_blocks=len(treeNodes)
-        # if self.splits > self.maxSplitsBeforeRestart:
-        #     treeNodes=self.kdtree.get_leaves()
-        #     X=torch.Tensor()
-        #     y=torch.Tensor()
-        #     for node in treeNodes: 
-        #         X=torch.cat((X,node.data),dim=0)
-        #         y=torch.cat((y,node.y),dim=0)
-        #     Xy=torch.cat((X,y), dim=1)
-        #     self.kdtree = None
-        #     self.splits = 0
-        #     self._update_block_arrangement(Xy)
-        #     self.add_points(X,y)
+        if self.splits > self.maxSplitsBeforeRestart:
+            treeNodes=self.kdtree.get_leaves()
+            X=torch.Tensor()
+            y=torch.Tensor()
+            for node in treeNodes: 
+                X=torch.cat((X,node.data),dim=0)
+                y=torch.cat((y,node.y),dim=0)
+            Xy=torch.cat((X,y), dim=1)
+            self.kdtree = None
+            self.splits = 0
+            self._update_block_arrangement(Xy)
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -183,7 +182,7 @@ class AdaptativePartitionManager(BlockManager):
 
     def _map_points(self, X: torch.Tensor, y: np.ndarray):
         """
-        Maps input points to their respective sub-blocks.
+        Maps kdtree leaf nodes data to their blocks.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
@@ -283,13 +282,7 @@ class AdaptativePartitionManager(BlockManager):
         treeLeaves=self.kdtree.get_leaves()
         test_blocks = np.empty(len(treeLeaves), dtype=object)  
         
-
-        #Clone blocks and map test data to each test_block
-        # for i, node in enumerate(treeLeaves):
-        #     if node.test_data is not None:
-        #         test_blocks[(i,)].X = list(node.test_data.unbind(dim=0))
-        #         test_blocks[(i,)].y = list(node.test_y.unbind(dim=0))
-                
+        #Clone blocks and map test data to each test_block    
         for j, node in enumerate(treeLeaves):
             if node.test_data is not None:
                 node.block.clear_points()
@@ -301,17 +294,7 @@ class AdaptativePartitionManager(BlockManager):
             block = test_blocks[idx]
             if len(block.y) > 0:  # Only if block has points
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
-            # else:  
-            #     test_blocks[(i,)].X = []
-            #     test_blocks[(i,)].y = []
-        # for _ , node in enumerate(treeNodes):
-        #     node.block.clear_points()
-        #     for i, _ in enumerate(node.data):
-        #         node.block.new_point(node.data[i],node.y[i],i)
-        # for idx in np.ndindex(self.blocks.shape):
-        #     block = self.blocks[idx]
-        #     if len(block.y) > 0:  # Only if block has points
-        #         block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
+
         # Selects blocks that weren't assigned any test data
         test_blocks = np.array(
             [test_blocks[index] for index in np.ndindex(test_blocks.shape) 
