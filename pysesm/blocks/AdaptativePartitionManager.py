@@ -137,17 +137,18 @@ class AdaptativePartitionManager(BlockManager):
                     node.block.block_index=(i,)
                     self.blocks[(i,)]=node.block
                 self.total_blocks=len(treeNodes)
-        if self.splits > self.maxSplitsBeforeRestart:
-            treeNodes=self.kdtree.get_leaves()
-            X=torch.Tensor()
-            y=torch.Tensor()
-            for node in treeNodes: 
-                X=torch.cat((X,node.data),dim=0)
-                y=torch.cat((y,node.y),dim=0)
-            Xy=torch.cat((X,y), dim=1)
-            self.kdtree = None
-            self.splits = 0
-            self._update_block_arrangement(Xy)
+        # if self.splits > self.maxSplitsBeforeRestart:
+        #     treeNodes=self.kdtree.get_leaves()
+        #     X=torch.Tensor()
+        #     y=torch.Tensor()
+        #     for node in treeNodes: 
+        #         X=torch.cat((X,node.data),dim=0)
+        #         y=torch.cat((y,node.y),dim=0)
+        #     Xy=torch.cat((X,y), dim=1)
+        #     self.kdtree = None
+        #     self.splits = 0
+        #     self._update_block_arrangement(Xy)
+        #     self.add_points(X,y)
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -171,9 +172,9 @@ class AdaptativePartitionManager(BlockManager):
 
                     block.h.data /= block.h.data.sum()
 
-                   # self.logger.debug(
-                    #    f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
-                   # )
+                    self.logger.debug(
+                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                    )
 
                 block.target = torch.stack([value * block.amplitude for value in block.y])
                 if block.target.dim() == 1:
@@ -189,11 +190,15 @@ class AdaptativePartitionManager(BlockManager):
             y (np.ndarray): Target data corresponding to the input points.
         """
         treeNodes=self.kdtree.get_leaves()
-        for node in treeNodes:
-            if all(torch.equal(a, b) for a, b in zip(node.block.X,list(node.data.unbind(dim=0)))): 
-                node.block.X=list(node.data.unbind(dim=0))
-            if all(torch.equal(a, b) for a, b in zip(node.block.X,list(node.data.unbind(dim=0)))): 
-                node.block.y=list(node.y.unbind(dim=0))
+        for _ , node in enumerate(treeNodes):
+            node.block.clear_points()
+            for i, _ in enumerate(node.data):
+                node.block.new_point(node.data[i],node.y[i],i)
+        for idx in np.ndindex(self.blocks.shape):
+            block = self.blocks[idx]
+            if len(block.y) > 0:  # Only if block has points
+                block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
+
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
@@ -277,14 +282,36 @@ class AdaptativePartitionManager(BlockManager):
         
         treeLeaves=self.kdtree.get_leaves()
         test_blocks = np.empty(len(treeLeaves), dtype=object)  
-        test_blocks = deepcopy(self.blocks)
+        
 
         #Clone blocks and map test data to each test_block
-        for i, node in enumerate(treeLeaves):
+        # for i, node in enumerate(treeLeaves):
+        #     if node.test_data is not None:
+        #         test_blocks[(i,)].X = list(node.test_data.unbind(dim=0))
+        #         test_blocks[(i,)].y = list(node.test_y.unbind(dim=0))
+                
+        for j, node in enumerate(treeLeaves):
             if node.test_data is not None:
-                test_blocks[(i,)].X = list(node.test_data.unbind(dim=0))
-                test_blocks[(i,)].y = list(node.test_y.unbind(dim=0))
-
+                node.block.clear_points()
+                test_blocks[(j,)] = node.block.clone_test()
+                for i, _ in enumerate(node.test_data):
+                    test_blocks[(j,)].new_point(node.test_data[i], node.test_y[i],i)
+                
+        for idx in np.ndindex(test_blocks.shape):
+            block = test_blocks[idx]
+            if len(block.y) > 0:  # Only if block has points
+                block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
+            # else:  
+            #     test_blocks[(i,)].X = []
+            #     test_blocks[(i,)].y = []
+        # for _ , node in enumerate(treeNodes):
+        #     node.block.clear_points()
+        #     for i, _ in enumerate(node.data):
+        #         node.block.new_point(node.data[i],node.y[i],i)
+        # for idx in np.ndindex(self.blocks.shape):
+        #     block = self.blocks[idx]
+        #     if len(block.y) > 0:  # Only if block has points
+        #         block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
         # Selects blocks that weren't assigned any test data
         test_blocks = np.array(
             [test_blocks[index] for index in np.ndindex(test_blocks.shape) 
@@ -296,7 +323,7 @@ class AdaptativePartitionManager(BlockManager):
             assert block.X!=[]
 
         #Normalizes test data
-        #self._vectorized_normalization(test_blocks)
+        self._vectorized_normalization(test_blocks)
         
         #Configure blocks:
         for index in np.ndindex(self.blocks.shape):
@@ -313,5 +340,8 @@ class AdaptativePartitionManager(BlockManager):
             for index in np.ndindex(test_blocks.shape)
             if test_blocks[index].is_active
             ]
+        
+        #Reconfigure kdtree and blocks to leave them as they were
+        self._map_points(None, None)
 
         return test_active_blocks

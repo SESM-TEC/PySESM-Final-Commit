@@ -11,7 +11,7 @@ import numpy as np
 from pysesm.utils.loggers import setup_logger
 
 def test_update_block_arrangement():
-    X1 = torch.randn(19, 6)
+    X1 = torch.randn(192, 6)
 
     logger=setup_logger()
     device_map = {
@@ -25,16 +25,39 @@ def test_update_block_arrangement():
 
     partitionManager=AdaptativePartitionManager(logger,6, maxNodeSize=5, device_manager=device_manager)
     partitionManager._update_block_arrangement(X1)
-
-    for block in partitionManager.blocks:
-        assert block is not None
-        
     
-    X2 = torch.randn(19, 6)
+    for block in partitionManager.blocks:
+        assert block is not None
+        assert block.X == []
+    
+    leaves=partitionManager.kdtree.get_leaves()
+    X=torch.Tensor()
+    for leaf in leaves:
+        X=torch.cat((leaf.data, X))
+    
+    sorted_X, _ =torch.sort(X,0)
+    sorted_X1, _ =torch.sort(X1[:,:-1],0)
+    
+    assert torch.equal(sorted_X, sorted_X1)    
+
+    X2 = torch.randn(192, 6)
     partitionManager._update_block_arrangement(X2)
+    
+    X_added=torch.cat((X1,X2))
 
     for block in partitionManager.blocks:
         assert block is not None
+        assert block.X == []
+    
+    leaves=partitionManager.kdtree.get_leaves()
+    X=torch.Tensor()
+    for leaf in leaves:
+        X=torch.cat((leaf.data, X))
+    
+    sorted_X, _ =torch.sort(X,0)
+    sorted_X1, _ =torch.sort(X_added[:,:-1],0)
+    
+    assert torch.equal(sorted_X, sorted_X1)    
         
 def test_configure_blocks():
     """Test that _configure_blocks correctly sets up blocks."""
@@ -61,14 +84,12 @@ def test_configure_blocks():
 def test_map_points():
     n_features=5
     torch.manual_seed(42) 
-    X = torch.randn(192, n_features)
-    y = torch.randn(192, 1)
-    Xy=torch.cat((X,y),dim=1)
+    X1 = torch.randn(19, n_features)
+    y1 = torch.randn(19, 1)
+    Xy=torch.cat((X1,y1),dim=1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5)
     partitionManager._update_block_arrangement(Xy)
-    X1 = torch.randn(500, n_features)
-    y1 = torch.randn(500, 1)
     partitionManager._map_points(X1, y1)
     nodes=partitionManager.kdtree.get_leaves()
     in_blocks=[]
@@ -86,9 +107,46 @@ def test_map_points():
     in_blocks_y = torch.stack(in_blocks_y, dim=0)
     in_blocks, _ =torch.sort(in_blocks,0)
     in_blocks_y, _ =torch.sort(in_blocks_y,0)
-    sort_X, _ = torch.sort(X,0)
-    sort_y, _ = torch.sort(y,0)
+    sort_X, _ = torch.sort(X1,0)
+    sort_y, _ = torch.sort(y1,0)
 
+    assert torch.equal(in_blocks,sort_X)
+    assert torch.equal(in_blocks_y,sort_y)
+    
+    X2 = torch.randn(192, n_features)
+    y2 = torch.randn(192, 1)
+    Xy2=torch.cat((X2,y2),dim=1)
+
+    partitionManager._update_block_arrangement(Xy2)
+    partitionManager._map_points(X2, y2)
+    
+    leaves=partitionManager.kdtree.get_leaves()
+    in_blocks=[]
+    in_blocks_y=[]
+    contador=0
+    for node in leaves:
+        assert node.block.X != []
+        assert node.block.y != []
+        assert node.block.positions != []
+        for x in node.block.X:
+            in_blocks.append(x)
+            contador+=1
+        for yi in node.block.y:
+            in_blocks_y.append(yi)
+    for block in partitionManager.blocks:
+        assert block.X !=[]
+    print("cont",contador)
+    X_added=torch.cat((X1,X2))
+    assert len(in_blocks)==X_added.shape[0]
+    y_added=torch.cat((y2,y1))
+    in_blocks = torch.stack(in_blocks, dim=0)
+    in_blocks_y = torch.stack(in_blocks_y, dim=0)
+    in_blocks, _ =torch.sort(in_blocks,0)
+    in_blocks_y, _ =torch.sort(in_blocks_y,0)
+    sort_X, _ = torch.sort(X_added,0)
+    sort_y, _ = torch.sort(y_added,0)
+
+    assert in_blocks.shape==sort_X.shape
     assert torch.equal(in_blocks,sort_X)
     assert torch.equal(in_blocks_y,sort_y)
 
@@ -112,7 +170,6 @@ def test_add_points():
     y = torch.randn(500, 1)
 
     partitionManager.add_points(X1, y)
-
     X2 = torch.randn(500, n_features)
 
     partitionManager.add_points(X2, y)
@@ -125,6 +182,7 @@ def test_add_points():
         assert node.block is not None
         assert node.block.X != []
         assert node.block.y != []
+        assert node.block.positions != []
         for tensor in node.block.X:
             assert tensor.device.type==device
         for tensor in node.block.y:
@@ -151,7 +209,9 @@ def test_add_points():
     X_added=torch.cat((X1,X2))
     X_added=X_added.to(device)
     sortX_added, _ = torch.sort(X_added,0)
-
+    print("X1 + X2 shape:", sortX_added.shape)
+    print("Retrieved from tree shape:", sortX.shape)
+    print("Max difference:", (sortX_added - sortX).abs().max())
     assert torch.equal(sortX_added,sortX)
 
 def test_init_ista_per_block():
@@ -244,9 +304,9 @@ def test_retrieve_test_active_blocks():
     y = torch.randn(500, 1)
     partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
     partitionManager.add_points(X1, y)
-    activeBlocks=partitionManager.retrieve_active_blocks()
+    activeBlocks1=partitionManager.retrieve_active_blocks()
     
-    for block in activeBlocks:
+    for block in activeBlocks1:
         assert block.X!=[]
         assert block.y!=[]
         assert not (isinstance(block.ista_layer, ISTALayer))
@@ -268,5 +328,21 @@ def test_retrieve_test_active_blocks():
 
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
 
-    #activeBlocks=partitionManager.retrieve_active_blocks()
+    X=torch.Tensor()
+    for block in activeTestBlocks:
+        X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
+    sortX, _ = torch.sort(X,0)   
+    sortXt, _ = torch.sort(Xt,0)
+    assert torch.equal(sortX,sortXt)
+    
+    X_val=torch.Tensor()
+    activeBlocks2=partitionManager.retrieve_active_blocks()
+    for block in activeBlocks2:
+        X_val=torch.cat((X_val,torch.stack(block.X,dim=0)),dim=0)
+    
+    sortX1, _ = torch.sort(X1,0)   
+    sortX_val, _ = torch.sort(X_val,0)
+    assert sortX1.shape==sortX_val.shape
+    assert torch.equal(sortX1,sortX_val)
+    
 
