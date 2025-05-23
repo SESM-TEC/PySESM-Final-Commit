@@ -31,7 +31,7 @@ class KLDivLossWrapper(torch.nn.Module):
         self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
         
     def forward(self, inputs, targets):
-        # Step 1: Ensure non-negativity (if your data can be negative)
+        # Step 1Dropbox/doc/inv/ridgerun/admin/renovaciones/: Ensure non-negativity (if your data can be negative)
         inputs = torch.nn.functional.relu(inputs) + 1e-8  # Small constant for numerical stability
         targets = torch.nn.functional.relu(targets) + 1e-8
         
@@ -128,15 +128,15 @@ experiment = {
     "n_functions": n_functions,
     "eig_range": [0.05, 0.2],
     "mu_range": [-2.0, 2.0],
-    # "sparse_coding_config": ISTAConfig(
-    #     alpha=0.10,
-    #     lambd=0.00001,
-    #     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    #     power_iterations=10,
-    #     n_functions=n_functions,
-    #     criterion=torch.nn.MSELoss(),
-    #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
-    # ),
+    "sparse_coding_config": ISTAConfig(
+        alpha=0.10,
+        lambd=0.00001,
+        step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+        power_iterations=10,
+        n_functions=n_functions,
+        criterion=torch.nn.MSELoss(),
+        evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+    ),
     # "sparse_coding_config": FISTAConfig(
     #     alpha = 0.020,
     #     lambd = 0.00001,
@@ -148,17 +148,17 @@ experiment = {
     #     criterion = torch.nn.MSELoss(),
     #     evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
     # ),
-    "sparse_coding_config": ADMMConfig(
-        rho = 0.1,            # Penalty parameter
-        alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
-        lambda_scaling = 1.0, # Lambda scaling factor
-        lambd = 0.00001,      # L1 regularization strength
-        abs_tol = 1e-4,       # Absolute tolerance
-        rel_tol = 1e-2,       # Relative tolerance
-        n_functions = n_functions,
-        criterion = torch.nn.MSELoss(),
-        evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
-    ),    
+    # "sparse_coding_config": ADMMConfig(
+    #     rho = 0.1,            # Penalty parameter
+    #     alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
+    #     lambda_scaling = 1.0, # Lambda scaling factor
+    #     lambd = 0.00001,      # L1 regularization strength
+    #     abs_tol = 1e-4,       # Absolute tolerance
+    #     rel_tol = 1e-2,       # Relative tolerance
+    #     n_functions = n_functions,
+    #     criterion = torch.nn.MSELoss(),
+    #     evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
+    # ),    
     "dictionary_alpha": 0.1,
     "dictionary_optimizer": lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     ##"dictionary_criterion": torch.nn.MSELoss(),
@@ -166,7 +166,7 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 5000,
+    "model_epochs": 100,
     "dict_epochs": 10,
     "sparse_coding_epochs": 30,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
