@@ -120,7 +120,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
 logger = setup_logger()
 
 # SESM CONFIGURATION
-n_functions=10
+n_functions=30
 experiment = {
     "hyp_set": 1,
     "n_samples": 500,
@@ -166,13 +166,13 @@ experiment = {
     "dictionary_criterion": JensenShannonLossWrapper(), 
     "rho_epochs": 10,
     "mu_epochs": 10,
-    "model_epochs": 100,
+    "model_epochs": 75,
     "dict_epochs": 10,
     "sparse_coding_epochs": 30,
     "psi": SurrogateFunctionEnum.GAUSSIAN,
-    "T": 2,
+    "T": 3,
     "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    "permutation_times": 1,
+    "permutation_times": 10,
     "seed": 45,
     "dfngroup": 1,
     "iter": 0,
