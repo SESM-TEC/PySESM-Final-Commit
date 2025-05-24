@@ -1,7 +1,5 @@
-from pysesm.models.SESM import SESM
-from pysesm.models.SSESM import SSESM
-from pysesm.models.BSESM import BSESM
-from pysesm.models.ISTALayer import ISTALayer
-from pysesm.models.DictLayer import DictLayer
+# pysesm/models/__init__.py
 
-__all__ = ["SESM", "BSESM", "SSESM", "ISTALayer", "DictLayer"]
+from .SESM import SESM, SESMConfig
+from .SSESM import SSESM
+from .BSESM import BSESM

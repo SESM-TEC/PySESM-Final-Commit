@@ -4,7 +4,7 @@ from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCod
 from copy import deepcopy
 from typing import Union, Callable, Iterator, Dict, Optional
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.factories.SparseCodingFactory import SparseCodingFactory
 from pysesm.device_manager.DeviceManager import DeviceManager
 
 import logging
@@ -231,7 +231,7 @@ class UniformPartitionManager(BlockManager):
                                      config: SparseCodingConfig):
 
         """
-        Initializes an ISTA layer for each block.
+        Initializes a sparse coding layer for each block.
 
         Args:
             config (SparseCodingConfig): Configuration for sparse coding.

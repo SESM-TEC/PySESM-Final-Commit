@@ -27,6 +27,7 @@ class SparseCodingConfig:
     
     Attributes:
         n_functions (int): Number of words in the dictionary, i.e. dimension of h. It MUST be given.
+        epochs (int): Number of epochs to train the sparse coding layer.
         initial_h: Initial h value of dimension n_functions x 1.
         evaluation_func (Callable): Function that computes predictions from a dictionary and sparse vector.
                                     Should have signature: f(dictionary, h) -> predictions.
@@ -34,6 +35,7 @@ class SparseCodingConfig:
 
     """
     n_functions: int = None  # Required, no default
+    epochs: int = 100  # Number of training epochs
     initial_h: Optional[torch.Tensor] = None  # Initial sparse vector (optional)
     evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
     criterion: Optional[torch.nn.Module]  = None
@@ -42,7 +44,7 @@ T_Config = TypeVar('T_Config', bound=SparseCodingConfig)
 
 class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
     """
-    Abstract base class for ISTA algorithm implementations.
+    Abstract base class for sparse coding algorithm implementations.
     Inherits from torch.nn.Module for PyTorch integration and ABC for abstract functionality.
     
     All concrete implementations (ISTALayer, FISTALayer, etc.) must inherit from this class
@@ -64,7 +66,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         """
         super().__init__()
 
-	# Type check for config
+        # Type check for config
         if not isinstance(config, self.CONFIG_CLASS):
             raise TypeError(f"Expected config of type {self.CONFIG_CLASS.__name__}, "
                            f"got {type(config).__name__}")
@@ -135,11 +137,11 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         
         Args:
             y (torch.Tensor): Target/ground truth vector
+            epochs (int): Number of iterations to train
             dictionary (torch.Tensor): Dictionary matrix for prediction
             log_losses (bool): If True, logs the computed losses
             
         Returns:
-            torch.Tensor: Computed loss
+            None
         """
         pass
-    

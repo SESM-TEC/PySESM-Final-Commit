@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.factories.SparseCodingFactory import SparseCodingFactory
 from pysesm.models.sparse_coding_utils import soft_threshold
 
 
