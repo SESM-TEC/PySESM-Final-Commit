@@ -88,6 +88,15 @@ class SSESM(SESM):
             sparse_coding_layer_hook=sparse_coding_layer_hook
         )
 
+
+    def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+        """
+        Concrete implementation of the evaluation function for SSESM.
+        This performs standard 2D matrix multiplication.
+        """
+        return torch.matmul(dictionary, h)    
+
+    
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.

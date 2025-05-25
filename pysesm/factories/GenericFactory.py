@@ -12,7 +12,7 @@ License:
 '''
 
 from typing import Dict, Type, Optional, TypeVar, Generic, List
-
+from ..base_types import BaseConfig
 
 # Define type variables for the generic factory
 T_Product = TypeVar('T_Product')  # The product being created (Layer, etc.)
@@ -173,7 +173,7 @@ class GenericFactory(Generic[T_Product, T_Config]):
             if isinstance(first_arg, str): # is the first positional argument a string?
                 return cls.create_from_id(*args, **kwargs)
             # Check if it's a config object
-            elif hasattr(first_arg, '__dataclass_fields__') or hasattr(first_arg, '__dict__'):
+            elif isinstance(first_arg, BaseConfig):
                 return cls.create_from_config(*args, **kwargs)
                 
         # Check kwargs

@@ -95,6 +95,7 @@ class FISTALayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: FISTAConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -110,6 +111,7 @@ class FISTALayer(SparseCodingBaseLayer):
             device: Device to run computations on.
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,
@@ -233,7 +235,7 @@ class FISTALayer(SparseCodingBaseLayer):
         # Manual FISTA update
         with torch.no_grad():
             # Forward pass using the auxiliary point z
-            z_pred = self.config.evaluation_func(dictionary, self.z)
+            z_pred = self.evaluation_func(dictionary, self.z)
             
             # Compute loss
             loss = self.criterion(z_pred, y)
@@ -301,7 +303,7 @@ class FISTALayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)

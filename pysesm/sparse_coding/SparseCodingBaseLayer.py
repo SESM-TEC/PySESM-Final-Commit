@@ -17,8 +17,10 @@ import logging
 
 import torch
 
+import ..base_types import BaseConfig
+
 @dataclass
-class SparseCodingConfig:
+class SparseCodingConfig(BaseConfig):
     """
     Configuration parameters for all sparse coding algorithms.
     
@@ -29,15 +31,12 @@ class SparseCodingConfig:
         n_functions (int): Number of words in the dictionary, i.e. dimension of h. It MUST be given.
         epochs (int): Number of epochs to train the sparse coding layer.
         initial_h: Initial h value of dimension n_functions x 1.
-        evaluation_func (Callable): Function that computes predictions from a dictionary and sparse vector.
-                                    Should have signature: f(dictionary, h) -> predictions.
         criterion (torch.nn.Module): Loss function used for training (default: Mean Squared Error).
 
     """
-    n_functions: int = None  # Required, no default
+    n_functions: int   # Required, no default
     epochs: int = 100  # Number of training epochs
     initial_h: Optional[torch.Tensor] = None  # Initial sparse vector (optional)
-    evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None
     criterion: Optional[torch.nn.Module]  = None
 
 T_Config = TypeVar('T_Config', bound=SparseCodingConfig)
@@ -57,6 +56,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
     @abstractmethod
     def __init__(self,
                  config: T_Config,
+                 evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
                  logger: Optional[logging.Logger] = None,
                  debug: bool = False,
                  parameter_hook: Optional[Callable] = None,
@@ -70,12 +70,17 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         if not isinstance(config, self.CONFIG_CLASS):
             raise TypeError(f"Expected config of type {self.CONFIG_CLASS.__name__}, "
                            f"got {type(config).__name__}")
-        
+
         self.config = config
 
+        if self.config.n_function is None:
+            raise ValueError("n_functions must be specified in SparseCodingConfig")
+        
         self.device = device
         self.logger = logger
         self.debug = debug
+        self.evaluation_func = evaluation_func
+
         self.parameter_hook = parameter_hook
 
         if self.config.criterion is None:

@@ -75,6 +75,7 @@ class ISTALayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: ISTAConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -90,6 +91,7 @@ class ISTALayer(SparseCodingBaseLayer):
             device: Device for computation (CPU/GPU).
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,
@@ -157,7 +159,7 @@ class ISTALayer(SparseCodingBaseLayer):
         # Manual ISTA update
         with torch.no_grad():
             # Forward pass
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             
             # Compute loss
             loss = self.criterion(y_pred, y)
@@ -205,7 +207,7 @@ class ISTALayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)

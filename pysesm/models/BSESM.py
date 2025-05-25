@@ -146,6 +146,14 @@ class BSESM(SESM):
 
         return filled_active_blocks_X, filled_active_blocks_y, max_points_in_block
 
+
+    def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+        """
+        Concrete implementation of the evaluation function for SSESM.
+        This performs standard 2D matrix multiplication.
+        """
+        return torch.bmm(dictionary, h).squeeze(-1).flatten()
+    
     def partial_fit(self, X, y, *_):
         """
         Perform a partial fit on the model using the provided data, updating the dictionary and sparse representation.

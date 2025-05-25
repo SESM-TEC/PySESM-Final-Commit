@@ -81,6 +81,7 @@ class ADMMLayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: ADMMConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -96,6 +97,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             device: Device to run computations on.
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,

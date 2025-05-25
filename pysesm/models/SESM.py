@@ -24,10 +24,13 @@ from ..models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingCo
 from ..enums.DeviceTargetEnum import DeviceTarget
 from ..factories.SparseCodingFactory import SparseCodingFactory
 from ..factories.DictFactory import DictFactory
+from ..factories.BlockManagerFactory import BlockManagerFactory
 from ..blocks.PartitionBlock import PartitionBlock
+from ..blocks.BlockManager import BlockManager BlockManagerConfig
+from ..base_types import BaseConfig
 
 @dataclass
-class SESMConfig:
+class SESMConfig(BaseConfig):
     """
     Configuration for SESM model.
     
@@ -37,19 +40,20 @@ class SESMConfig:
     Attributes:
         n_features (int): The number of input features or dimensions that the model will work with.
             Each input tensor X is expected to have this many features.
-        
-        n_functions (int): The number of basis functions in the dictionary. These functions
-            can be combined linearly to approximate complex surrogate behaviors.
-        
+                
         model_epochs (int): The number of epochs for the overall SESM training loop,
             including both dictionary learning and sparse representation adjustments.
         
         sparse_coding_config (SparseCodingConfig): Configuration for the sparse coding layer
             (e.g., ISTA, FISTA, ADMM). Contains algorithm-specific parameters and the number
-            of epochs for sparse coding optimization.
+            of epochs for sparse coding optimization, and most importantly, how many words
+            the dictionary has (n_functions).
         
         dict_config (DictConfig): Configuration for the dictionary layer. Contains parameters
             specific to the dictionary type (e.g., GaussianDictConfig for Gaussian dictionaries).
+
+        partition_config (BlockManagerConfig): Configuration for the block manager, or input space
+            partition strategy.
         
         seed (int): Random seed for reproducibility of training processes, including
             weight initialization and other stochastic operations.
@@ -63,10 +67,10 @@ class SESMConfig:
             Helps track internal processes and identify issues during development.
     """
     n_features: int
-    n_functions: int
     model_epochs: int
     sparse_coding_config: SparseCodingConfig
     dict_config: DictConfig
+    partition_config: BlockManagerConfig
     seed: int
     debug: bool = False
 
@@ -96,8 +100,6 @@ class SESM(torch.nn.Module, ABC):
         
         n_features (int): Number of input dimensions the model works with.
         
-        n_functions (int): Number of basis functions in the dictionary.
-        
         model_epochs (int): Number of training epochs for the overall SESM model.
         
         sparse_coding_config (SparseCodingConfig): Configuration for the sparse coding layer.
@@ -126,6 +128,7 @@ class SESM(torch.nn.Module, ABC):
     # Type hints for instance attributes
     sparse_coding_layer: SparseCodingBaseLayer
     dictionary_layer: DictBaseLayer
+    partition_manager: BlockManager
     n_features: int
     model_epochs: int
     sparse_coding_config: SparseCodingConfig
@@ -179,7 +182,7 @@ class SESM(torch.nn.Module, ABC):
         
         self.config = config
         self.n_features = config.n_features
-        self.n_functions = config.n_functions
+        self.n_functions = config.sparse_coding_config.n_functions
         self.model_epochs = config.model_epochs
         self.sparse_coding_config = config.sparse_coding_config
         self.dict_config = config.dict_config
@@ -207,25 +210,29 @@ class SESM(torch.nn.Module, ABC):
             "loss_max": [],
             "loss_min": [],
         }
-        
-        # Ensure configuration consistency
-        self.sparse_coding_config.n_functions = config.n_functions
-        self.sparse_coding_config.evaluation_func = self.evaluation_func
-        
+                
         # Sparse coding layer will be set from block in partial_fit
         self.sparse_coding_layer = None
         
         # Create dictionary layer using factory pattern
         self.dictionary_layer = DictFactory.create(
             config=self.dict_config,
-            n_features=config.n_features,
-            n_functions=config.n_functions,
             evaluation_func=self.evaluation_func,
-            logger=logger,
+            n_features=self.n_features,
+            n_functions=self.n_functions,
+            evaluation_func=self.evaluation_func,
+            logger=self.logger,
             parameter_hook=self.dict_layer_hook,
             device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER) if device_manager else None,
             **kwargs
         )
+
+        self.partition_manager = BlockManagerFactory.create(
+            config.partition_config,
+            logger=self.logger,
+            device_manager=device_manager,
+            sesm_hook=sesm_hook,
+            dict_layer
 
     @abstractmethod
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:

@@ -16,9 +16,11 @@ from typing import Optional, Callable, Iterator, Type
 import torch
 import logging
 
+import ..base_types import BaseConfig
+
 
 @dataclass
-class DictConfig:
+class DictConfig(BaseConfig):
     """Base configuration for all dictionary types"""
     epochs: int
     alpha: float
