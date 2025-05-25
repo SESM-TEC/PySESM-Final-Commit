@@ -73,7 +73,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
 
         self.config = config
 
-        if self.config.n_function is None:
+        if self.config.n_functions is None:
             raise ValueError("n_functions must be specified in SparseCodingConfig")
         
         self.device = device

@@ -148,6 +148,90 @@ def test_normalize_extreme_block_sizes():
     
     assert torch.allclose(block_large.normalized_X, expected_normalized_large, rtol=1e-5, atol=1e-8)
 
+
+def test_partition_block_calculate_amplitude_and_target():
+    """
+    Test that PartitionBlock.calculate_amplitude_and_target correctly
+    computes amplitude and scales target values.
+    """
+
+    cpu_device=torch.device('cpu');
+    
+    # 1. Setup a dummy PartitionBlock
+    # These spatial parameters don't affect amplitude/target, but are required for init.
+    space_origin = torch.tensor([0.0, 0.0], device=cpu_device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=cpu_device)
+
+    # Create an instance of PartitionBlock
+    block = PartitionBlock(
+        space_origin=space_origin,
+        block_index=block_index,
+        block_size=block_size,
+        device=cpu_device
+    )
+
+    # --- Test Case 1: Max absolute y value > 1 ---
+    # Add points with y values > 1 (e.g., max_abs = 2.0)
+    block.new_point(torch.tensor([0.1, 0.1], device=cpu_device), torch.tensor([1.5], device=cpu_device), 0)
+    block.new_point(torch.tensor([0.2, 0.2], device=cpu_device), torch.tensor([-2.0], device=cpu_device), 1) # Max abs is 2.0
+    block.new_point(torch.tensor([0.3, 0.3], device=cpu_device), torch.tensor([0.5], device=cpu_device), 2)
+
+    # Call the method under test
+    block.calculate_amplitude_and_target()
+
+    # Assertions for amplitude
+    expected_amplitude = 1.0 / 2.0 # 1 / max_abs(y)
+    assert pytest.approx(block.amplitude, rel=1e-6) == expected_amplitude
+
+    # Assertions for target (scaled y values)
+    # Original y values: [1.5, -2.0, 0.5]
+    # Expected target values: [1.5 * 0.5, -2.0 * 0.5, 0.5 * 0.5] = [0.75, -1.0, 0.25]
+    expected_target_values = torch.tensor([[0.75], [-1.0], [0.25]], device=cpu_device) # Uniques to -1 for 2D
+    assert torch.allclose(block.target, expected_target_values, atol=1e-6)
+
+    # --- Test Case 2: Max absolute y value <= 1 ---
+    # Clear previous points for the next test case
+    block.clear_points()
+
+    # Add points with y values <= 1 (e.g., max_abs = 0.5)
+    block.new_point(torch.tensor([0.4, 0.4], device=cpu_device), torch.tensor([0.3], device=cpu_device), 3)
+    block.new_point(torch.tensor([0.5, 0.5], device=cpu_device), torch.tensor([-0.5], device=cpu_device), 4) # Max abs is 0.5
+    block.new_point(torch.tensor([0.6, 0.6], device=cpu_device), torch.tensor([0.1], device=cpu_device), 5)
+
+    # Call the method again
+    block.calculate_amplitude_and_target()
+
+    # Assertions for amplitude
+    expected_amplitude = 1.0 # Max abs <= 1, so amplitude is 1.0
+    assert pytest.approx(block.amplitude, rel=1e-6) == expected_amplitude
+
+    # Assertions for target (scaled y values - no change as amplitude is 1.0)
+    expected_target_values_2 = torch.tensor([[0.3], [-0.5], [0.1]], device=cpu_device)
+    assert torch.allclose(block.target, expected_target_values_2, atol=1e-6)
+
+    # --- Test Case 3: Empty block ---
+    block.clear_points()
+    block.calculate_amplitude_and_target()
+    assert block.amplitude == 1.0 # Default amplitude for empty
+    assert block.target is None # Target should be None
+
+    # --- Test Case 4: Single scalar y value in list ---
+    block.clear_points()
+    block.new_point(torch.tensor([0.1, 0.1], device=cpu_device), torch.tensor(2.5, device=cpu_device), 0)
+    block.calculate_amplitude_and_target()
+    assert pytest.approx(block.amplitude, rel=1e-6) == 1.0 / 2.5
+    assert torch.allclose(block.target, torch.tensor([[1.0]], device=cpu_device), atol=1e-6)
+
+
+    # --- Test Case 5: Single multi-dim y value in list ---
+    block.clear_points()
+    block.new_point(torch.tensor([0.1, 0.1], device=cpu_device), torch.tensor([1.0, 3.0], device=cpu_device), 0)
+    block.calculate_amplitude_and_target()
+    assert pytest.approx(block.amplitude, rel=1e-6) == 1.0 / 3.0
+    assert torch.allclose(block.target, torch.tensor([[1.0/3.0, 1.0]], device=cpu_device), atol=1e-6)
+
+    
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
     print_pytest_instructions()    
