@@ -11,7 +11,7 @@ License:
 '''
 
 from .GenericFactory import GenericFactory
-from ..models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 
 
 class SparseCodingFactory(GenericFactory[SparseCodingBaseLayer, SparseCodingConfig]):

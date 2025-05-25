@@ -11,7 +11,6 @@ License:
 
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
-from ..factories.BlockManagerFactory import BlockManagerFactory
 from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
 from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
@@ -35,7 +34,6 @@ class UniformPartitionConfig(BlockManagerConfig):
     initial_bounds: Optional[np.ndarray] = None # Initial space bounds
     threshold: float = 0
 
-@BlockManagerFactory.register("uniform_partition_manager")
 class UniformPartitionManager(BlockManager):
     """
     A class to manage a uniform partitioning of the input space into

@@ -18,10 +18,8 @@ from typing import Callable, Optional
 from enum import Enum, auto
 from math import sqrt
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
-
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
 
 class RestartStrategy(Enum):
     """Enumeration of restart strategies for FISTA algorithm."""
@@ -65,7 +63,6 @@ class FISTAConfig(SparseCodingConfig):
     momentum_scheme: MomentumScheme = MomentumScheme.ORIGINAL  
 
 
-@SparseCodingFactory.register("fista")
 class FISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA).

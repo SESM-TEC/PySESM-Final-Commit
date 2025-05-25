@@ -19,14 +19,14 @@ from abc import ABC, abstractmethod
 
 from ..validation import validate_sesm_partial_fit
 from ..functions import SurrogateFunction
-from ..models.DictBaseLayer import DictBaseLayer, DictConfig
-from ..models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from ..dictionaries.DictBaseLayer import DictBaseLayer, DictConfig
+from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from ..enums.DeviceTargetEnum import DeviceTarget
 from ..factories.SparseCodingFactory import SparseCodingFactory
 from ..factories.DictFactory import DictFactory
 from ..factories.BlockManagerFactory import BlockManagerFactory
 from ..blocks.PartitionBlock import PartitionBlock
-from ..blocks.BlockManager import BlockManager BlockManagerConfig
+from ..blocks.BlockManager import BlockManager, BlockManagerConfig
 from ..base_types import BaseConfig
 
 @dataclass
@@ -217,7 +217,6 @@ class SESM(torch.nn.Module, ABC):
         # Create dictionary layer using factory pattern
         self.dictionary_layer = DictFactory.create(
             config=self.dict_config,
-            evaluation_func=self.evaluation_func,
             n_features=self.n_features,
             n_functions=self.n_functions,
             evaluation_func=self.evaluation_func,
@@ -231,8 +230,7 @@ class SESM(torch.nn.Module, ABC):
             config.partition_config,
             logger=self.logger,
             device_manager=device_manager,
-            sesm_hook=sesm_hook,
-            dict_layer
+            sparse_coding_layer_hook=self.sparse_coding_layer_hook)
 
     @abstractmethod
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:

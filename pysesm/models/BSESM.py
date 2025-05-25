@@ -1,7 +1,6 @@
 from pysesm.functions import SurrogateFunction
 from pysesm.blocks import PartitionBlock, UniformPartitionManager
-from pysesm.enums import SurrogateFunctionEnum, EvaluationFuncEnum
-from pysesm.models.SESM.SESM import SESM
+from pysesm.models.SESM import SESM
 
 
 import logging
@@ -31,7 +30,6 @@ class BSESM(SESM):
         ista_alpha: float,
         ista_lambd: float,
         dictionary_alpha: float,
-        psi: Union[SurrogateFunction, SurrogateFunctionEnum],
         dfngroup,
         seed: int,
         logger: logging.Logger,

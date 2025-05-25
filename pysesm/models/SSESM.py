@@ -18,8 +18,8 @@ from sklearn.metrics import mean_squared_error
 
 from ..functions import SurrogateFunction
 from ..blocks import UniformPartitionManager
-from ..models.SESM.SESM import SESM, SESMConfig
-from ..models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from ..models.SESM import SESM, SESMConfig
+from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from ..device_manager.DeviceManager import DeviceManager
 from ..factories.SparseCodingFactory import SparseCodingFactory
 

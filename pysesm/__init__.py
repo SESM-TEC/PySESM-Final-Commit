@@ -16,6 +16,14 @@ from . import dictionaries
 # Import common base types
 from .base_types import BaseConfig
 
+# --- Factory Registrations (dedicated files to break import cycles) ---
+# These imports are for their side-effect of running the registration code
+# contained within them. They don't typically add names to pysesm's namespace.
+import pysesm.sparse_coding._factory_registration
+import pysesm.dictionaries._factory_registration
+import pysesm.blocks._factory_registration
+
+
 # Define __all__ for explicit export on 'from pysesm import *'
 __all__ = [
     "models",

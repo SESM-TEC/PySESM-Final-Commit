@@ -17,10 +17,8 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import soft_threshold
-
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import soft_threshold
 
 @dataclass
 class ADMMConfig(SparseCodingConfig):
@@ -47,7 +45,6 @@ class ADMMConfig(SparseCodingConfig):
     rel_tol: float = 1e-2    # Relative tolerance for stopping criteria
     lambda_scaling: float = 1.0  # Scaling factor for lambda to make it independent of rho
 
-@SparseCodingFactory.register("admm")
 class ADMMLayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing the ADMM algorithm for sparse coding.

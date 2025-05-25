@@ -16,22 +16,20 @@ import torch
 import logging
 
 from .DictBaseLayer import DictBaseLayer, DictConfig
-from ..factories.DictFactory import DictFactory
 from ..functions.GaussianFunction import GaussianFunction
 
 
 @dataclass
 class GaussianDictConfig(DictConfig):
     """Configuration specific to Gaussian dictionaries"""
-    mu_epochs: int
-    rho_epochs: int
+    mu_epochs: int = 10
+    rho_epochs: int = 10
     split_mu_rho: bool = True
     # Parameters for GaussianFunction initialization
     eig_range: list = None
     mu_range: list = None
 
 
-@DictFactory.register("gaussian")
 class GaussianDictLayer(DictBaseLayer):
     """Dictionary layer using Gaussian basis functions"""
     

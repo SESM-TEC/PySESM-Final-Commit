@@ -12,7 +12,7 @@ License:
 
 import copy
 import torch
-from typing import Optional # Keep Optional for explicit None types
+from typing import Tuple,Optional # Keep Optional for explicit None types
 
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer

@@ -17,9 +17,8 @@ import torch
 from typing import Callable, Optional
 from dataclasses import dataclass
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
 
 __all__ = ['ISTALayer', 'ISTAConfig', 'StepSizeMethod']
 
@@ -50,7 +49,6 @@ class ISTAConfig(SparseCodingConfig):
 
 
 # Define the ISTA layer
-@SparseCodingFactory.register("classic_ista") 
 class ISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
@@ -91,7 +89,7 @@ class ISTALayer(SparseCodingBaseLayer):
             device: Device for computation (CPU/GPU).
         """
         super().__init__(config=config,
-                         evaluation_func=evaluation_func
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,

@@ -17,7 +17,7 @@ import logging
 
 import torch
 
-import ..base_types import BaseConfig
+from ..base_types import BaseConfig
 
 @dataclass
 class SparseCodingConfig(BaseConfig):

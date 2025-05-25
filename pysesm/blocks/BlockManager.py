@@ -12,12 +12,18 @@ from .PartitionBlock import PartitionBlock
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..base_types import BaseConfig
 
+from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
+from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Union, Callable, Iterator
+from typing import Union, Callable, Iterator, Optional
 import torch
 from torch import Tensor
+import logging
 from numpy.typing import NDArray
+
+
 
 @dataclass
 class BlockManagerConfig(BaseConfig):

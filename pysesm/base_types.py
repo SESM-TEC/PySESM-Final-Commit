@@ -3,6 +3,6 @@
 from dataclasses import dataclass
 
 @dataclass
-class BaseConfig
+class BaseConfig:
     """Base class for all configuration objects in pysesm."""
     pass

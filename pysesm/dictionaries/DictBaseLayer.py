@@ -16,7 +16,7 @@ from typing import Optional, Callable, Iterator, Type
 import torch
 import logging
 
-import ..base_types import BaseConfig
+from ..base_types import BaseConfig
 
 
 @dataclass
