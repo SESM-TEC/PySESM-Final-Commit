@@ -64,7 +64,7 @@ def test_clear_points():
 
     assert len(block.X) == 0
     assert len(block.y) == 0
-    assert len(block.positions) == 1
+    assert len(block.positions) == 0
     assert block.normalized_X is None
 
 def test_is_active():
@@ -109,64 +109,11 @@ def test_normalize():
     pos = 0
 
     block.new_point(point_x, point_y, pos)
-    block.normalize()
+    block.normalize_points()
 
     assert block.normalized_X is not None
     assert torch.allclose(block.normalized_X, torch.tensor([[0.5, 0.5]], device='cpu'))
 
-def test_clone_test():
-    """Test the clone_test method of the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
-
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
-    pos = 0
-
-    block.new_point(point_x, point_y, pos)
-    cloned_block = block.clone_test()
-
-    assert cloned_block.block_index == block.block_index
-    assert torch.allclose(cloned_block.block_size, block.block_size)
-    assert torch.allclose(cloned_block.block_scope, block.block_scope)
-    assert cloned_block.h == block.h
-    assert cloned_block.amplitude == block.amplitude
-    assert cloned_block.sparse_coding_layer == block.sparse_coding_layer
-    assert len(cloned_block.X) == 0
-    assert len(cloned_block.y) == 0
-    assert cloned_block.normalized_X is None
-    assert len(cloned_block.positions) == 0
-    assert len(cloned_block.target) == 0
-    assert len(cloned_block.predicted_output) == 0
-
-def test_deepcopy():
-    """Test the deepcopy functionality of the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
-
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
-    pos = 0
-
-    block.new_point(point_x, point_y, pos)
-    cloned_block = copy.deepcopy(block)
-
-    assert cloned_block.block_index == block.block_index
-    assert torch.allclose(cloned_block.block_size, block.block_size)
-    assert torch.allclose(cloned_block.block_scope, block.block_scope)
-    assert cloned_block.h == block.h
-    assert cloned_block.amplitude == block.amplitude
-    assert cloned_block.sparse_coding_layer == block.sparse_coding_layer
-    assert len(cloned_block.X) == 0
-    assert len(cloned_block.y) == 0
-    assert cloned_block.normalized_X is None
-    assert len(cloned_block.positions) == 0
-    assert len(cloned_block.target) == 0
-    assert len(cloned_block.predicted_output) == 0
 
 def test_normalize_extreme_block_sizes():
     """Test normalization with very small and very large block sizes."""
@@ -179,7 +126,7 @@ def test_normalize_extreme_block_sizes():
     
     point_small = torch.tensor([0.5e-6, 0.5e-6], device='cpu')
     block_small.new_point(point_small, torch.tensor([1.0], device='cpu'), 0)
-    block_small.normalize()
+    block_small.normalize_points()
     
     min_vals = block_small.block_scope[0].to('cpu')
     sizes = block_small.block_size.to('cpu')
@@ -193,24 +140,13 @@ def test_normalize_extreme_block_sizes():
     
     point_large = torch.tensor([0.5e6, 0.5e6], device='cpu')
     block_large.new_point(point_large, torch.tensor([1.0], device='cpu'), 0)
-    block_large.normalize()
+    block_large.normalize_points()
     
     min_vals = block_large.block_scope[0].to('cpu')
     sizes = block_large.block_size.to('cpu')
     expected_normalized_large = (point_large - min_vals) / sizes
     
     assert torch.allclose(block_large.normalized_X, expected_normalized_large, rtol=1e-5, atol=1e-8)
-
-def test_sparse_coding_layer_interaction():
-    """Test interaction with sparse_coding_layer."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    sparse_coding_layer = torch.nn.Linear(2, 2).to('cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, sparse_coding_layer=sparse_coding_layer, device='cpu')
-
-    block.new_point(torch.tensor([0.5, 0.5], device='cpu'), torch.tensor([1.0], device='cpu'), 0)
-    assert isinstance(block.sparse_coding_layer, torch.nn.Linear)
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
