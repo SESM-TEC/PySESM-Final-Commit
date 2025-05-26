@@ -41,7 +41,7 @@ class ISTAConfig(SparseCodingConfig):
         early_stopping_tol (float): Tolerance threshold for early stopping.
     """
     alpha: float = 0.1
-    lambd: float = 0.01
+    lambd: float = 0.00001
     step_size_method: StepSizeMethod = StepSizeMethod.POWER_ITERATION
     power_iterations: int = 10
     early_stopping: bool = False

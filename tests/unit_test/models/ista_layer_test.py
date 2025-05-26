@@ -1,4 +1,4 @@
-from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
+from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
 import torch
 import logging
 import numpy as np
@@ -32,12 +32,13 @@ def test_ista_perfect_dictionary():
     
     # Initialize ISTA layer
     ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                epochs=100,
                                 alpha=0.1,
                                 lambd=0.00001,  # Small lambda since we want h≈1
                                 step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
                                 power_iterations=10,                                
-                                criterion=torch.nn.MSELoss(),
-                                evaluation_func=lambda d, h: torch.matmul(d, h)),
+                                criterion=torch.nn.MSELoss()),
+                     evaluation_func=lambda d, h: torch.matmul(d, h),
                      logger=logger)
         
     ista.h.data = torch.tensor([[0.5]])  # Start h below target
@@ -89,12 +90,13 @@ def test_ista_sparse_selection():
     
     # Initialize ISTA layer
     ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                epochs=100,
                                 alpha=0.1,
                                 lambd=0.00001,  # Small lambda since we want h≈1
                                 step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
                                 power_iterations=10,                                
-                                criterion=torch.nn.MSELoss(),
-                                evaluation_func=lambda d, h: torch.matmul(d, h)),
+                                criterion=torch.nn.MSELoss()),
+                     evaluation_func=lambda d, h: torch.matmul(d, h),
                      logger=logger)
     
     # Initialize h with random values as a column vector

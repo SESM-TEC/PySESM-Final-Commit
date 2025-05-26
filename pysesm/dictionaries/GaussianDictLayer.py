@@ -52,7 +52,8 @@ class GaussianDictLayer(DictBaseLayer):
             n_functions=n_functions,
             eig_range=config.eig_range,
             mu_range=config.mu_range,
-            device=device
+            device=device,
+            logger=logger
         )
         
         super().__init__(
@@ -65,3 +66,68 @@ class GaussianDictLayer(DictBaseLayer):
             device=device,
             **kwargs
         )
+
+    # --- Implement abstract methods from DictBaseLayer ---
+
+    def _initialize_parameters(self, **kwargs) -> torch.nn.Parameter:
+        """
+        Initializes the parameters (theta) for the Gaussian functions using self.psi.
+        """
+        # self.psi is the GaussianFunction instance
+        return self.psi.initialize().to(self.device)
+
+
+    def _evaluate_dictionary(self, X: torch.Tensor, parameters: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Evaluates the Gaussian dictionary functions at given points X using the current parameters.
+        Passes kwargs like rho_flag, mu_flag to the GaussianFunction's __call__.
+        """
+        # self.psi is the GaussianFunction instance
+        return self.psi(X, parameters, **kwargs)
+
+
+    def _train_with_strategy(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
+                           dictionary_shape: tuple = None, log_losses: bool = True): # dictionary_shape is None now for DictBaseLayer
+        """
+        Implements the training strategy for Gaussian dictionary parameters (mu and rho).
+        Uses a split training strategy based on `split_mu_rho` config.
+        """
+        if self.config.split_mu_rho:
+            # Training mu (mean) parameters
+            if self.config.mu_epochs > 0:
+                self.logger.debug(f"[{self.__class__.__name__}] Training mu for {self.config.mu_epochs} epochs.")
+                for epoch in range(self.config.mu_epochs):
+                    loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=False)
+                    if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
+                        self.logger.debug(f"[{self.__class__.__name__}] Mu Epoch {epoch+1}/{self.config.mu_epochs}, Loss: {loss.item():.6f}")
+
+            # Training rho (covariance) parameters
+            if self.config.rho_epochs > 0:
+                self.logger.debug(f"[{self.__class__.__name__}] Training rho for {self.config.rho_epochs} epochs.")
+                for epoch in range(self.config.rho_epochs):
+                    loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=False, rho_flag=True)
+                    if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
+                        self.logger.debug(f"[{self.__class__.__name__}] Rho Epoch {epoch+1}/{self.config.rho_epochs}, Loss: {loss.item():.6f}")
+        else:
+            # Joint training of all parameters
+            self.logger.debug(f"[{self.__class__.__name__}] Training all parameters for {self.config.epochs} epochs (joint strategy).")
+            for epoch in range(self.config.epochs):
+                loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=True)
+                if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
+                    self.logger.debug(f"[{self.__class__.__name__}] Joint Epoch {epoch+1}/{self.config.epochs}, Loss: {loss.item():.6f}")
+
+    # --- Override _add_hook_info to provide mu/rho specific info ---
+    def _add_hook_info(self, hook_info: dict, **eval_kwargs):
+        """
+        Adds Gaussian-specific information (mu/rho parameters, flags) to the parameter hook.
+        """
+        # Extract mu and rho from the full parameters vector (theta)
+        # Assuming theta has rho first, then mu.
+        num_rho_params = self.n_features * (self.n_features + 1) // 2
+        
+        hook_info['rho_params'] = hook_info['parameters'][:num_rho_params, :].clone()
+        hook_info['mu_params'] = hook_info['parameters'][-self.n_features:, :].clone()
+        
+        # Add flags from eval_kwargs to indicate which parameters are being optimized in this epoch
+        hook_info['mu_flag'] = eval_kwargs.get('mu_flag', False)
+        hook_info['rho_flag'] = eval_kwargs.get('rho_flag', False)
