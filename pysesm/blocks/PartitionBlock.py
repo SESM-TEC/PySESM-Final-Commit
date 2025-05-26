@@ -72,7 +72,10 @@ class PartitionBlock:
         
         self.space_origin = space_origin.to(self.device)
 
+        # In future, this 'eps' may become a configurable parameter allowing larger overlaps.
         eps = torch.finfo(torch.float32).eps
+
+        
         # Calculate the base edge of this specific block based on its index
         # (e.g., for block (i, j), its origin is global_origin + i*block_size_x + j*block_size_y)
         base_edge_of_this_block = self.space_origin + torch.mul(
@@ -167,6 +170,27 @@ class PartitionBlock:
 
         self.normalized_X = (tensor_X - min_vals) / sizes
 
+
+    def _create_target_tensor(self) -> Optional[torch.Tensor]:
+        """
+        Private helper: Stacks and formats 'y' data into a 2D tensor,
+        then scales it by `self.amplitude`. Does NOT calculate amplitude.
+        Assumes self.y is populated and self.amplitude is set.
+        """
+        if not self.y:
+            return None
+
+        stacked_y = torch.stack([val.to(self.device) if isinstance(val, torch.Tensor) else torch.tensor(val, device=self.device) for val in self.y])
+        
+        # Ensure target is at least 2D (N_samples, output_dim)
+        if stacked_y.dim() < 2:
+            stacked_y = stacked_y.unsqueeze(-1)
+        
+        # Apply the current amplitude
+        target_tensor = stacked_y * self.amplitude
+        return target_tensor.detach()
+
+        
     def calculate_amplitude_and_target(self):
         """
         Calculates the squeezing amplitude factor for the block's 'y' values
@@ -179,24 +203,37 @@ class PartitionBlock:
             self.target = None
             return
 
-        # Stack y values to compute max absolute value. Ensure they are tensors.
+        # Stack y values. Ensure individual y elements are tensors.
+        # If `y` is a list of scalar tensors (e.g., [tensor(1.0), tensor(2.0)]),
+        # stacking them results in a 1D tensor (e.g., tensor([1.0, 2.0])).
+        # If `y` is a list of 1D tensors (e.g., [tensor([1.0]), tensor([2.0])]),
+        # stacking them results in a 2D tensor (e.g., tensor([[1.0],[2.0]])).
+        # If `y` is a list of N-dim tensors, stacking them results in (N_samples, ...).
         stacked_y = torch.stack([val if isinstance(val, torch.Tensor) else torch.tensor(val, device=self.device) for val in self.y])
-
-        # If y values are scalars, unsqueeze to make it (n_samples, 1) before max()
-        if stacked_y.dim() == 0:
-             stacked_y = stacked_y.unsqueeze(0)
         
-        max_y_abs = stacked_y.abs().max()
+        # Handle scalar y inputs for max_y_abs calculation
+        if stacked_y.dim() == 0:
+            max_y_abs = stacked_y.abs().item() # Get scalar directly
+        else:
+            max_y_abs = stacked_y.abs().max().item()
 
         if max_y_abs > 1:
-            self.amplitude = 1.0 / max_y_abs.item() # Get scalar float value
+            self.amplitude = 1.0 / max_y_abs
         else:
             self.amplitude = 1.0
 
-        # Create target tensor by applying amplitude.
-        # Ensure target is 2D: (n_samples_in_block, output_dim)
-        # If original y was (n_samples,) or (n_samples, scalar), make it (n_samples, 1)
-        self.target = torch.stack([value * self.amplitude for value in self.y]).to(self.device)
-        if self.target.dim() == 1:
-            self.target = self.target.unsqueeze(-1)
-        self.target = self.target.detach() # Detach from any prior graph if y was part of one
+        # Now, use the new helper method to create the target tensor
+        self.target = self._create_target_tensor()
+        
+    def prepare_target_for_inference(self):
+        """
+        Prepares the 'target' tensor for inference/testing using this block's 'y' data
+        and its already set 'amplitude' (which should be the learned value).
+        Does NOT recalculate amplitude.
+        """
+        if not self.y:
+            self.target = None
+            return
+
+        # Directly use the helper method; self.amplitude is assumed to be set already.
+        self.target = self._create_target_tensor()

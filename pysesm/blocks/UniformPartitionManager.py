@@ -79,13 +79,18 @@ class UniformPartitionManager(BlockManager):
         super().__init__(config=config, logger=logger, device_manager=device_manager)
         
         self.T = config.T
+
+        if self.T is not None: # T can be None if not provided initially, handled in _update_block_arrangement
+            # If T is an int, it will be converted to tensor in _update_block_arrangement
+            # If it's already a tensor, validate its values here.
+            if isinstance(self.T, torch.Tensor) and (self.T <= 0).any():
+                raise ValueError(f"All values in 'T' (blocks per dimension) must be positive integers. Got: {self.T}")
+        
         self.initial_bounds = config.initial_bounds
         self.threshold = config.threshold
 
         self.blocks = None
         self.block_size = None
-        self.X = None
-        self.y = None
         
         self.sparse_coding_layer_hook = sparse_coding_layer_hook
 
@@ -108,7 +113,7 @@ class UniformPartitionManager(BlockManager):
             if block.is_point_in_block(x):
                 return block
 
-        self.logger.warning("Could not find a block for point {}", x)
+        self.logger.warning("Could not find a block for point %s", x)
         return None
 
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
@@ -122,17 +127,31 @@ class UniformPartitionManager(BlockManager):
         """
         
         device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-        self.initial_bounds = self.initial_bounds.to(device)
 
-        # If no T is given, create a T with a default size
-        if type(self.T) is int:
-            num_features = X.shape[1] if X.dim() > 1 else 1
-            self.T = torch.tensor([self.T for _ in range(num_features)], device=device)
+        if self.initial_bounds is not None and isinstance(self.initial_bounds, np.ndarray):
+            # If it's still None at this point, it will be inferred later.
+            # If it's already a Tensor, it's fine.
+            self.initial_bounds = torch.from_numpy(self.initial_bounds).to(device)
+
+        # If no T is given initially (i.e., self.T is None), or if it's a single integer:
+        if self.T is None or isinstance(self.T, int):
+            num_features = X.shape[1] if X.dim() > 1 else 1 # Number of features for the input space
+            # Create T as a tensor, ensuring all values are positive
+            T_val_to_use = self.T if self.T is not None else DEFAULT_BLOCKS_PER_DIM
+            if isinstance(T_val_to_use, int) and T_val_to_use <= 0:
+                raise ValueError(f"Default or provided integer 'T' ({T_val_to_use}) must be a positive integer.")
+            
+            self.T = torch.tensor([T_val_to_use for _ in range(num_features)], device=device)
 
         # Ensure T is a tensor for subsequent operations
         self.T = self.T.to(device)
 
-        # When no points and no blocks have been created
+        # Validate that all T values are positive after conversion
+        if (self.T <= 0).any():
+            raise ValueError(f"All values in 'T' (blocks per dimension) must be positive integers. Got: {self.T}")
+
+        
+        # When no points and no blocks have been created (first call)
         if self.blocks is None:
             # Check for user given initial bounds
             if self.initial_bounds is None:
@@ -142,18 +161,20 @@ class UniformPartitionManager(BlockManager):
                 self.logger.warning(
                     f"[{self.__class__.__name__}] No initial bounds provided, using calculated one {self.initial_bounds}"
                 )
+            else:
+                # If initial_bounds was provided and is now a tensor, ensure it's on device
+                self.initial_bounds = self.initial_bounds.to(device)
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
             self.block_size = torch.div(delta, self.T.float()).to(device)
 
-            
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=object) 
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(space_origin = self.initial_bounds[0].to(device), 
+                self.blocks[index] = PartitionBlock(space_origin = self.initial_bounds[0],
                                                     block_index = index, 
-                                                    block_size = self.block_size.to(device),
+                                                    block_size = self.block_size,
                                                     device=device)
         else:
             new_max_x = torch.max(X).to(device)
@@ -163,36 +184,28 @@ class UniformPartitionManager(BlockManager):
             self.logger.debug(f"[{self.__class__.__name__}] Blocks already exist. Skipping re-arrangement for new points outside bounds.")
             
 
-    def _map_points(self, X: torch.Tensor, y: np.ndarray):
+    def _map_points(self, X: torch.Tensor, y: torch.Tensor):
         """
         Maps input points to their respective sub-blocks.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
-            y (np.ndarray): Target data corresponding to the input points.
+            y (torch.Tensor): Target data corresponding to the input points.
         """
         device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         X = X.to(device)
-        
-        # y should be tensor already, convert to list of tensors if needed for new_point
-        # Ensure y is a list of individual point tensors for new_point
-        y_list = [yi.to(device) for yi in y.split(1, dim=0)] if y.dim() > 0 else [y.to(device)]
 
+        # y should be a torch.Tensor. Split it into a list of 1-row tensors for new_point.
+        # This handles (N_samples, output_dim) -> list of (1, output_dim)
+        # and (N_samples,) -> list of (1,) which PartitionBlock.new_point will squeeze to ().
+        y_list = list(y.split(1, dim=0))
 
         for i in range(X.shape[0]):
             selected_block = self._find_block(X[i])
             if selected_block is not None:
                 selected_block.new_point(X[i], y_list[i], i)
             else:
-                self.logger.warning(f"Point {X[i]} at index {i} could not be mapped to any block. "
-                                    "Consider adjusting initial bounds or partition strategy.")
-
-        # After mapping points, normalize X and calculate amplitude/target for each active block.
-        for idx in np.ndindex(self.blocks.shape):
-            block = self.blocks[idx]
-            if block.is_active: # Only process active blocks
-                # Find the squeeze factor for the y's in the block
-                block.calculate_amplitude_and_target() 
+                self.logger.warning(f"Point %s at index %s could not be mapped to any block. ", X[i], i)
 
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
@@ -206,9 +219,22 @@ class UniformPartitionManager(BlockManager):
 
         self._update_block_arrangement(X)
         self._map_points(X, y) # Sends points to their respective blocks
+        self._prepare_block_targets() # Adjust the y 
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
 
+    def _prepare_block_targets(self):
+        """
+        Processes y values within each active block by calculating amplitude and target values.
+        Ensures target values are in the correct 2D shape (n_samples_in_block, output_dim).
+        """
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
+            if block.is_active: # Only process if block has points
+                # PartitionBlock.calculate_amplitude_and_target handles y processing,
+                # amplitude calculation, and ensuring self.target is 2D.
+                block.calculate_amplitude_and_target()
 
+                
     def init_sparse_coding_per_block(self,
                                      config: SparseCodingConfig,
                                      evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
@@ -244,6 +270,40 @@ class UniformPartitionManager(BlockManager):
             if self.blocks[index].is_active
         ]
 
+
+    def _create_test_block_structure(self) -> np.ndarray:
+        """
+        Creates a new NumPy array of PartitionBlock instances, copying only
+        the spatial properties, the learned sparse_coding_layer, and amplitude
+        from the original training blocks. Clears data points (X, y, target, normalized_X).
+        """
+        test_blocks_array = np.empty_like(self.blocks, dtype=object)
+        for index in np.ndindex(self.blocks.shape):
+            original_block = self.blocks[index]
+            new_pb = PartitionBlock(
+                space_origin=original_block.space_origin,
+                block_index=original_block.block_index,
+                block_size=original_block.block_size,
+                device=original_block.device
+            )
+            # Transfer the learned sparse_coding_layer and amplitude from original training block
+            new_pb.sparse_coding_layer = original_block.sparse_coding_layer
+            new_pb.amplitude = original_block.amplitude
+            test_blocks_array[index] = new_pb
+        return test_blocks_array
+
+    def _prepare_test_block_targets(self, blocks_array: np.ndarray):
+        """
+        Iterates through the given blocks array and calls prepare_target_for_inference
+        on each active block, utilizing its pre-set amplitude.
+        """
+        for idx in np.ndindex(blocks_array.shape):
+            block = blocks_array[idx]
+            if block.is_active: # Only process active blocks
+                block.prepare_target_for_inference()
+
+
+    
     def retrieve_test_active_blocks(self, X, y):
         """
         Retrieves active blocks for testing purposes.
@@ -259,38 +319,25 @@ class UniformPartitionManager(BlockManager):
         X = X.to(device)
         y = y.to(device)
 
-        # Create new blocks array that can be modified without affecting original training blocks
-        test_blocks = np.empty_like(self.blocks, dtype=object)
-        for index in np.ndindex(self.blocks.shape):
-            # Create a shallow copy of PartitionBlock, but clear its points data.
-            # This reuses the spatial definition (scope, size, origin) but clears X, y, etc.
-            # The clone_test / __deepcopy__ method from PartitionBlock.py is gone now.
-            # We explicitly create a new PartitionBlock with same spatial properties.
-            original_block = self.blocks[index]
-            new_pb = PartitionBlock(
-                space_origin=original_block.space_origin,
-                block_index=original_block.block_index,
-                block_size=original_block.block_size,
-                device=original_block.device
-            )
-            # Crucially, we need to assign the *existing sparse_coding_layer* from the original block
-            # to the new test block. This is what makes it a 'test' block with trained h.
-            new_pb.sparse_coding_layer = original_block.sparse_coding_layer
-            test_blocks[index] = new_pb
+
+        # 1. Create the new test block structure and transfer learned properties
+        test_blocks = self._create_test_block_structure()
             
         # Temporarily use the test_blocks for mapping
         temp_current_blocks = self.blocks
         self.blocks = test_blocks
 
-        # Map and normalize points into test blocks
-        # This will populate X, y, normalized_X, amplitude, target in the new test_blocks
+        # 2. Map test points into test blocks. This populates new_pb.X, new_pb.y.
         self._map_points(X, y)
 
-        # This works because it just adjusts coordinates to the block relative position
+        # 3. Prepare target for inference using the transferred amplitude
+        self._prepare_test_block_targets(self.blocks) # Pass self.blocks (which is test_blocks temporarily)
+
+        # 4. Normalize X coordinates for test blocks
         self._vectorized_normalization(self.blocks) # Calls normalize_points on each block
 
-        # Retrieve mapped test blocks and return to usual blocks
-        test_active_blocks = self.retrieve_active_blocks()
+        # 5. Retrieve mapped test blocks and restore original blocks
+        test_active_blocks = self.retrieve_active_blocks() # Retrieves from current self.blocks (test_blocks)
         self.blocks = temp_current_blocks # Restore original training blocks
 
         return test_active_blocks
