@@ -121,63 +121,68 @@ class JensenShannonLossWrapper(torch.nn.Module):
 # LOGGER INSTANCE
 logger = setup_logger()
 
-# SESM CONFIGURATION
 n_functions=10
+
+
+sparse_coding_config = ISTAConfig(
+    alpha=0.10,
+    lambd=0.00001,
+    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    power_iterations=10,
+    n_functions=n_functions,
+    criterion=torch.nn.MSELoss()
+)
+# sparse_coding_config = FISTAConfig(
+#     alpha = 0.020,
+#     lambd = 0.00001,
+#     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+#     power_iterations = 10,
+#     n_functions = n_functions,
+#     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+#     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+#     criterion = torch.nn.MSELoss(),
+# )
+# sparse_coding_config = ADMMConfig(
+#     epochs = 100,
+#     rho = 0.1,            # Penalty parameter
+#     alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
+#     lambda_scaling = 1.0, # Lambda scaling factor
+#     lambd = 0.00001,      # L1 regularization strength
+#     abs_tol = 1e-4,       # Absolute tolerance
+#     rel_tol = 1e-2,       # Relative tolerance
+#     n_functions = n_functions,
+#     criterion = torch.nn.MSELoss()
+# )
+dict_config = GaussianDictConfig(
+    epochs = 10,
+    alpha = 0.1,
+    # criterion = torch.nn.MSELoss(),
+    # criterion = KLDivLossWrapper(),
+    criterion = JensenShannonLossWrapper(),
+    optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    mu_epochs = 10,
+    rho_epochs = 10,
+    split_mu_rho = True,
+    eig_range = [0.05, 0.2],
+    mu_range = [-2.0, 2.0],
+)
+partition_config = UniformPartitionConfig(
+    T=1,
+    initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
+    threshold=0
+)
+
+ssesm_config = SSESMConfig(
+    n_features = 2,
+    model_epochs = 5000,
+    sparse_coding_config = sparse_coding_config,
+    dict_config = dict_config,
+    partition_config = partition_config
+)
+
+# SESM CONFIGURATION
 experiment = {
-    "config": SSESMConfig(
-        n_features = 2,
-        model_epochs = 5000,
-        # sparse_coding_config = ISTAConfig(
-        #     alpha=0.10,
-        #     lambd=0.00001,
-        #     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-        #     power_iterations=10,
-        #     n_functions=n_functions,
-        #     criterion=torch.nn.MSELoss(),
-        #     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
-        # ),
-        # sparse_coding_config = FISTAConfig(
-        #     alpha = 0.020,
-        #     lambd = 0.00001,
-        #     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-        #     power_iterations = 10,
-        #     n_functions = n_functions,
-        #     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
-        #     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
-        #     criterion = torch.nn.MSELoss(),
-        #     evaluation_func = lambda dictionary, h: torch.matmul(dictionary, h)
-        # ),
-        sparse_coding_config = ADMMConfig(
-            epochs = 100,
-            rho = 0.1,            # Penalty parameter
-            alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
-            lambda_scaling = 1.0, # Lambda scaling factor
-            lambd = 0.00001,      # L1 regularization strength
-            abs_tol = 1e-4,       # Absolute tolerance
-            rel_tol = 1e-2,       # Relative tolerance
-            n_functions = n_functions,
-            criterion = torch.nn.MSELoss()
-        ),
-        dict_config = GaussianDictConfig(
-            epochs = 10,
-            alpha = 0.1,
-            # criterion = torch.nn.MSELoss(),
-            # criterion = KLDivLossWrapper(),
-            criterion = JensenShannonLossWrapper(),
-            optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-            mu_epochs = 10,
-            rho_epochs = 10,
-            split_mu_rho = True,
-            eig_range = [0.05, 0.2],
-            mu_range = [-2.0, 2.0],
-        ),
-        partition_config = UniformPartitionConfig(
-            T=1,
-            initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-            threshold=0
-        ),
-        permutation_times = 1
-    ),
+    "config": ssesm_config,
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
