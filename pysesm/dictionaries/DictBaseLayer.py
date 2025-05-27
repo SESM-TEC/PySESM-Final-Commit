@@ -82,7 +82,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         self.dictionary = None
         
         # Initialize parameters (subclass-specific)
-        self.parameters = self._initialize_parameters(**kwargs)
+        self.theta_params = self._initialize_parameters(**kwargs)
         
         # Setup criterion and optimizer
         self._setup_criterion()
@@ -146,9 +146,11 @@ class DictBaseLayer(torch.nn.Module, ABC):
     def _setup_optimizer(self):
         """Setup the optimizer"""
         if self.config.optimizer_factory is None:
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=self.config.alpha, weight_decay=0)
+            # Nota: self.parameters() devuelve un iterador de todos los parámetros del módulo.
+            # Aquí, solo necesitamos pasar nuestro parámetro específico.
+            self.optimizer = torch.optim.SGD([self.theta_params], lr=self.config.alpha, weight_decay=0)            
         else:
-            self.optimizer = self.config.optimizer_factory(self.parameters(), lr=self.config.alpha)
+            self.optimizer = self.config.optimizer_factory([self.theta_params], lr=self.config.alpha)
     
     def _train_epoch(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
                     dictionary_shape: tuple, log_losses: bool, **eval_kwargs):
@@ -180,7 +182,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         if self.parameter_hook is not None:
             hook_info = {
                 'epoch': len(self.losses),
-                'parameters': self.parameters.clone().detach(),
+                'theta_params': self.theta_params.clone().detach(),
                 'loss': loss.item(),
                 'dictionary_shape': dictionary_shape
             }
@@ -206,7 +208,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         """
         X = X.to(self.device)
         if self.dictionary is None:
-            self.dictionary = self._evaluate_dictionary(X, self.parameters)
+            self.dictionary = self._evaluate_dictionary(X, self.theta_params)
     
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
                    dictionary_shape: tuple = None, log_losses: bool = True) -> None:
@@ -238,5 +240,5 @@ class DictBaseLayer(torch.nn.Module, ABC):
             torch.Tensor: Evaluated dictionary
         """
         X = X.to(self.device)
-        evaluated_dictionary = self._evaluate_dictionary(X, self.parameters, **kwargs)
+        evaluated_dictionary = self._evaluate_dictionary(X, self.theta_params, **kwargs)
         return evaluated_dictionary if not dictionary_shape else evaluated_dictionary.view(dictionary_shape)

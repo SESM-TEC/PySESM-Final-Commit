@@ -125,8 +125,8 @@ class GaussianDictLayer(DictBaseLayer):
         # Assuming theta has rho first, then mu.
         num_rho_params = self.n_features * (self.n_features + 1) // 2
         
-        hook_info['rho_params'] = hook_info['parameters'][:num_rho_params, :].clone()
-        hook_info['mu_params'] = hook_info['parameters'][-self.n_features:, :].clone()
+        hook_info['rho_params'] = hook_info['theta_params'][:num_rho_params, :].clone()
+        hook_info['mu_params'] = hook_info['theta_params'][-self.n_features:, :].clone()
         
         # Add flags from eval_kwargs to indicate which parameters are being optimized in this epoch
         hook_info['mu_flag'] = eval_kwargs.get('mu_flag', False)

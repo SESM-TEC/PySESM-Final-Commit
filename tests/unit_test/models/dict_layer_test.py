@@ -78,6 +78,7 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     true_mean = np.array([0.5, -0.3])
     fixed_cov = 0.5 * np.eye(n_features)
     
+    # Calculate true unnormalized Gaussian values
     gaussian_values = multivariate_normal.pdf(X.cpu().numpy(), mean=true_mean, cov=fixed_cov)
     peak_value = multivariate_normal.pdf(true_mean, mean=true_mean, cov=fixed_cov)
     y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=common_device).reshape(-1, 1)
@@ -88,15 +89,10 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     mu_history = []
     
     def parameter_tracker(info):
-        # The hook info structure might change slightly depending on _add_hook_info implementation
-        # For GaussianDictLayer, you need to extract mu from `info['parameters']`
-        # `parameters` is the full theta vector (rho then mu)
-        current_mu = info['parameters'][-n_features:, 0].cpu().numpy()
-        # For mu_grad, you would need to get it from info['mu_grad'] if hook provides it explicitly
-        # Otherwise, parameter_tracker logic needs to be adapted or remove grad tracking.
+              
         mu_history.append({
             'epoch': info['epoch'],
-            'mu': current_mu,
+            'mu': info['mu_params'].flatten(),
             'loss': info['loss']
         })
 
@@ -127,13 +123,10 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     dict_layer.partial_fit(
         X=X,
         y=y,
-        h=h,
-        # epochs=n_epochs, # epochs now comes from dict_config.epochs
-        # mu_flag=True,   # These flags are now controlled by dict_config
-        # rho_flag=False  # These flags are now controlled by dict_config
+        h=h
     )
     
-    learned_mean = dict_layer.parameters[-n_features:, 0].detach().cpu().numpy()
+    learned_mean = dict_layer.theta_params[-n_features:, 0].detach().cpu().numpy()
 
     if DEBUG_VISUALIZATION:
         adapted_values = multivariate_normal.pdf(X.cpu().numpy(), mean=learned_mean, cov=fixed_cov)
@@ -144,9 +137,7 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
         mu_points = np.array([entry['mu'].flatten() for entry in mu_history])
         ax.scatter(mu_points[:, 0], mu_points[:, 1], np.zeros_like(mu_points[:, 0]), 
                 'b.', label='μ trajectory', alpha=0.5)
-        # Note: Gradient visualization will be harder if `_add_hook_info` doesn't provide it
-        # You'll need to adapt parameter_tracker if you want to visualize gradients.
-        # For now, remove gradient plotting if hook info doesn't include it.
+       
 
     np.testing.assert_allclose(learned_mean, true_mean, rtol=1e-1, err_msg="Learned mean not close to true mean.")
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
@@ -198,7 +189,7 @@ def test_gaussian_dict_layer_find_diagonal_covariance(common_logger, common_devi
         # rho_flag=True    # Controlled by dict_config.rho_epochs
     )
     
-    rho = dict_layer.parameters[:-n_features, 0].detach() # Access parameters directly
+    rho = dict_layer.theta_params[:-n_features, 0].detach() # Access parameters directly
     A = torch.zeros(n_features, n_features, device=common_device)
     indices = torch.triu_indices(n_features, n_features)
     A[indices[0], indices[1]] = rho
@@ -265,7 +256,7 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
         # flags controlled by config
     )
     
-    rho = dict_layer.parameters[:-n_features, 0].detach()
+    rho = dict_layer.theta_params[:-n_features, 0].detach()
     A = torch.zeros(n_features, n_features, device=common_device)
     indices = torch.triu_indices(n_features, n_features)
     A[indices[0], indices[1]] = rho
