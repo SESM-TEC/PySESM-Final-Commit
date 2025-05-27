@@ -28,6 +28,7 @@ from ..factories.BlockManagerFactory import BlockManagerFactory
 from ..blocks.PartitionBlock import PartitionBlock
 from ..blocks.BlockManager import BlockManager, BlockManagerConfig
 from ..base_types import BaseConfig
+from ..device_manager.DeviceManager import DeviceManager
 
 @dataclass
 class SESMConfig(BaseConfig):
@@ -189,7 +190,13 @@ class SESM(torch.nn.Module, ABC):
         self.seed = config.seed
         self.debug = config.debug
         self.logger = logger
-        self.device_manager = device_manager
+        
+        
+        if device_manager is None:
+            self.device_manager = DeviceManager(logger=self.logger, default_device="cpu")
+            self.logger.info("No DeviceManager provided. Creating a default DeviceManager (CPU only).")
+        else:
+            self.device_manager = device_manager
         
         # Store hooks for monitoring
         self.sesm_hook = sesm_hook
@@ -222,14 +229,14 @@ class SESM(torch.nn.Module, ABC):
             evaluation_func=self.evaluation_func,
             logger=self.logger,
             parameter_hook=self.dict_layer_hook,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER) if device_manager else None,
+            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             **kwargs
         )
 
         self.partition_manager = BlockManagerFactory.create(
             config.partition_config,
             logger=self.logger,
-            device_manager=device_manager,
+            device_manager=self.device_manager,
             sparse_coding_layer_hook=self.sparse_coding_layer_hook)
 
     @abstractmethod

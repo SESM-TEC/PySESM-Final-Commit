@@ -90,7 +90,7 @@ class SSESM(SESM):
         self.partition_manager = BlockManagerFactory.create(
             config.partition_config,
             logger=logger, 
-            device_manager=device_manager,
+            device_manager=self.device_manager,
             sparse_coding_layer_hook=sparse_coding_layer_hook
         )
 
