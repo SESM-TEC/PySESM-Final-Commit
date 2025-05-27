@@ -71,7 +71,7 @@ class SESMConfig(BaseConfig):
     sparse_coding_config: SparseCodingConfig
     dict_config: DictConfig
     partition_config: BlockManagerConfig
-    seed: int
+    seed: int = None
     debug: bool = False
 
 

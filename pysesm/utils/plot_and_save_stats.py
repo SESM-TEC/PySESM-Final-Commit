@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import os
 import torch
 
-from pysesm.models.SESM.SESM import SESM
+from pysesm.models.SESM import SESM
 
 def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     """

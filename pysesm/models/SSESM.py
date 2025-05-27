@@ -14,14 +14,29 @@ import logging
 import numpy as np
 import torch
 from typing import Callable, Iterator, Optional
+from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
 
 from ..functions import SurrogateFunction
-from ..blocks import UniformPartitionManager
+from ..blocks import BlockManager
 from ..models.SESM import SESM, SESMConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from ..device_manager.DeviceManager import DeviceManager
 from ..factories.SparseCodingFactory import SparseCodingFactory
+from ..factories.BlockManagerFactory import BlockManagerFactory
+
+@dataclass
+class SSESMConfig(SESMConfig):
+    """
+    Configuration for SSESM model, extending base SESMConfig.
+    
+    Attributes:
+        permutation_times (int): Number of times to permute the dataset for training
+                                 in the sequential partial fit loop.
+        dfngroup (Optional[Any]): Unclear purpose. Placeholder for potentially grouping
+                                  dictionary functions or data. Consider removing if unused.
+    """
+    permutation_times: int = 1
 
 
 class SSESM(SESM):
@@ -31,15 +46,13 @@ class SSESM(SESM):
     function approximation and surrogate modeling tasks with dynamic sub-block partitioning.
     """
 
+    CONFIG_CLASS = SSESMConfig
+
     def __init__(
         self,
-        config: SESMConfig,
+        config: SSESMConfig,
         logger: logging.Logger,
-        device_manager: DeviceManager,
-        permutation_times: int,
-        dfngroup,
-        initial_bounds=None,
-        T=None,
+        device_manager: DeviceManager = None,
         dict_layer_hook: Optional[Callable[[dict], None]] = None,
         sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,
         sesm_hook: Optional[Callable[[dict], None]] = None,
@@ -52,13 +65,9 @@ class SSESM(SESM):
         sub-block operations, and configures hyperparameters.
 
         Args:
-            config (SESMConfig): Configuration object containing all SESM parameters.
+            config (SSESMConfig): Configuration object containing all SSESM parameters.
             logger (logging.Logger): Logger instance for runtime monitoring.
             device_manager (DeviceManager): Device manager for GPU/CPU allocation.
-            permutation_times (int): Number of times to permute the dataset for training.
-            dfngroup: Grouping information for function blocks (specific to implementation).
-            initial_bounds (optional): Initial bounds for partitioning (default: None).
-            T: Number of blocks per dimension or total blocks.
             dict_layer_hook: Optional callback for dictionary layer monitoring.
             sparse_coding_layer_hook: Optional callback for sparse coding layer monitoring.
             sesm_hook: Optional callback for SESM-level monitoring.
@@ -75,15 +84,12 @@ class SSESM(SESM):
             **kwargs
         )
 
-        self.permutation_times = permutation_times
-        self.dfngroup = dfngroup
+        self.permutation_times = config.permutation_times
 
         # Create partition manager
-        self.partition_manager = UniformPartitionManager(
+        self.partition_manager = BlockManagerFactory.create(
+            config.partition_config,
             logger=logger, 
-            T=T, 
-            n_functions=config.n_functions, 
-            initial_bounds=initial_bounds,
             device_manager=device_manager,
             sparse_coding_layer_hook=sparse_coding_layer_hook
         )
@@ -119,7 +125,8 @@ class SSESM(SESM):
 
         # Add points to partition manager and initialize blocks
         self.partition_manager.add_points(X, y)
-        self.partition_manager.init_sparse_coding_per_block(config=self.sparse_coding_config)
+        self.partition_manager.init_sparse_coding_per_block(config=self.sparse_coding_config,
+                                                            evaluation_func=self.evaluation_func)
         active_blocks = self.partition_manager.retrieve_active_blocks()
 
         # Train blocks with permutation
@@ -169,7 +176,7 @@ class SSESM(SESM):
             
             # Map predictions back to original positions
             for i, pos in enumerate(block.positions):
-                y_pred_per_block[pos] = block_pred[i].item() if block_pred[i].dim() == 0 else block_pred[i]
+                y_pred_per_block[pos] = block_pred[i].item() if block_pred[i].dim() == 0 else block_pred[i].cpu()
 
         return torch.tensor(y_pred_per_block, dtype=X.dtype)
 
