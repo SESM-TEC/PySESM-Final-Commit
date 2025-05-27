@@ -183,8 +183,10 @@ class PartitionBlock:
         stacked_y = torch.stack([val.to(self.device) if isinstance(val, torch.Tensor) else torch.tensor(val, device=self.device) for val in self.y])
         
         # Ensure target is at least 2D (N_samples, output_dim)
-        if stacked_y.dim() < 2:
-            stacked_y = stacked_y.unsqueeze(-1)
+        if stacked_y.dim() > 2: # Si es (N, 1, 1) o más, aplanar la última dim
+            stacked_y = stacked_y.squeeze(-1) # Resultado (N, 1)
+        elif stacked_y.dim() < 2: # Si es (N,), añadir una dim
+            stacked_y = stacked_y.unsqueeze(-1) # Resultado (N, 1)
         
         # Apply the current amplitude
         target_tensor = stacked_y * self.amplitude

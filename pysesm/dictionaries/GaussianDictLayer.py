@@ -95,26 +95,17 @@ class GaussianDictLayer(DictBaseLayer):
         if self.config.split_mu_rho:
             # Training mu (mean) parameters
             if self.config.mu_epochs > 0:
-                self.logger.debug(f"[{self.__class__.__name__}] Training mu for {self.config.mu_epochs} epochs.")
                 for epoch in range(self.config.mu_epochs):
                     loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=False)
-                    if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
-                        self.logger.debug(f"[{self.__class__.__name__}] Mu Epoch {epoch+1}/{self.config.mu_epochs}, Loss: {loss.item():.6f}")
 
             # Training rho (covariance) parameters
             if self.config.rho_epochs > 0:
-                self.logger.debug(f"[{self.__class__.__name__}] Training rho for {self.config.rho_epochs} epochs.")
                 for epoch in range(self.config.rho_epochs):
                     loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=False, rho_flag=True)
-                    if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
-                        self.logger.debug(f"[{self.__class__.__name__}] Rho Epoch {epoch+1}/{self.config.rho_epochs}, Loss: {loss.item():.6f}")
         else:
             # Joint training of all parameters
-            self.logger.debug(f"[{self.__class__.__name__}] Training all parameters for {self.config.epochs} epochs (joint strategy).")
             for epoch in range(self.config.epochs):
                 loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=True)
-                if self.logger.level <= logging.DEBUG: # Log only if debug is enabled
-                    self.logger.debug(f"[{self.__class__.__name__}] Joint Epoch {epoch+1}/{self.config.epochs}, Loss: {loss.item():.6f}")
 
     # --- Override _add_hook_info to provide mu/rho specific info ---
     def _add_hook_info(self, hook_info: dict, **eval_kwargs):

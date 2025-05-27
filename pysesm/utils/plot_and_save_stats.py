@@ -9,7 +9,7 @@ import torch
 
 from pysesm.models.SESM import SESM
 
-def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
+def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngroup: str = "sesm"):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
@@ -91,7 +91,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax4.set_zlabel('y')
     ax4.legend()
 
-    ax4.set_title(f"Ground truth - {hypset}/{model.dfngroup}")
+    ax4.set_title(f"Ground truth - {hypset}/{dfngroup}")
 
     # Matplotlib para "Surrogate Model" (estática)
     Z_pred = Z.clone().reshape(N, N).detach().numpy()
@@ -103,7 +103,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax2.set_zlabel('y')
     ax2.legend()
 
-    ax2.set_title(f"Surrogate Model - {hypset}/{model.dfngroup}")
+    ax2.set_title(f"Surrogate Model - {hypset}/{dfngroup}")
 
     plt.tight_layout()
     return fig
@@ -129,7 +129,7 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
     # Matplotlib subplots (no interactivas)
     fig = plot_surface(test_dataset,X_train,y_train,Z,model,hypset)
 
-    plt.savefig(f"{folder_name}/plots/{model.dfngroup}.{1}_static.png")
+    plt.savefig(f"{folder_name}/plots/{dfngroup}.{1}_static.png")
     plt.close(fig)
 
     # Plotly para la gráfica interactiva de la "Original Function"
@@ -144,11 +144,11 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
         marker=dict(size=5, color="red"),
     )
     fig_original.update_layout(
-        title=f"Original Function - {hypset}/{model.dfngroup}",
+        title=f"Original Function - {hypset}/{dfngroup}",
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
     )
     fig_original.write_html(
-        f"{folder_name}/plots/{model.dfngroup}.{1}_original.html"
+        f"{folder_name}/plots/{dfngroup}.{1}_original.html"
     )
 
     # Plotly para la gráfica interactiva del "Surrogate Model"
@@ -163,11 +163,11 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
         marker=dict(size=5, color="red"),
     )
     fig_surrogate.update_layout(
-        title=f"Surrogate Model - {hypset}/{model.dfngroup}",
+        title=f"Surrogate Model - {hypset}/{dfngroup}",
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
     )
     fig_surrogate.write_html(
-        f"{folder_name}/plots/{model.dfngroup}.{1}_surrogate.html"
+        f"{folder_name}/plots/{dfngroup}.{1}_surrogate.html"
     )
 
 

@@ -119,7 +119,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
         return js_divergence
 
 # LOGGER INSTANCE
-logger = setup_logger()
+logger = setup_logger(level=logging.DEBUG)
 
 n_functions=10
 
@@ -177,7 +177,8 @@ ssesm_config = SSESMConfig(
     model_epochs = 5000,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
-    partition_config = partition_config
+    partition_config = partition_config,
+    debug=True
 )
 
 # SESM CONFIGURATION
@@ -187,7 +188,6 @@ experiment = {
     "n_samples": 500,
     "seed": 45,
     "iter": 0,
-    "debug": True,
     "device_map": {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
         DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en GPU 0
@@ -228,9 +228,6 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
-
-# LOGGER INSTANCE
-logger = setup_logger()
 
 # INSTANTIATE THE MODELS
 ssesm_model = SSESM(**experiment,logger=logger)
