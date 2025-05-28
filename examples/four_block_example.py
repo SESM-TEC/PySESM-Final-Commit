@@ -11,12 +11,12 @@ License:
 import logging
 import torch
 import matplotlib.pyplot as plt
-from pysesm.models.SSESM import SSESM
-from pysesm.models.SESM import SESM, SESMConfig
-from pysesm.models.ISTALayer import ISTALayer, ISTAConfig, StepSizeMethod
-from pysesm.models.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
-from pysesm.models.ADMMLayer import ADMMLayer, ADMMConfig
-from pysesm.models.GaussianDictLayer import GaussianDictConfig
+from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
+from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
+from pysesm.sparse_coding import ADMMLayer, ADMMConfig
+from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
+from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
@@ -24,6 +24,7 @@ from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
+
 
 
 class KLDivLossWrapper(torch.nn.Module):
@@ -52,7 +53,6 @@ class KLDivLossWrapper(torch.nn.Module):
         loss = self.kl_loss(log_inputs, targets_normalized)
         
         return loss
-
 
 class CrossEntropyLossWrapper(torch.nn.Module):
     """
@@ -118,9 +118,8 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
-
 # LOGGER INSTANCE
-logger = setup_logger()
+logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
 n_functions = 30
@@ -134,88 +133,70 @@ device_map = {
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
-# Create device manager
-device_manager = DeviceManager(logger, device_map=device_map)
-
-# Create the dictionary configuration for Gaussian dictionary
-dict_config = GaussianDictConfig(
-    epochs=20,  # Total dictionary epochs (when split_mu_rho=False)
-    alpha=0.1,  # Dictionary learning rate
-    criterion=JensenShannonLossWrapper(),  # Dictionary loss function
-    optimizer_factory=lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    mu_epochs=10,  # Epochs for mu parameter (when split_mu_rho=True)
-    rho_epochs=10,  # Epochs for rho parameter (when split_mu_rho=True)
-    split_mu_rho=True,  # Use split training strategy
-    eig_range=[0.05, 0.2],  # Range for eigenvalues (Gaussian-specific)
-    mu_range=[-2.0, 2.0]    # Range for mu values (Gaussian-specific)
+sparse_coding_config = ISTAConfig(
+    alpha=0.10,
+    lambd=0.00001,
+    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    power_iterations=10,
+    n_functions=n_functions,
+    criterion=torch.nn.MSELoss()
 )
-
-# Create sparse coding configuration
-# Uncomment the configuration you want to use:
-
-# Option 1: ISTA
-# sparse_coding_config = ISTAConfig(
-#     alpha=0.10,
-#     lambd=0.00001,
-#     step_size_method=StepSizeMethod.FROBENIUS,  # or StepSizeMethod.POWER_ITERATION
-#     power_iterations=10,
-#     n_functions=n_functions,
-#     epochs=30,  # Sparse coding epochs now in config!
-#     criterion=torch.nn.MSELoss(),
-#     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
-# )
-
-# Option 2: FISTA
 # sparse_coding_config = FISTAConfig(
-#     alpha=0.020,
-#     lambd=0.00001,
-#     step_size_method=StepSizeMethod.FROBENIUS,  # or StepSizeMethod.POWER_ITERATION
-#     power_iterations=10,
-#     n_functions=n_functions,
-#     epochs=30,  # Sparse coding epochs now in config!
-#     restart_strategy=RestartStrategy.ADAPTIVE,  # or RestartStrategy.NONE
-#     momentum_scheme=MomentumScheme.MONOTONIC,   # or MomentumScheme.ORIGINAL
-#     criterion=torch.nn.MSELoss(),
-#     evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+#     alpha = 0.020,
+#     lambd = 0.00001,
+#     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+#     power_iterations = 10,
+#     n_functions = n_functions,
+#     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+#     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+#     criterion = torch.nn.MSELoss(),
 # )
-
-# Option 3: ADMM (currently active)
-sparse_coding_config = ADMMConfig(
-    rho=0.1,            # Penalty parameter
-    alpha=1.5,          # Relaxation parameter (>1.0 for over-relaxation)
-    lambda_scaling=1.0,  # Lambda scaling factor
-    lambd=0.00001,      # L1 regularization strength
-    abs_tol=1e-4,       # Absolute tolerance
-    rel_tol=1e-2,       # Relative tolerance
-    n_functions=n_functions,
-    epochs=30,  # Sparse coding epochs now in config!
-    criterion=torch.nn.MSELoss(),
-    evaluation_func=lambda dictionary, h: torch.matmul(dictionary, h)
+# sparse_coding_config = ADMMConfig(
+#     epochs = 100,
+#     rho = 0.1,            # Penalty parameter
+#     alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
+#     lambda_scaling = 1.0, # Lambda scaling factor
+#     lambd = 0.00001,      # L1 regularization strength
+#     abs_tol = 1e-4,       # Absolute tolerance
+#     rel_tol = 1e-2,       # Relative tolerance
+#     n_functions = n_functions,
+#     criterion = torch.nn.MSELoss()
+# )
+dict_config = GaussianDictConfig(
+    epochs = 10,
+    alpha = 0.1,
+    # criterion = torch.nn.MSELoss(),
+    # criterion = KLDivLossWrapper(),
+    criterion = JensenShannonLossWrapper(),
+    optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    mu_epochs = 10,
+    rho_epochs = 10,
+    split_mu_rho = True,
+    eig_range = [0.05, 0.2],
+    mu_range = [-2.0, 2.0],
+)
+partition_config = UniformPartitionConfig(
+    T=2,
+    initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
+    threshold=0
 )
 
-# Create SESM configuration
-sesm_config = SESMConfig(
-    n_features=n_features,
-    n_functions=n_functions,
-    model_epochs=75,
-    sparse_coding_config=sparse_coding_config,
-    dict_config=dict_config,
-    seed=45,
-    debug=True
+ssesm_config = SSESMConfig(
+    n_features = n_features,
+    model_epochs = 100,
+    sparse_coding_config = sparse_coding_config,
+    dict_config = dict_config,
+    partition_config = partition_config,
+    log_interval=100,
+    permutation_times=3
 )
 
-# Additional parameters for data generation and SSESM
-experiment_params = {
+# SESM CONFIGURATION
+experiment = {
+    "config": ssesm_config,
     "hyp_set": 1,
     "n_samples": 500,
-    "n_features": n_features,
-    "n_functions": n_functions,
-    "eig_range": dict_config.eig_range,
-    "mu_range": dict_config.mu_range,
-    "T": 3,
-    "initial_bounds": torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    "permutation_times": 10,
-    "dfngroup": 1,
+    "seed": 45,
     "iter": 0,
 }
 
@@ -239,48 +220,31 @@ def show_data(X, y, c, marker, label, ax=None):
 
 
 # DATA GENERATION
-# Note: generate_gaussian_dataset might need to be updated to not require psi
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset({
-    **experiment_params,
-    "sparse_coding_config": sparse_coding_config,
-})
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
+
+# ax = show_data(X_train,y_train,'r','x','Training')
+# show_data(X_test,y_test,'0.4','.','Test',ax)
 
 # RESULTS FOLDER NAME CREATION
-folder_name = f"results_one_block_{experiment_params['hyp_set']}"
+folder_name = f"results_one_block_{experiment['hyp_set']}"
 
-# INSTANTIATE THE MODEL
-ssesm_model = SSESM(
-    config=sesm_config,
-    logger=logger,
-    device_manager=device_manager,
-    permutation_times=experiment_params["permutation_times"],
-    dfngroup=experiment_params["dfngroup"],
-    initial_bounds=experiment_params["initial_bounds"],
-    T=experiment_params["T"],
-    # Optional hooks for monitoring
-    # dict_layer_hook=lambda info: log_to_console("DictLayer", info),
-    # sparse_coding_layer_hook=lambda info: log_to_console("SparseCodingLayer", info),
-    # sesm_hook=lambda info: log_to_console("SESM", info)
-)
+# INSTANTIATE THE MODELS
+ssesm_model = SSESM(**experiment,logger=logger)
+#bsesm_model = BSESM(**experiment,logger=logger)
 
 try:
-    # TRAIN AND TEST THE MODEL
-    logging.info(f"Training model {ssesm_model.__class__.__name__}")
-    model_folder = f"{folder_name}_{ssesm_model.__class__.__name__}"
-    
-    # Train the model
-    ssesm_model.partial_fit(X_train, y_train)
-    
-    # Evaluate performance
-    y_predicted, time, mse_value = ssesm_model.performance_stats(X_test, y_test)
+    # TRAIN AND TEST THE ALL MODELS
+    for model in [ssesm_model]: # bsesm_model
+        logging.info("Training model {}".format(model.__class__.__name__))
+        model_folder = f"{folder_name}_{model.__class__.__name__}"
+        model.partial_fit(X_train, y_train)
+        y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
-    logging.info(f"Model: {ssesm_model.__class__.__name__}, MSE Value = {mse_value:.6f}, time = {time:.6f}")
+        logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-    # Plot results
-    plot_surface(testDataset, X_train, y_train, y_predicted, ssesm_model, experiment_params["hyp_set"])
+        plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
-    plt.show(block=True)
-    
+    plt.show(block=True)  
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')
