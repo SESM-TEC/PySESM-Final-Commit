@@ -304,6 +304,7 @@ class SESM(torch.nn.Module, ABC):
         if self.sparse_coding_layer is None:
             self.sparse_coding_layer = SparseCodingFactory.create(
                 config=self.sparse_coding_config,
+                evaluation_func=self.evaluation_func,
                 logger=self.logger,
                 parameter_hook=self.sparse_coding_layer_hook,
                 device=self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER) if self.device_manager else None

@@ -114,12 +114,12 @@ class ISTALayer(SparseCodingBaseLayer):
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
                 
-            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
             # Initialize h as zeros (common for ISTA)
             self.h = torch.nn.Parameter(
                 torch.zeros(self.config.n_functions, 1).to(self.device), 
-                requires_grad=True
+                requires_grad=False
             )
 
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:

@@ -119,12 +119,12 @@ class ADMMLayer(SparseCodingBaseLayer):
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
                 
-            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
             # Initialize h as zeros
             self.h = torch.nn.Parameter(
                 torch.zeros(self.config.n_functions, 1, device=self.device), 
-                requires_grad=True
+                requires_grad=False
             )
         
         # Initialize auxiliary variables for ADMM
@@ -337,7 +337,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             self.z = z_new
 
             # Compute current loss for tracking
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             loss = self.criterion(y_pred, y)
 
             if log_losses:
@@ -380,7 +380,7 @@ class ADMMLayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)

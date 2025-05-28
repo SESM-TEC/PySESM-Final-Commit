@@ -178,7 +178,7 @@ ssesm_config = SSESMConfig(
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=10
+    log_interval=100
 )
 
 # SESM CONFIGURATION
