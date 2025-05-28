@@ -6,4 +6,3 @@ class DeviceTarget(Enum):
     SPARSE_CODING_LAYER = "sparse_coding_layer"
     DICTIONARY_LAYER = "dictionary_layer"
     PARTITION_MANAGER = "partition_manager"
-    #SURROGATE_FUNCTION = "surrogate_function"
