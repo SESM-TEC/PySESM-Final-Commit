@@ -310,7 +310,7 @@ class FISTALayer(SparseCodingBaseLayer):
 
         return loss
     
-    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple FISTA iterations.
         
@@ -320,10 +320,10 @@ class FISTALayer(SparseCodingBaseLayer):
         
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of iterations.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        epochs = self.config.epochs
         # Reset iteration counter for fixed restart strategy
         self.iter_count = 0
         self.prev_loss = float('inf')

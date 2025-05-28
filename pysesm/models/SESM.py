@@ -282,7 +282,7 @@ class SESM(torch.nn.Module, ABC):
         Train the model by learning a sparse vector and dictionary that approximates the target function.
         
         Note: This method is kept for backward compatibility and non-partitioned use cases.
-        For partitioned training (SSESM), use partial_fit with PartitionBlock instead.
+        For partitioned training (SSESM, BSESM), use partial_fit.
         
         This method creates a single sparse coding layer and trains both dictionary and
         sparse representations over the specified number of model epochs.
@@ -318,7 +318,7 @@ class SESM(torch.nn.Module, ABC):
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self.train_step(X, y, dictionary_shape)
+            self._train_step(X, y, self.sparse_coding_layer,dictionary_shape)
 
             epoch_end_time = time.time()
             self.elapsed_time += epoch_end_time - epoch_start_time
@@ -328,12 +328,32 @@ class SESM(torch.nn.Module, ABC):
                 f"Loss Dictionary: {self.dictionary_layer_losses[-1]:.6f}"
             )
 
-    def partial_fit(self, block: PartitionBlock) -> None:
+    @abstractmethod
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
+        """
+        Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
+
+        All derived classes must implement this as the entry point for (partial) trainings using
+        input space partitioning.
+         
+
+        Args:
+            X (torch.Tensor): Input features for training.
+            y (torch.Tensor): Target values.
+            initial_h (torch.Tensor): Initial h value or None for random initialization.
+            *_: Additional unused positional arguments.
+
+        Returns:
+            None
+        """
+        pass
+            
+    def _train_block(self, block: PartitionBlock) -> None:
         """
         Perform partial training on the SESM model using a PartitionBlock.
         
-        This is the preferred method for training SESM in a partitioned setting (SSESM).
-        It uses the block's own sparse coding layer while updating the global dictionary.
+        This corresponds to a "block step" in the block strategy, which is usually implemented
+        in the derived classes (SSESM, BSESM).
         
         The method implements the key insight of SESM: a global dictionary with local
         sparse representations per block, enabling scalable function approximation.
@@ -353,30 +373,23 @@ class SESM(torch.nn.Module, ABC):
             This method modifies the dictionary_layer parameters and the block's
             sparse_coding_layer.h in place.
         """
-        # Use the block's sparse coding layer (clean architecture - no copying)
-        self.sparse_coding_layer = block.sparse_coding_layer
-        
-        # Ensure block data is properly formatted
-        X = block.normalized_X.clone().detach().requires_grad_(False)
-        y = block.target
-        
-        # Ensure y is 2D for consistent matrix operations
-        if y.dim() == 1:
-            y = y.unsqueeze(-1)
-
         # Setup dictionary if this is the first block
-        self.dictionary_layer.setup(X)
+        self.dictionary_layer.setup(block.normalized_X.clone().detach().requires_grad_(False))
         
         # Ensure sparse coding layer is initialized with block's h
-        if not hasattr(self.sparse_coding_layer, 'h') or self.sparse_coding_layer.h is None:
-            self.sparse_coding_layer.setup(block.h)
+        if not hasattr(block.sparse_coding_layer, 'h') or block.sparse_coding_layer.h is None:
+            block.sparse_coding_layer.setup(block.h)
+
+        # Ensure the target y have the proper dimensions
+        if block.target.dim() == 1:
+            block.target = block.target.unsqueeze(-1)
 
         # Train for the specified number of epochs
         
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self.train_step(X, y, dictionary_shape=None)
+            self._block_train_step(block, dictionary_shape=None)
 
             self.elapsed_time += time.time() - epoch_start_time
 
@@ -386,16 +399,31 @@ class SESM(torch.nn.Module, ABC):
                    epoch == self.model_epochs - 1 ) ):
                 self.logger.info(
                     f"Block {block.block_index} - Epoch {epoch + 1}/{self.model_epochs}: "
-                    f"Loss Sparse Coding: {self.sparse_coding_layer_losses[-1]:.6f}, "
+                    f"Loss Sparse Coding: {block.sparse_coding_layer.losses[-1]:.6f}, "
                     f"Loss Dictionary: {self.dictionary_layer_losses[-1]:.6f}"
                 )
                 
         self.partial_fit_count += 1
 
-    def train_step(self,
-                   X: torch.Tensor,
-                   y: torch.Tensor,
-                   dictionary_shape: tuple = None,
+    def _block_train_step(self,
+                          block: PartitionBlock,
+                          dictionary_shape: tuple = None,
+    ):
+        """
+        Perform a single training step through the SESM model for one block.
+        """
+
+        X = block.normalized_X.clone().detach().requires_grad_(False)
+        y = block.target
+
+        self._train_step(X,y,block.sparse_coding_layer,dictionary_shape)
+
+
+    def _train_step(self,
+                    X: torch.Tensor,
+                    y: torch.Tensor,
+                    sparsecoding: SparseCodingBaseLayer,
+                    dictionary_shape: tuple = None,
     ):
         """
         Perform a single training step through the SESM model.
@@ -417,7 +445,9 @@ class SESM(torch.nn.Module, ABC):
         """
         # Step 1: Optimize dictionary with fixed h
         # Detach h to prevent gradient flow during dictionary optimization
-        h_detached = self.sparse_coding_layer.h.detach().clone()
+        # Ensure y is 2D for consistent matrix operations
+
+        h_detached = sparsecoding.h.detach().clone()
 
         # Train dictionary layer with its own training strategy
         self.dictionary_layer.partial_fit(
@@ -427,32 +457,23 @@ class SESM(torch.nn.Module, ABC):
             dictionary_shape=dictionary_shape,
         )
 
-        # Analyze dictionary losses for statistics
-        dict_epochs = getattr(self.dict_config, 'epochs', 
-                            getattr(self.dict_config, 'mu_epochs', 0) + 
-                            getattr(self.dict_config, 'rho_epochs', 0))
-        self.loss_analysis(dict_epochs)
-
         # Step 2: Optimize h with fixed dictionary
         # Detach dictionary to prevent gradient flow during sparse coding
         dictionary_for_sparse = self.dictionary_layer.dictionary.detach()
-        self.sparse_coding_layer.partial_fit(
-            y=y, 
-            epochs=self.sparse_coding_config.epochs, 
-            dictionary=dictionary_for_sparse
-        )
+        sparsecoding.partial_fit(y=y, 
+                                 dictionary=dictionary_for_sparse)
         
         # Call SESM hook if provided for monitoring
         if self.sesm_hook is not None:
             hook_info = {
                 'partial_fit_count': self.partial_fit_count,
-                'sparse_coding_losses': self.sparse_coding_layer_losses[-self.sparse_coding_config.epochs:],
-                'dictionary_losses': self.dictionary_layer_losses[-dict_epochs:],
-                'h': self.sparse_coding_layer.h.detach().clone(),
+                'sparse_coding_losses': sparsecoding.losses[-sparsecoding.config.epochs:],
+                'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
+                'h': sparsecoding.h.detach().clone(),
                 'dictionary_params': self.dictionary_layer.parameters.detach().clone()
             }
             self.sesm_hook(hook_info)
-
+            
     def predict(
             self,
             X: torch.Tensor,
@@ -460,7 +481,7 @@ class SESM(torch.nn.Module, ABC):
             custom_h: torch.Tensor = None
     ) -> torch.Tensor:
         """
-        Generate predictions using the trained SESM model.
+        Generate predictions using the trained SESM model with fit, i.e. a single block.
         
         Computes y_pred = evaluation_func(dictionary, h) where the dictionary is
         evaluated at the input points X.
@@ -468,6 +489,45 @@ class SESM(torch.nn.Module, ABC):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features) where
                 predictions are needed.
+            
+            dictionary_shape (tuple, optional): Shape for dictionary evaluation.
+                If provided, the dictionary is reshaped before predictions.
+            
+            custom_h (torch.Tensor, optional): Custom sparse vector to use for
+                predictions instead of the learned h. Shape should be (n_functions, 1).
+                Useful for evaluating different sparse representations.
+
+        Returns:
+            torch.Tensor: Predicted values of shape (n_samples,) or shape matching
+                the evaluation function output.
+                
+        Raises:
+            ValueError: If no sparse vector is available (neither trained nor custom_h).
+        """
+        return _predict(X,self.sparse_coding_layer,dictionary_shape,custom_h)
+
+    def _predict(
+            self,
+            X: torch.Tensor,
+            sparsecoding: SparseCodingBaseLayer,
+            dictionary_shape: tuple = None,
+            custom_h: torch.Tensor = None
+    ) -> torch.Tensor:
+        """
+        Generate predictions using the trained SESM model, but for one block only.
+        It assumes the X data points lie within the range the given sparse coding layer
+        was train into.
+
+        
+        Computes y_pred = evaluation_func(dictionary, h) where the dictionary is
+        evaluated at the input points X.
+
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features) where
+                predictions are needed.
+
+            sparsecoding (SparseCodingBaseLayer): the sparse coding layer of the block
+                in charge of the X points.
             
             dictionary_shape (tuple, optional): Shape for dictionary evaluation.
                 If provided, the dictionary is reshaped before predictions.
@@ -494,35 +554,43 @@ class SESM(torch.nn.Module, ABC):
         # Determine which h to use
         if custom_h is not None:
             h = custom_h.to(device)
-        elif self.sparse_coding_layer is not None:
-            h = self.sparse_coding_layer.h.to(device)
+        elif sparsecoding.h is not None:
+            h = sparsecoding.h.to(device)
         else:
             raise ValueError("No sparse vector available for prediction. Train the model first or provide custom_h.")
         
         # Combine dictionary and h using evaluation function
         return self.evaluation_func(dictionary, h)
-
-    def loss_analysis(self, dict_epochs: int) -> None:
+    
+    def _predict_block(
+            self,
+            block: PartitionBlock,
+            dictionary_shape: tuple = None,
+            custom_h: torch.Tensor = None
+    ) -> torch.Tensor:
         """
-        Analyze and store statistical information about dictionary training losses.
-        
-        Computes mean, standard deviation, max, and min of the losses over the
-        specified number of recent epochs. This information is useful for monitoring
-        training convergence and stability.
+        Generate predictions using the trained SESM model for a particular block
 
+        This is an interface function that extracts the information from the given block
+        and calls the protected method _predict.
+        
         Args:
-            dict_epochs (int): Number of most recent epochs to analyze. Should not
-                exceed the total number of logged losses.
+            block (PartitionBlock): Block with input data and sparse coding layer
+            
+            dictionary_shape (tuple, optional): Shape for dictionary evaluation.
+                If provided, the dictionary is reshaped before predictions.
+            
+            custom_h (torch.Tensor, optional): Custom sparse vector to use for
+                predictions instead of the learned h. Shape should be (n_functions, 1).
+                Useful for evaluating different sparse representations.
 
         Returns:
-            None: Updates the loss_stats dictionary in place with computed statistics.
-            
-        Note:
-            Only performs analysis if enough losses have been recorded.
+            torch.Tensor: Predicted values of shape (n_samples,) or shape matching
+                the evaluation function output.
+                
+        Raises:
+            ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        if len(self.dictionary_layer.losses) >= dict_epochs:
-            current_loss = self.dictionary_layer.losses[-dict_epochs:]
-            self.loss_stats["loss_mean"].append(np.mean(current_loss))
-            self.loss_stats["loss_std"].append(np.std(current_loss))
-            self.loss_stats["loss_max"].append(np.max(current_loss))
-            self.loss_stats["loss_min"].append(np.min(current_loss))
+        X = block.normalized_X.clone().detach().requires_grad_(False)
+        return self._predict(X,block.sparse_coding_layer,dictionary_shape,custom_h)
+    

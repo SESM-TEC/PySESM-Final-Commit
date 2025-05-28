@@ -135,8 +135,8 @@ class SSESM(SESM):
             permuted_blocks = [active_blocks[i] for i in selected_indices]
             
             for block in permuted_blocks:
-                # Use the new clean interface - pass the whole block
-                super().partial_fit(block)
+                # Reuse the SESM approach at the parent class
+                super()._train_block(block)
                 
                 self.logger.debug(
                     f"Block {block.block_index}/{len(active_blocks)} processed. "
@@ -167,13 +167,8 @@ class SSESM(SESM):
         y_pred_per_block = [0 for _ in range(len(y))]
         
         for block in active_blocks:
-            X_torch = block.normalized_X.clone().detach()
-            
             # Use parent's predict with the block's sparse coding h
-            block_pred = super().predict(
-                X_torch, 
-                custom_h=block.sparse_coding_layer.h
-            ) / block.amplitude
+            block_pred = super()._predict_block(block) / block.amplitude
             
             # Map predictions back to original positions
             for i, pos in enumerate(block.positions):

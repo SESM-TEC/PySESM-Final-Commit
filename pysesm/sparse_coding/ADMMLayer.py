@@ -391,7 +391,7 @@ class ADMMLayer(SparseCodingBaseLayer):
         return loss
 
     
-    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple ADMM iterations.
 
@@ -400,10 +400,10 @@ class ADMMLayer(SparseCodingBaseLayer):
 
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of ADMM iterations to perform.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        epochs=self.config.epochs
         # Initialize cached factorization for efficiency across iterations
         self.cached_factorization = self._factorize_system_matrix(dictionary)
 
