@@ -9,11 +9,14 @@ License:
 '''
 
 import logging
+from typing import Optional
+
 
 # Variable to ensure that the configuration is made just once
-_logger_configured = False
+_configured_loggers = {}
 
-def setup_logger(name: str = 'pysesm', level: int = logging.INFO) -> logging.Logger:
+def setup_logger(name: str = 'pysesm', level: int = logging.INFO, 
+                 log_file: Optional[str] = None) -> logging.Logger:
     """
     Configure and return a logger instance.
 
@@ -21,49 +24,56 @@ def setup_logger(name: str = 'pysesm', level: int = logging.INFO) -> logging.Log
     You can directly provide the desired logging level.
 
     Args:
-        name (str): El nombre del logger a configurar. Por defecto es 'pysesm'.
-        level (int): El nivel mínimo de logging a procesar (ej., logging.INFO, logging.DEBUG, logging.WARNING).
-                     Por defecto es logging.INFO.
+        name (str): Logger name. Default: 'pysesm'.
+        level (int): Minimum logging level (e.g. logging.INFO, logging.DEBUG, logging.WARNING).
+                     Default:  logging.INFO.
 
     Returns:
-        logging.Logger: La instancia de logger configurada.
+        logging.Logger: Configured logger instance.
     """
-    global _logger_configured
+    global _configured_loggers
 
     logger = logging.getLogger(name)
-    logger.setLevel(level) # Establece el nivel para este logger específico
+    logger.setLevel(level)  
 
-    # Si ya hemos configurado handlers para este logger o para el root, no añadir más
-    if not logger.handlers and not _logger_configured: # Comprobar también la flag global
+    # If the logger is alredy configured, return
+    if name in _configured_loggers:
+        return logger
+    
+    # Avoid duplicated handlers
+    if not logger.handlers:
+
+        # Ensure the root logger has no handlers to avoid duplicated messages
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]: 
+            root_logger.removeHandler(handler)
+        
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        # Crear y configurar el handler de consola
+        # Concole handler
         console_handler = logging.StreamHandler()
-        # El nivel del handler debe ser al menos tan permisivo como el nivel general que deseas ver.
-        # Aquí lo ponemos en DEBUG para que no filtre nada antes de que el logger principal lo haga.
-        # O podrías ponerlo en level, pero si quieres que sea global lo mejor es DEBUG.
         console_handler.setLevel(logging.DEBUG) 
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        # Crear y configurar el handler de archivo
-        file_handler = logging.FileHandler("log.log")
-        file_handler.setLevel(logging.DEBUG) # Igual que el de consola
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-
-        # Establecer la flag a True después de la primera configuración
-        _logger_configured = True
+        # Configurar el handler de archivo SOLO SI se proporciona un nombre de archivo
+        if log_file:
+            try:
+                file_handler = logging.FileHandler(log_file)
+                file_handler.setLevel(logging.DEBUG) # Nivel bajo para que el logger principal filtre
+                file_handler.setFormatter(formatter)
+                logger.addHandler(file_handler)
+            except Exception as e:
+                # Loggear una advertencia si no se puede crear el archivo de log
+                # Usamos el logger root temporalmente ya que nuestro logger aún no está completamente configurado
+                root_logger.warning(f"Could not set up file handler for '{log_file}': {e}")
         
-        # Opcional: Desactivar la propagación al logger root si no quieres que sus handlers (si los tiene) también manejen estos mensajes
-        # logger.propagate = False 
+        
+        # Opcional: Desactivar la propagación al logger root
+        logger.propagate = False 
 
+    _configured_loggers[name] = logger
     return logger
-
-# Si quieres que el logger root no haga nada por defecto, puedes configurarlo explícitamente
-# Esto evita que logging.basicConfig() (si se usara en otro lado) añada handlers al root
-# logging.getLogger().setLevel(logging.WARNING)
-# logging.getLogger().addHandler(logging.NullHandler()) # Añadir un handler nulo para que no haga nada

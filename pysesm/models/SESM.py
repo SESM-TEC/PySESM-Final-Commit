@@ -64,8 +64,7 @@ class SESMConfig(BaseConfig):
             functions, or a custom callable with signature (dictionary, h) -> predictions.
             Default is EVAL_DEFAULT which uses standard matrix multiplication.
         
-        debug (bool): Flag to enable detailed debug output during model training and evaluation.
-            Helps track internal processes and identify issues during development.
+        log_interva (int): Every how many epochs of the main SESM loop should we log progress.
     """
     n_features: int
     model_epochs: int
@@ -73,7 +72,7 @@ class SESMConfig(BaseConfig):
     dict_config: DictConfig
     partition_config: BlockManagerConfig
     seed: int = None
-    debug: bool = False
+    log_interval: int = 1
 
 
 class SESM(torch.nn.Module, ABC):
@@ -127,6 +126,7 @@ class SESM(torch.nn.Module, ABC):
     """
     
     # Type hints for instance attributes
+    config: SESMConfig
     sparse_coding_layer: SparseCodingBaseLayer
     dictionary_layer: DictBaseLayer
     partition_manager: BlockManager
@@ -135,7 +135,7 @@ class SESM(torch.nn.Module, ABC):
     sparse_coding_config: SparseCodingConfig
     dict_config: DictConfig
     seed: int
-    debug: bool
+    log_interval: int
     logger: logging.Logger
     loss_stats: dict
     elapsed_time: float
@@ -188,7 +188,6 @@ class SESM(torch.nn.Module, ABC):
         self.sparse_coding_config = config.sparse_coding_config
         self.dict_config = config.dict_config
         self.seed = config.seed
-        self.debug = config.debug
         self.logger = logger
         
         
@@ -372,6 +371,7 @@ class SESM(torch.nn.Module, ABC):
             self.sparse_coding_layer.setup(block.h)
 
         # Train for the specified number of epochs
+        
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
@@ -379,13 +379,16 @@ class SESM(torch.nn.Module, ABC):
 
             self.elapsed_time += time.time() - epoch_start_time
 
-            if self.debug and (epoch == 0 or (epoch + 1) % 10 == 0):
+            if ( (self.config.log_interval>0) and
+                 ( (epoch + 1) % self.config.log_interval == 0 or
+                   epoch == 0 or
+                   epoch == self.model_epochs - 1 ) ):
                 self.logger.info(
-                    f"Block {block.block_index} - Epoch {epoch + 1}: "
+                    f"Block {block.block_index} - Epoch {epoch + 1}/{self.model_epochs}: "
                     f"Loss Sparse Coding: {self.sparse_coding_layer_losses[-1]:.6f}, "
                     f"Loss Dictionary: {self.dictionary_layer_losses[-1]:.6f}"
                 )
-        
+                
         self.partial_fit_count += 1
 
     def train_step(self,

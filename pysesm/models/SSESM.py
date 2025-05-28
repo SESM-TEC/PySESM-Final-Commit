@@ -138,11 +138,12 @@ class SSESM(SESM):
                 # Use the new clean interface - pass the whole block
                 super().partial_fit(block)
                 
-                if self.debug and permutation == 0:
-                    self.logger.debug(
-                        f"Block {block.block_index} training completed. "
-                        f"Sparse vector sparsity: {(block.sparse_coding_layer.h == 0).sum().item()}/{self.n_functions}"
-                    )
+                self.logger.debug(
+                    f"Block {block.block_index}/{len(active_blocks)} processed. "
+                    f"Sparse vector sparsity: {(block.sparse_coding_layer.h == 0).sum().item()}/{self.n_functions}"
+                )
+
+            self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
 
     def predict(self, X: torch.Tensor, y: torch.Tensor, *_) -> torch.Tensor:
         """
