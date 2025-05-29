@@ -4,7 +4,10 @@ import plotly.express as px
 import pandas as pd
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
 import os
+import torch
 
 from pysesm.models.SESM.SESM import SESM
 
@@ -38,11 +41,36 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax5.set_ylabel("Dictionary loss")
     ax5.set_title("Dictionary Loss (Model epochs)")
 
+    # Modificación para mostrar puntos por bloque con colores diferentes
     ax3 = fig.add_subplot(233)
-    ax3.scatter(X_train[:, 0], X_train[:, 1])
+    
+    # Verificar si el modelo tiene partition_manager (para SSESM)
+    if hasattr(model, 'partition_manager'):
+        # Obtener bloques activos
+        active_blocks = model.partition_manager.retrieve_active_blocks()
+        
+        # Generar colores únicos para cada bloque
+        colors = cm.tab10(np.linspace(0, 1, len(active_blocks)))
+        
+        # Iterar sobre los bloques y plotear sus puntos
+        for i, block in enumerate(active_blocks):
+            if len(block.X) > 0:  # Solo si el bloque tiene puntos
+                # Usar las coordenadas originales (sin normalizar)
+                block_X = torch.stack(block.X).detach().cpu().numpy()
+                ax3.scatter(block_X[:, 0], block_X[:, 1], 
+                           c=[colors[i]], 
+                           label=f'Block {i}',
+                           alpha=0.7)
+        
+        ax3.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax3.set_title("Sampled positions by block")
+    else:
+        # Fallback para modelos sin partition_manager
+        ax3.scatter(X_train[:, 0], X_train[:, 1])
+        ax3.set_title("Sampled positions")
+    
     ax3.set_xlabel("X")
     ax3.set_ylabel("Y")
-    ax3.set_title("Sampled positions")
 
     # Ajuste de los límites de los ejes
     ax3.set_xlim([min(X_train[:, 0]), max(X_train[:, 0])])

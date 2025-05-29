@@ -298,7 +298,7 @@ def test_retrieve_test_active_blocks():
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
+    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=250, device_manager=device_manager)
     partitionManager.add_points(X1, y)
     activeBlocks1=partitionManager.retrieve_active_blocks()
     
@@ -319,8 +319,8 @@ def test_retrieve_test_active_blocks():
         evaluation_func=dummy_eval_func,
         ista_optimizer=dummy_optimizer
     )
-    Xt = torch.randn(5, n_features)
-    yt = torch.randn(5)
+    Xt = torch.randn(500, n_features)
+    yt = torch.randn(500)
 
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
 
@@ -342,5 +342,10 @@ def test_retrieve_test_active_blocks():
     sortX_val, _ = torch.sort(X_val,0)
     assert sortX1.shape==sortX_val.shape
     assert torch.equal(sortX1,sortX_val)
+
+    count=0
+    for block in activeTestBlocks:
+        count+=len(block.positions)
     
+    assert count==len(yt)
 

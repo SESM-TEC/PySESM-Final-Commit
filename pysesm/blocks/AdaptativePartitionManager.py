@@ -283,13 +283,15 @@ class AdaptativePartitionManager(BlockManager):
         test_blocks = np.empty(len(treeLeaves), dtype=object)  
         
         #Clone blocks and map test data to each test_block    
+        pos=0
         for j, node in enumerate(treeLeaves):
             if node.test_data is not None:
                 node.block.clear_points()
                 test_blocks[(j,)] = node.block.clone_test()
                 for i, _ in enumerate(node.test_data):
-                    test_blocks[(j,)].new_point(node.test_data[i], node.test_y[i],i)
-                
+                    test_blocks[(j,)].new_point(node.test_data[i], node.test_y[i],pos)
+                    pos+=1
+
         for idx in np.ndindex(test_blocks.shape):
             block = test_blocks[idx]
             if len(block.y) > 0:  # Only if block has points
@@ -307,8 +309,12 @@ class AdaptativePartitionManager(BlockManager):
 
         #Normalizes test data
         self._vectorized_normalization(test_blocks)
+        # intento de nueva normalización
+        # for block in test_blocks:
+         #    node=self.kdtree._find_node(block.X[0])
+          #   block.normalized_X=(torch.stack(block.X) - node.bounds[1])/block.block_size
         
-        #Configure blocks:
+        # Configure blocks:
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
             if len(block.y) != 0:
