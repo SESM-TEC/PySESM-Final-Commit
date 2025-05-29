@@ -328,7 +328,7 @@ def test_add_points_multiple_calls_fixed_bounds(create_manager, caplog):
     assert any("could not be mapped to any block" in r.message for r in caplog.records)
 
 
-def test_retrieve_test_active_blocks_isolation(create_manager):
+def test_retrieve_test_active_blocks_isolation_old(create_manager):
     """
     Test that retrieve_test_active_blocks creates isolated test blocks
     and correctly assigns original sparse coding layers to them.
@@ -392,7 +392,139 @@ def test_retrieve_test_active_blocks_isolation(create_manager):
     assert len(test_block_1_1.X) == 1 # X_test[2]
     assert torch.allclose(test_block_1_1.X[0], X_test[2])
 
+def test_retrieve_test_active_blocks_isolation(create_manager):
+    """
+    Test that retrieve_test_active_blocks creates isolated test blocks
+    and correctly assigns original sparse coding layers to them.
+    Crucially, it verifies that the sparse coding layers themselves (and their 'h' parameters)
+    are *shared instances* between original and test blocks for learned properties.
+    """
+    bounds = torch.tensor([[0, 0], [1, 1]], dtype=torch.float32)
+    manager = create_manager(T_val=torch.tensor([2, 2], device='cpu'), initial_bounds_val=bounds.cpu().numpy())
+    
+    X_train = torch.tensor([[0.1, 0.1], [0.6, 0.6], [0.15, 0.15]], device='cpu', dtype=torch.float32) # Added a third point for more diversity
+    y_train = torch.tensor([[1.0], [2.0], [3.0]], device='cpu', dtype=torch.float32)
+    manager.add_points(X_train, y_train)
 
+    def dummy_eval_func(D: torch.Tensor, h: torch.Tensor) -> torch.Tensor: return torch.matmul(D,h)
+    ista_config = ISTAConfig(n_functions=2, epochs=50, alpha=0.01, lambd=0.1)
+    manager.init_sparse_coding_per_block(config=ista_config, evaluation_func=dummy_eval_func)
+
+    # --- Puntos clave de este test: Simular algún entrenamiento para que h cambie ---
+    # Accede directamente a los bloques y simula un entrenamiento para cambiar 'h'
+    # Esto es una simulación del proceso de entrenamiento real, no del manager en sí.
+    active_blocks_train = manager.retrieve_active_blocks()
+    
+    # Asignar valores distintivos a 'h' para cada bloque activo
+    # block (0,0) will get h_val_A
+    # block (1,1) will get h_val_B
+    h_val_A = torch.tensor([[0.5], [0.1]], dtype=torch.float32) # Example values for h
+    h_val_B = torch.tensor([[-0.2], [0.8]], dtype=torch.float32) # Example values for h
+    
+    # Busca los bloques activos y asigna valores a sus 'h'
+    for block in active_blocks_train:
+        if block.block_index == (0,0): # Block containing (0.1,0.1) and (0.15,0.15)
+            block.sparse_coding_layer.h.data = h_val_A
+            # También simular que las pérdidas cambian
+            block.sparse_coding_layer.losses.append(0.123) 
+        elif block.block_index == (1,1): # Block containing (0.6,0.6)
+            block.sparse_coding_layer.h.data = h_val_B
+            block.sparse_coding_layer.losses.append(0.456)
+        # Puedes añadir otros bloques si tu X_train los activa
+
+    # Store references to original manager's internal state BEFORE retrieve_test_active_blocks
+    original_blocks_ref = manager.blocks
+    
+    # Get references to specific original sparse coding layers and their 'h'
+    original_sc_layer_0_0 = original_blocks_ref[0, 0].sparse_coding_layer
+    original_h_0_0_ref = original_sc_layer_0_0.h # Reference to the Parameter object for (0,0)
+    original_h_0_0_data_ref = original_h_0_0_ref.data # Reference to the underlying tensor data for (0,0)
+
+    original_sc_layer_1_1 = original_blocks_ref[1, 1].sparse_coding_layer
+    original_h_1_1_ref = original_sc_layer_1_1.h # Reference to the Parameter object for (1,1)
+    original_h_1_1_data_ref = original_h_1_1_ref.data # Reference to the underlying tensor data for (1,1)
+
+
+    # Test data to be mapped into the test blocks
+    # X_test[0] -> (0,0)
+    # X_test[1] -> (0,0)
+    # X_test[2] -> (1,1)
+    test_X = torch.tensor([[0.15, 0.15], [0.25, 0.25], [0.7, 0.7]], device='cpu', dtype=torch.float32)
+    test_y = torch.tensor([[3.0], [4.0], [5.0]], device='cpu', dtype=torch.float32)
+
+    test_active_blocks = manager.retrieve_test_active_blocks(test_X, test_y)
+
+    # 1. Assert original manager's blocks array reference is unchanged
+    assert manager.blocks is original_blocks_ref
+
+    # 2. Assert contents of original blocks (X, y, etc.) are still the same (not modified by test mapping)
+    # Check block (0,0) in original manager
+    assert len(original_blocks_ref[0,0].X) == 2 # (0.1,0.1) and (0.15,0.15) from X_train
+    assert torch.allclose(original_blocks_ref[0,0].X[0], X_train[0])
+    assert torch.allclose(original_blocks_ref[0,0].X[1], X_train[2]) # original (0.15,0.15)
+    assert original_blocks_ref[0,0].normalized_X is not None
+    assert original_blocks_ref[0,0].target is not None
+    # Check block (1,1) in original manager
+    assert len(original_blocks_ref[1,1].X) == 1 # (0.6,0.6) from X_train
+    assert torch.allclose(original_blocks_ref[1,1].X[0], X_train[1])
+    assert original_blocks_ref[1,1].normalized_X is not None
+    assert original_blocks_ref[1,1].target is not None
+
+
+    # 3. Assert test_active_blocks contain new PartitionBlock instances (not identity with originals)
+    test_block_0_0 = next((b for b in test_active_blocks if b.block_index == (0,0)), None)
+    test_block_1_1 = next((b for b in test_active_blocks if b.block_index == (1,1)), None) # Block (1,1) now has test data
+
+    assert test_block_0_0 is not None
+    assert test_block_1_1 is not None
+    assert test_block_0_0 is not original_blocks_ref[0,0] # Should be a new PartitionBlock instance
+    assert test_block_1_1 is not original_blocks_ref[1,1] # Should be a new PartitionBlock instance
+
+
+    # 4. Assert test blocks contain mapped test data (and are cleared of old train data)
+    assert len(test_block_0_0.X) == 2 # X_test[0] and X_test[1] mapped to this block
+    assert torch.allclose(test_block_0_0.X[0], test_X[0])
+    assert torch.allclose(test_block_0_0.X[1], test_X[1])
+    assert test_block_0_0.normalized_X is not None
+    assert test_block_0_0.target is not None
+
+    assert len(test_block_1_1.X) == 1 # X_test[2] mapped to this block
+    assert torch.allclose(test_block_1_1.X[0], test_X[2])
+    assert test_block_1_1.normalized_X is not None
+    assert test_block_1_1.target is not None
+
+
+    # 5. Assert test blocks point to the *original* sparse_coding_layer instances
+    # Identity check: same SC layer object (shallow copy of SC layer)
+    assert test_block_0_0.sparse_coding_layer is original_sc_layer_0_0 
+    assert test_block_1_1.sparse_coding_layer is original_sc_layer_1_1
+
+    # And crucially, assert that the 'h' Parameter objects are the same reference
+    assert test_block_0_0.sparse_coding_layer.h is original_h_0_0_ref
+    assert test_block_1_1.sparse_coding_layer.h is original_h_1_1_ref
+
+    # And that the underlying tensor data for 'h' is also the same reference
+    assert test_block_0_0.sparse_coding_layer.h.data is original_h_0_0_data_ref
+    assert test_block_1_1.sparse_coding_layer.h.data is original_h_1_1_data_ref
+
+    # 6. Verify that the values of 'h' in the test blocks match the values we set in the original blocks
+    assert torch.allclose(test_block_0_0.sparse_coding_layer.h, h_val_A)
+    assert torch.allclose(test_block_1_1.sparse_coding_layer.h, h_val_B)
+
+    # 7. Verify that the 'losses' list of the sparse coding layer is also the same object (shared state)
+    # This is important for logging and tracking.
+    assert test_block_0_0.sparse_coding_layer.losses is original_sc_layer_0_0.losses
+    assert test_block_1_1.sparse_coding_layer.losses is original_sc_layer_1_1.losses
+    assert test_block_0_0.sparse_coding_layer.losses[-1] == 0.123
+    assert test_block_1_1.sparse_coding_layer.losses[-1] == 0.456
+
+    # 8. Sanity check: ensure training data is cleared from test_active_blocks after creation
+    # This is managed by _create_test_block_structure within retrieve_test_active_blocks
+    # which creates a fresh PartitionBlock and then copies SC layer.
+    assert len(test_block_0_0.y) == 2 # test_y points mapped
+    assert len(test_block_1_1.y) == 1 # test_y points mapped
+
+    
 def test_add_points_with_n_dimensional_input(create_manager):
     """
     Test add_points with a 3D input space (n_features=3).

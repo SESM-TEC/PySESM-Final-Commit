@@ -176,7 +176,7 @@ dict_config = GaussianDictConfig(
     mu_range = [-2.0, 2.0],
 )
 partition_config = UniformPartitionConfig(
-    T=2,
+    T=3,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     threshold=0
 )
