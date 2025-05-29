@@ -73,29 +73,48 @@ class PartitionBlock:
         )
 
     def normalize(self):
+        # if len(self.X) == 0:
+        #     print("tensor_list está vacío, no se puede hacer stack")    
+        #     print("X:",self.X)
         tensor_X = torch.stack(self.X).to(self.device)
         min_vals = self.block_scope[0].to(self.device)
         sizes = self.block_size.to(self.device)
-    
+
         self.normalized_X = (tensor_X - min_vals) / sizes
 
     def clone_test(self):
         cloned_block = PartitionBlock.__new__(PartitionBlock)
+
+        # Clone immutable or safe-to-copy directly attributes
         cloned_block.block_index = self.block_index
-        cloned_block.block_size = self.block_size
-        cloned_block.block_scope = self.block_scope
-        cloned_block.h = self.h
         cloned_block.amplitude = self.amplitude
+        cloned_block.device = self.device
+
+        # Clone tensors safely (detach to avoid graph, clone to avoid shared storage)
+        cloned_block.space_bound = self.space_bound.clone().detach().to(self.device)
+        cloned_block.block_size = self.block_size.clone().detach().to(self.device)
+        cloned_block.block_scope = self.block_scope.clone().detach().to(self.device)
+
+
+
+        # Clone h (as Parameter if needed)
+        cloned_block.h = None
+        if self.h is not None:
+            cloned_block.h = torch.nn.Parameter(self.h.clone().detach(), requires_grad=True)
+
+        # Handle ista_layer (deepcopy if you want a separate instance)
+        cloned_block.ista_layer = copy.deepcopy(self.ista_layer) if self.ista_layer is not None else None
+
+        # Init empty containers
         cloned_block.X = []
-        cloned_block.y = []
         cloned_block.normalized_X = None
+        cloned_block.y = []
         cloned_block.positions = []
         cloned_block.target = []
         cloned_block.predicted_output = []
-        cloned_block.ista_layer = self.ista_layer
-        cloned_block.device = self.device 
-        return cloned_block
 
+        return cloned_block 
+    
     def __deepcopy__(self, memo):
         # Use the custom clone_test method for deep copying
         cloned_block = self.clone_test()

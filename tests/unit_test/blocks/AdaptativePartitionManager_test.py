@@ -325,10 +325,12 @@ def test_retrieve_test_active_blocks():
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
 
     X=torch.Tensor()
-    for block in activeTestBlocks:
+    for i, block in enumerate(activeTestBlocks):
         X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
+        if (i+1)<len(activeTestBlocks):
+            assert not torch.equal(block.h,activeTestBlocks[i+1].h)
     sortX, _ = torch.sort(X,0)   
-    sortXt, _ = torch.sort(Xt,0)
+    sortXt, _ = torch.sort(Xt,0)    
     assert torch.equal(sortX,sortXt)
     
     X_val=torch.Tensor()

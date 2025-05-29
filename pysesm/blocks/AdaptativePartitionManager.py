@@ -171,9 +171,9 @@ class AdaptativePartitionManager(BlockManager):
 
                     block.h.data /= block.h.data.sum()
 
-                    self.logger.debug(
-                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
-                    )
+                    # self.logger.debug(
+                    #     f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                    # )
 
                 block.target = torch.stack([value * block.amplitude for value in block.y])
                 if block.target.dim() == 1:

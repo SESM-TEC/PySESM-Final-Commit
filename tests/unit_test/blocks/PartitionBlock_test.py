@@ -122,21 +122,30 @@ def test_clone_test():
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
-#     cloned_block = block.clone_test()
+    block.new_point(point_x, point_y, pos)
+    block.h=torch.nn.Parameter(
+                        torch.rand(2,1), requires_grad=True
+                    )
+    cloned_block = block.clone_test()
 
-#     assert cloned_block.block_index == block.block_index
-#     assert torch.allclose(cloned_block.block_size, block.block_size)
-#     assert torch.allclose(cloned_block.block_scope, block.block_scope)
-#     assert cloned_block.h == block.h
-#     assert cloned_block.amplitude == block.amplitude
-#     assert cloned_block.ista_layer == block.ista_layer
-#     assert len(cloned_block.X) == 0
-#     assert len(cloned_block.y) == 0
-#     assert cloned_block.normalized_X is None
-#     assert len(cloned_block.positions) == 0
-#     assert len(cloned_block.target) == 0
-#     assert len(cloned_block.predicted_output) == 0
+    assert cloned_block.block_index == block.block_index
+    assert torch.allclose(cloned_block.block_size, block.block_size)
+    assert torch.allclose(cloned_block.block_scope, block.block_scope)
+    assert cloned_block.amplitude == block.amplitude
+    assert cloned_block.ista_layer == block.ista_layer
+    assert len(cloned_block.X) == 0 
+    assert len(cloned_block.y) == 0
+    assert cloned_block.normalized_X is None
+    assert len(cloned_block.positions) == 0
+    assert len(cloned_block.target) == 0
+    assert len(cloned_block.predicted_output) == 0
+
+    #Here is being checked the reference for the object h changes but has the same content:
+    assert block.h is not cloned_block.h
+    assert torch.equal(block.h, cloned_block.h)
+
+    #Assert a different reference is being used for the cloned block
+    assert block is not cloned_block
 
 def test_deepcopy():
     """Test the deepcopy functionality of the PartitionBlock."""
@@ -149,21 +158,21 @@ def test_deepcopy():
     point_y = torch.tensor([1.0], device='cpu')
     pos = 0
 
-#     block.new_point(point_x, point_y, pos)
-#     cloned_block = copy.deepcopy(block)
+    block.new_point(point_x, point_y, pos)
+    cloned_block = copy.deepcopy(block)
 
-#     assert cloned_block.block_index == block.block_index
-#     assert torch.allclose(cloned_block.block_size, block.block_size)
-#     assert torch.allclose(cloned_block.block_scope, block.block_scope)
-#     assert cloned_block.h == block.h
-#     assert cloned_block.amplitude == block.amplitude
-#     assert cloned_block.ista_layer == block.ista_layer
-#     assert len(cloned_block.X) == 0
-#     assert len(cloned_block.y) == 0
-#     assert cloned_block.normalized_X is None
-#     assert len(cloned_block.positions) == 0
-#     assert len(cloned_block.target) == 0
-#     assert len(cloned_block.predicted_output) == 0
+    assert cloned_block.block_index == block.block_index
+    assert torch.allclose(cloned_block.block_size, block.block_size)
+    assert torch.allclose(cloned_block.block_scope, block.block_scope)
+    assert cloned_block.h == block.h
+    assert cloned_block.amplitude == block.amplitude
+    assert cloned_block.ista_layer == block.ista_layer
+    assert len(cloned_block.X) == 0
+    assert len(cloned_block.y) == 0
+    assert cloned_block.normalized_X is None
+    assert len(cloned_block.positions) == 0
+    assert len(cloned_block.target) == 0
+    assert len(cloned_block.predicted_output) == 0
 
 def test_normalize_extreme_block_sizes():
     """Test normalization with very small and very large block sizes."""
@@ -208,6 +217,7 @@ def test_ista_layer_interaction():
 
     block.new_point(torch.tensor([0.5, 0.5], device='cpu'), torch.tensor([1.0], device='cpu'), 0)
     assert isinstance(block.ista_layer, torch.nn.Linear)
+
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
