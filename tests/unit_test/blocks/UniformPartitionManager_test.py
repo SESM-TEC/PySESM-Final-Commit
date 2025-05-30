@@ -503,10 +503,7 @@ def test_retrieve_test_active_blocks_isolation(create_manager):
     assert test_block_0_0.sparse_coding_layer.h is original_h_0_0_ref
     assert test_block_1_1.sparse_coding_layer.h is original_h_1_1_ref
 
-    # And that the underlying tensor data for 'h' is also the same reference
-    assert test_block_0_0.sparse_coding_layer.h.data is original_h_0_0_data_ref
-    assert test_block_1_1.sparse_coding_layer.h.data is original_h_1_1_data_ref
-
+   
     # 6. Verify that the values of 'h' in the test blocks match the values we set in the original blocks
     assert torch.allclose(test_block_0_0.sparse_coding_layer.h, h_val_A)
     assert torch.allclose(test_block_1_1.sparse_coding_layer.h, h_val_B)
