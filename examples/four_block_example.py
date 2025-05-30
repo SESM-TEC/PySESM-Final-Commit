@@ -122,7 +122,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 30
+n_functions = 10
 n_features = 2
 
 # Device configuration
@@ -134,6 +134,7 @@ device_map = {
 }
 
 sparse_coding_config = ISTAConfig(
+    epochs=50,
     alpha=0.10,
     lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -163,14 +164,14 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 10,
+    epochs = 20,
     alpha = 0.1,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
     optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    mu_epochs = 10,
-    rho_epochs = 10,
+    mu_epochs = 20,
+    rho_epochs = 20,
     split_mu_rho = True,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
@@ -183,11 +184,11 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 100,
+    model_epochs = 200,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=100,
+    log_interval=50,
     permutation_times=3
 )
 
@@ -218,6 +219,43 @@ def show_data(X, y, c, marker, label, ax=None):
     plt.show(block=False)
     return ax
 
+def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
+    """
+    Imprime los vectores h de todos los bloques activos del modelo SSESM.
+    
+    Args:
+        model (SSESM): La instancia del modelo SSESM entrenado.
+        logger (logging.Logger): La instancia del logger para la salida.
+        threshold (float): Umbral para considerar un componente de h como no nulo.
+    """
+    logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
+    active_blocks = model.partition_manager.retrieve_active_blocks()
+    
+    if not active_blocks:
+        logger.info("No se encontraron bloques activos en el modelo.")
+        return
+
+    for block in active_blocks:
+        block_index_str = str(block.block_index) # Convertir tupla a string para el log
+        
+        if block.sparse_coding_layer and block.sparse_coding_layer.h is not None:
+            h_tensor = block.sparse_coding_layer.h.detach().cpu()
+            
+            # Contar componentes no nulos
+            non_zero_components = torch.sum(torch.abs(h_tensor) > threshold).item()
+            total_components = h_tensor.numel()
+            sparsity_ratio = (total_components - non_zero_components) / total_components * 100
+            
+            logger.info(f"  Bloque {block_index_str}:")
+            logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
+            logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
+            logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
+            logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
+            logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
+        else:
+            logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
+    logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
+
 
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
@@ -238,6 +276,7 @@ try:
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
         model.partial_fit(X_train, y_train)
+        show_all_h(model, logger)
         y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))

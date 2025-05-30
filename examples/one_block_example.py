@@ -202,7 +202,7 @@ experiment = {
     #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
 
-def show_data(X,y,c,marker,label,ax=None):
+def show_data(X, y, c, marker, label, ax=None):
     if ax is None:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
@@ -219,6 +219,45 @@ def show_data(X,y,c,marker,label,ax=None):
 
     plt.show(block=False)
     return ax
+
+
+def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
+    """
+    Imprime los vectores h de todos los bloques activos del modelo SSESM.
+    
+    Args:
+        model (SSESM): La instancia del modelo SSESM entrenado.
+        logger (logging.Logger): La instancia del logger para la salida.
+        threshold (float): Umbral para considerar un componente de h como no nulo.
+    """
+    logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
+    active_blocks = model.partition_manager.retrieve_active_blocks()
+    
+    if not active_blocks:
+        logger.info("No se encontraron bloques activos en el modelo.")
+        return
+
+    for block in active_blocks:
+        block_index_str = str(block.block_index) # Convertir tupla a string para el log
+        
+        if block.sparse_coding_layer and block.sparse_coding_layer.h is not None:
+            h_tensor = block.sparse_coding_layer.h.detach().cpu()
+            
+            # Contar componentes no nulos
+            non_zero_components = torch.sum(torch.abs(h_tensor) > threshold).item()
+            total_components = h_tensor.numel()
+            sparsity_ratio = (total_components - non_zero_components) / total_components * 100
+            
+            logger.info(f"  Bloque {block_index_str}:")
+            logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
+            logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
+            logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
+            logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
+            logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
+        else:
+            logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
+    logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
+
 
 # DATA GENERATION
 trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
@@ -239,6 +278,7 @@ try:
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
         model.partial_fit(X_train, y_train)
+        show_all_h(model, logger)
         y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
         logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
