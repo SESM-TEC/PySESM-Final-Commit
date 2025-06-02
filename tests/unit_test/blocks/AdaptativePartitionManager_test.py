@@ -12,7 +12,7 @@ from pysesm.utils.loggers import setup_logger
 
 def test_update_block_arrangement():
     X1 = torch.randn(192, 6)
-
+    y1 = torch.randn(192, 1)
     logger=setup_logger()
     device_map = {
         DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
@@ -24,7 +24,7 @@ def test_update_block_arrangement():
     device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
     partitionManager=AdaptativePartitionManager(logger,6, maxNodeSize=5, device_manager=device_manager)
-    partitionManager._update_block_arrangement(X1)
+    partitionManager._update_block_arrangement(X1, y1)
     
     for block in partitionManager.blocks:
         assert block is not None
@@ -36,12 +36,13 @@ def test_update_block_arrangement():
         X=torch.cat((leaf.data, X))
     
     sorted_X, _ =torch.sort(X,0)
-    sorted_X1, _ =torch.sort(X1[:,:-1],0)
+    sorted_X1, _ =torch.sort(X1,0)
     
     assert torch.equal(sorted_X, sorted_X1)    
 
     X2 = torch.randn(192, 6)
-    partitionManager._update_block_arrangement(X2)
+    y2 = torch.randn(192, 1)
+    partitionManager._update_block_arrangement(X2,y2)
     
     X_added=torch.cat((X1,X2))
 
@@ -55,7 +56,7 @@ def test_update_block_arrangement():
         X=torch.cat((leaf.data, X))
     
     sorted_X, _ =torch.sort(X,0)
-    sorted_X1, _ =torch.sort(X_added[:,:-1],0)
+    sorted_X1, _ =torch.sort(X_added,0)
     
     assert torch.equal(sorted_X, sorted_X1)    
         
@@ -69,8 +70,8 @@ def test_configure_blocks():
     X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
     y = torch.tensor([[1.0], [2.0]], device='cpu')
 
-    manager._update_block_arrangement(X)
-    manager._map_points(X, y)
+    manager._update_block_arrangement(X, y)
+    manager._map_points()
     manager._configure_blocks()
 
     for block in manager.blocks.flat:
@@ -89,8 +90,8 @@ def test_map_points():
     Xy=torch.cat((X1,y1),dim=1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5)
-    partitionManager._update_block_arrangement(Xy)
-    partitionManager._map_points(X1, y1)
+    partitionManager._update_block_arrangement(X1, y1)
+    partitionManager._map_points()
     nodes=partitionManager.kdtree.get_leaves()
     in_blocks=[]
     in_blocks_y=[]
@@ -117,8 +118,8 @@ def test_map_points():
     y2 = torch.randn(192, 1)
     Xy2=torch.cat((X2,y2),dim=1)
 
-    partitionManager._update_block_arrangement(Xy2)
-    partitionManager._map_points(X2, y2)
+    partitionManager._update_block_arrangement(X2, y2)
+    partitionManager._map_points()
     
     leaves=partitionManager.kdtree.get_leaves()
     in_blocks=[]
@@ -229,8 +230,8 @@ def test_init_ista_per_block():
     X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
     y = torch.tensor([[1.0], [2.0]], device='cpu')
 
-    manager._update_block_arrangement(X)
-    manager._map_points(X, y)
+    manager._update_block_arrangement(X, y)
+    manager._map_points()
 
     def dummy_eval_func(x, y):
         return torch.sum(x - y)

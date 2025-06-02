@@ -73,9 +73,7 @@ class PartitionBlock:
         )
 
     def normalize(self):
-        # if len(self.X) == 0:
-        #     print("tensor_list está vacío, no se puede hacer stack")    
-        #     print("X:",self.X)
+
         tensor_X = torch.stack(self.X).to(self.device)
         min_vals = self.block_scope[0].to(self.device)
         sizes = self.block_size.to(self.device)

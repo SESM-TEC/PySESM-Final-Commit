@@ -112,17 +112,18 @@ def preorder_assert(node, Data, maxNodeSize):
         else:
             Data=torch.cat((Data, node.right.data))
             assert (node.right.data[:, node.dim] >= node.split_point).all()
-            assert node.left.data.size()[0] <= maxNodeSize
+            assert node.right.data.size()[0] <= maxNodeSize
     
     return Data
 
 def test_add_point():
     n_features=5
     torch.manual_seed(42) 
-    X = torch.randn(500, n_features+1)
+    X = torch.randn(500, n_features)
+    y = torch.randn(500, 1)
     logger=setup_logger()
     partitionManager=AdaptativePartitionManager(logger,n_features+1, maxNodeSize=5)
-    partitionManager._update_block_arrangement(X)
+    partitionManager._update_block_arrangement(X, y)
     kd=partitionManager.kdtree
     for _ in range(kd.maxNodeSize):
         x=torch.rand(n_features)
@@ -131,14 +132,13 @@ def test_add_point():
 
         x=x.unsqueeze(0)
         y=y.unsqueeze(0)
-        xy=torch.cat((x,y),dim=1)
-        X=torch.cat((X,xy))
+        X=torch.cat((X,x))
         Data=torch.Tensor()
         Data=preorder_assert(kd.root, Data, kd.maxNodeSize)
         
         sortx, _ = torch.sort(Data,0)
         sortData, _ = torch.sort(X,0)
-        assert torch.equal(sortData[:,:-1],sortx)
+        assert torch.equal(sortData,sortx)
     leaves=kd.get_leaves()
 
     for leaf in leaves:                 #If split nodes, check child nodes have blocks defined
@@ -152,23 +152,7 @@ def test_add_point():
     sortx, _ = torch.sort(Data,0)   
     sortData, _ = torch.sort(X,0)
 
-    assert not torch.equal(sortData[:,:-1],sortx)
-
-def test_find_block():
-    torch.manual_seed(42) 
-    X = torch.randn(191, 6)
-    x=torch.rand(5)
-    y=torch.rand(1)
-    kd=KDTree(X)
-
-    node=kd.find_block(x)
-
-    assert node is None
-
-    kd.add_point(x, y)
-    node=kd.find_block(x)
-
-    assert torch.any(torch.all(node.data == x, dim=1))
+    assert not torch.equal(sortData,sortx)
 
 def test_get_leaves():
     n_features=5

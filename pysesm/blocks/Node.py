@@ -25,10 +25,7 @@ class Node():
             dim (int): Dimension where the data has the greatest variance
             bounds (torch.Tensor): Space limits of each dimension.  
         """       
-        initial_bounds=None
-        if parent is not None:
-            initial_bounds=parent.bounds
-        self.Data=KdSESMData(Data, initial_bounds)
+        self.Data=KdSESMData(Data)
         self.left=None
         self.right=None 
         self.parent=parent

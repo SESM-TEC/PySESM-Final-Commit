@@ -33,9 +33,8 @@ class KDTree():
         It stops when the children nodes have maxNodeSize points or less
         """
         
-        if node is None or node.data.size()[0] <= self.maxNodeSize:
+        if node is None or node.data.size(0) <= self.maxNodeSize:
             return      
-        
         # Calculate median only for the dimension we need
         node.split_point = torch.median(node.data[:,node.dim]).item()
 
@@ -45,10 +44,9 @@ class KDTree():
         # Create mask of data over threshold only once and reuse its inverse
         mask = data[:, node.dim] >= node.split_point
         not_mask = ~mask
-        
         node.right = Node(data[mask])
         node.left = Node(data[not_mask])        
-       
+
         node.data = None
         node.bounds = None
         node.block=None
@@ -59,8 +57,9 @@ class KDTree():
     def _find_node(self, x : torch.Tensor, node = None) -> Node:
         """
         Finds the node where a point should be located based on split points and the greatest variance dimensions of each node.
-
-        x: one-dimensional tensor
+        Args:
+            x (torch.Tensor): one-dimensional tensor
+            node (Node): Starting node
         """
         if node is None:
             node=self.root
@@ -104,26 +103,14 @@ class KDTree():
                 (2,),
                 right_bound,
                 device=self.device)
-
-    def find_block(self, point : torch.Tensor) -> Union[PartitionBlock, None]:
-        """
-        Finds the node where a given point is. If no node has the given point, returns None
-        
-        point: One-dimensional tensor
-        """
-        
-        node = self._find_node(point)
-
-        isPointInNode = torch.any(torch.all(node.data == point, dim=1))
-
-        if isPointInNode:
-            return node    ##CHECK: THIS MUST RETURN A PARTITIONBLOCK
-            
-        return None
     
     def get_leaves(self,  leaves : list = None, node = None) -> list:
         """
         Finds leaves of the tree and returns them in a list
+
+        Args:
+            leaves (list): A list with some already added leaf nodes.
+            node (Node): The starting node, usually the root node.
         """
         if leaves is None:
             leaves=[]
@@ -141,7 +128,13 @@ class KDTree():
             leaves = self.get_leaves(leaves, node.right)
         return leaves
 
-    def _splitDataInNodes_test(self,node : Node):
+    def _splitDataInNodes_test(self, node : Node):
+        """
+        Splits test data without changing the structure of the kdtree
+
+        Args:
+            node (Node): Starting node, usually the root node
+        """
         if node.test_data is None or node.data is not None:
             return
         test_Data=torch.cat((node.test_data,node.test_y),dim=1)

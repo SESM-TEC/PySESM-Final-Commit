@@ -7,7 +7,7 @@ Author: Hender Valdivia
 '''
 import torch
 class KdSESMData():
-    def __init__(self, Data, parent_bounds=None):
+    def __init__(self, Data):
         self.data=Data[:,:-1]
         self.y=Data[:,-1:]
         self.split_point=None

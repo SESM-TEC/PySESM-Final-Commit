@@ -95,20 +95,24 @@ class AdaptativePartitionManager(BlockManager):
         else:
             return None #Check type, should be PartitionBlock its node
 
-    def _update_block_arrangement(self, X: torch.Tensor) -> None:
+    def _update_block_arrangement(self, X: torch.Tensor, y:torch.Tensor) -> None:
         """
-        Updates the arrangement of blocks based on the input data.
+        Updates the kdtree and its blocks based on the input data.
 
-        This method initializes or adjusts the block arrangement and sizes, ensuring coverage of the input space.
+        This method initializes or adjusts the kdtree, blocks and sizes, ensuring coverage of the input space.
 
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor): Target data of shape (n_samples,)    
         """
         X=X.to(self.device)
-        if self.kdtree is None:
+        y=y.to(self.device)
+        Xy=torch.cat((X,y),dim=1)
+
+        #Initialize the kdtree if it doesn't exist and configure it
+        if self.kdtree is None: 
             self.splits=0
-            self.kdtree = KDTree(X, self.maxNodeSize, device=self.device)
-            X=X[:,:-1]
+            self.kdtree = KDTree(Xy, self.maxNodeSize, device=self.device)
             treeNodes=self.kdtree.get_leaves()
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  
@@ -124,10 +128,12 @@ class AdaptativePartitionManager(BlockManager):
                  )
 
                  node.block=self.blocks[(i,)] #Define node blocks
-
-        else:  #logic to add points to the existing tree
-            for row in X:
+        
+        #Given a kdtree, update the space coverage
+        else:  
+            for row in torch.cat((X,y),dim=1):
                 self.kdtree.add_point(row[:-1],row[-1:])
+            
             treeNodes=self.kdtree.get_leaves()
             if len(treeNodes)>self.total_blocks:    #If a node was split, update self.blocks
                 self.splits=len(treeNodes)-self.total_blocks    #How many nodes were split
@@ -137,17 +143,20 @@ class AdaptativePartitionManager(BlockManager):
                     node.block.block_index=(i,)
                     self.blocks[(i,)]=node.block
                 self.total_blocks=len(treeNodes)
+
+        #After many splits, recreate the kdtree to avoid any bias
         if self.splits > self.maxSplitsBeforeRestart:
             treeNodes=self.kdtree.get_leaves()
             X=torch.Tensor()
             y=torch.Tensor()
+            
             for node in treeNodes: 
                 X=torch.cat((X,node.data),dim=0)
                 y=torch.cat((y,node.y),dim=0)
-            Xy=torch.cat((X,y), dim=1)
+
             self.kdtree = None
             self.splits = 0
-            self._update_block_arrangement(Xy)
+            self._update_block_arrangement(X, y)
 
     def _configure_blocks(self, init_h: bool = True):
         """
@@ -171,28 +180,25 @@ class AdaptativePartitionManager(BlockManager):
 
                     block.h.data /= block.h.data.sum()
 
-                    # self.logger.debug(
-                    #     f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
-                    # )
+                    self.logger.debug(
+                        f"Created random vector for block at index {index}, created sparse vector h: {block.h}"
+                    )
 
                 block.target = torch.stack([value * block.amplitude for value in block.y])
                 if block.target.dim() == 1:
                     block.target = block.target.unsqueeze(-1)
                 block.target = block.target.detach()
 
-    def _map_points(self, X: torch.Tensor, y: np.ndarray):
+    def _map_points(self):
         """
         Maps kdtree leaf nodes data to their blocks.
-
-        Args:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
-            y (np.ndarray): Target data corresponding to the input points.
         """
         treeNodes=self.kdtree.get_leaves()
         for _ , node in enumerate(treeNodes):
             node.block.clear_points()
             for i, _ in enumerate(node.data):
                 node.block.new_point(node.data[i],node.y[i],i)
+
         for idx in np.ndindex(self.blocks.shape):
             block = self.blocks[idx]
             if len(block.y) > 0:  # Only if block has points
@@ -207,10 +213,9 @@ class AdaptativePartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data of shape (n_samples,).
         """
-
-        Xy=torch.cat((X,y), dim=1)
-        self._update_block_arrangement(Xy)
-        self._map_points(X, y)
+        
+        self._update_block_arrangement(X, y)
+        self._map_points()
         self._vectorized_normalization(self.blocks) # Normalize X coords in each block
         self._configure_blocks() # Normalize y value and initialize h in each block 
 
@@ -242,7 +247,6 @@ class AdaptativePartitionManager(BlockManager):
                 logger=self.logger,
                 optimizer=ista_optimizer,
                 device= self.device_manager.get_device(DeviceTarget.ISTA_LAYER),
-                # parameter_hook=self._ista_hook if self.hook_manager and self.hook_manager.active_hooks[HookType.ISTALAYER] else None
             )
         
     def retrieve_active_blocks(self):
@@ -309,10 +313,6 @@ class AdaptativePartitionManager(BlockManager):
 
         #Normalizes test data
         self._vectorized_normalization(test_blocks)
-        # intento de nueva normalización
-        # for block in test_blocks:
-         #    node=self.kdtree._find_node(block.X[0])
-          #   block.normalized_X=(torch.stack(block.X) - node.bounds[1])/block.block_size
         
         # Configure blocks:
         for index in np.ndindex(self.blocks.shape):
@@ -331,6 +331,6 @@ class AdaptativePartitionManager(BlockManager):
             ]
         
         #Reconfigure kdtree and blocks to leave them as they were
-        self._map_points(None, None)
+        self._map_points()
 
         return test_active_blocks
