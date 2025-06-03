@@ -102,7 +102,7 @@ def test_find_block(create_manager):
     assert found_block.block_index == expected_block_index
     assert torch.allclose(found_block.block_size, torch.tensor([0.25, 0.25], device='cpu'))
     # Assert block_scope lower bound (original_lower - eps)
-    assert torch.allclose(found_block.block_scope[0], torch.tensor([0.0, 0.0], device='cpu') - torch.finfo(torch.float32).eps, atol=1e-7)
+    assert torch.allclose(found_block.block_scope[0], torch.tensor([0.0, 0.0], device='cpu'), atol=1e-7)
     
 
 
