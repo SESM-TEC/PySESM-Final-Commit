@@ -159,10 +159,7 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     #   - Predicción cruda mockeada para este bloque es 0.8.
     #   - Predicción final = PredicciónCruda / Amplitud = 0.8 / 1.0 = 0.8.
 
-    expected_final_predictions = torch.tensor([
-        [5.0], # Para X_test[0]
-        [0.8]  # Para X_test[1]
-    ], device=device, dtype=torch.float32)
+    expected_final_predictions = torch.tensor([5.0,0.8], device=device, dtype=torch.float32)
 
     assert y_final_predictions.shape == expected_final_predictions.shape
     assert torch.allclose(y_final_predictions, expected_final_predictions, atol=1e-5), \

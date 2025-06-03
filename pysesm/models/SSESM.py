@@ -168,7 +168,7 @@ class SSESM(SESM):
         
         for block in active_blocks:
             # Use parent's predict with the block's sparse coding h
-            block_pred = super()._predict_block(block) / block.amplitude
+            block_pred = self._predict_block(block) / block.amplitude
             
             # Map predictions back to original positions
             for i, pos in enumerate(block.positions):
