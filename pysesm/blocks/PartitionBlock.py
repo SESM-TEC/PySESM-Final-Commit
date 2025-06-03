@@ -72,10 +72,6 @@ class PartitionBlock:
         
         self.space_origin = space_origin.to(self.device)
 
-        # In future, this 'eps' may become a configurable parameter allowing larger overlaps.
-        eps = torch.finfo(torch.float32).eps
-
-        
         # Calculate the base edge of this specific block based on its index
         # (e.g., for block (i, j), its origin is global_origin + i*block_size_x + j*block_size_y)
         base_edge_of_this_block = self.space_origin + torch.mul(
@@ -83,8 +79,8 @@ class PartitionBlock:
         )
         # Define the block's specific bounding box (min_coords, max_coords)
         self.block_scope = torch.stack((
-            base_edge_of_this_block - eps,
-            base_edge_of_this_block + self.block_size + eps
+            base_edge_of_this_block,
+            base_edge_of_this_block + self.block_size
         )).to(self.device)
         
         self.amplitude: float = 1.0
