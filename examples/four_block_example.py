@@ -122,7 +122,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 10
+n_functions = 30
 n_features = 2
 
 # Device configuration
@@ -184,12 +184,12 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 200,
+    model_epochs = 50,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=50,
-    permutation_times=3
+    log_interval=25,
+    permutation_times=20
 )
 
 # SESM CONFIGURATION
