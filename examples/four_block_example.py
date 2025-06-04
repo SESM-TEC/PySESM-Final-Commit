@@ -164,14 +164,14 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 20,
-    alpha = 0.1,
+    epochs = 4,
+    alpha = 0.01,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
     optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    mu_epochs = 20,
-    rho_epochs = 20,
+    mu_epochs = 10,
+    rho_epochs = 10,
     split_mu_rho = True,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
@@ -184,12 +184,12 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 50,
+    model_epochs = 20,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
     log_interval=25,
-    permutation_times=20
+    permutation_times=50
 )
 
 # SESM CONFIGURATION
