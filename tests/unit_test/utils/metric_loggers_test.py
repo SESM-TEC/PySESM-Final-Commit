@@ -97,6 +97,7 @@ import wandb
 import pytest
 from unittest.mock import MagicMock, patch
 from pysesm.utils.metric_loggers import log_to_console, log_to_WB
+import warnings
 
 def skip_if_not_logged_in_to_wandb():
     """Helper function to skip tests if not logged in to W&B"""
@@ -124,8 +125,16 @@ def test_logger_output():
     logger = MagicMock()
     layer_name = "TestLayer"
     info = {"loss": 0.5, "accuracy": 0.9}
-    
-    log_to_WB(layer_name, info, logger=logger)
+
+    # Usar warnings.catch_warnings para ignorar la DeprecationWarning específica
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="The `Scope.user` setter is deprecated",
+            category=DeprecationWarning,
+            module="wandb.analytics.sentry" # Ser más específico sobre el origen
+        )
+        log_to_WB(layer_name, info, logger=logger)
     
     expected_message = f"{layer_name} - loss: 0.5, accuracy: 0.9"
     logger.info.assert_called_once_with(expected_message)
