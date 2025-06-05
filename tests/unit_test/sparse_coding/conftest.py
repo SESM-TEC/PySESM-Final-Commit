@@ -6,7 +6,7 @@ import numpy as np
 
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig # For type hinting
+from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig 
 
 # --- Common Fixtures for Sparse Coding Tests ---
 

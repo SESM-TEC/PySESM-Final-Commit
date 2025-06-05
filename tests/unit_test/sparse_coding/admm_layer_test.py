@@ -29,12 +29,13 @@ class TestADMMLayer(BaseSparseCodingTest):
         """
         class ADMMLayerFactory:
             config_class = ADMMConfig
-            def create(self, config):
+            def create(self, config,**kwargs):
                 return ADMMLayer(
                     config=config,
                     evaluation_func=common_evaluation_func,
                     logger=common_logger,
-                    device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+                    device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                    **kwargs
                 )
         return ADMMLayerFactory()
 
@@ -70,7 +71,10 @@ class TestADMMLayer(BaseSparseCodingTest):
         n_features = 2
         n_functions = 3
         
-        dictionary_D, _, target_y = sparse_coding_data_generator(n_samples, n_features, n_functions)
+        dictionary_D, _, target_y = sparse_coding_data_generator(n_samples, n_features, n_functions,
+                                                                 sparsity_level=1.0,
+                                                                 noise_level=0.01,
+                                                                 random_seed=42)
         
         # Configure ADMM for one step
         config = layer_factory.config_class(

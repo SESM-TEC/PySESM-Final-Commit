@@ -51,10 +51,11 @@ class BaseSparseCodingTest(ABC):
         n_functions = 5
         config = layer_factory.config_class(n_functions=n_functions)
         layer = layer_factory.create(config) # setup() is called in __init__
-        
+    
         assert isinstance(layer.h, torch.nn.Parameter), "`h` should be a torch.nn.Parameter"
         assert layer.h.requires_grad is False, "`h` should not require gradients in sparse coding"
-        assert layer.h.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+        # CORRECTED: Convert torch.device object to string for comparison
+        assert str(layer.h.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
             f"`h` should be on the correct device. Expected {common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)}, got {layer.h.device}"
         assert layer.h.shape == (n_functions, 1), "`h` should have shape (n_functions, 1)"
 
@@ -150,20 +151,22 @@ class BaseSparseCodingTest(ABC):
         layer = layer_factory.create(config)
         
         # Ensure layer itself is on the correct device
-        assert next(layer.parameters()).device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
-        assert layer.h.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+        assert str(next(layer.parameters()).device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+        assert str(layer.h.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
 
-        # Mock criterion to observe its inputs
-        mock_criterion = MagicMock(side_effect=lambda x, y: torch.tensor(0.0, device=x.device))
-        layer.criterion = mock_criterion
-        
+        # Mock the `forward` method of the actual criterion object to observe its inputs
+        # The criterion is already initialized by the layer's constructor (e.g., as MSELoss)
+        original_criterion_forward = layer.criterion.forward # Store original to restore later if needed
+        mock_criterion_forward = MagicMock(side_effect=lambda x, y: torch.tensor(0.0, device=x.device))
+        layer.criterion.forward = mock_criterion_forward # Mock only the forward method
+                
         layer.train_step(target_y, dictionary_D) # Perform one step
         
         # Verify inputs to criterion are on the correct device
-        called_y_pred, called_target_y = mock_criterion.call_args[0]
-        assert called_y_pred.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+        called_y_pred, called_target_y = mock_criterion_forward.call_args[0]
+        assert str(called_y_pred.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
             "Predicted y in criterion should be on correct device"
-        assert called_target_y.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+        assert str(called_target_y.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
             "Target y in criterion should be on correct device"
 
         # Dynamically check type to avoid import cycle for ADMMLayer and FISTALayer
@@ -175,10 +178,10 @@ class BaseSparseCodingTest(ABC):
             ADMMLayer = FISTALayer = type(None) # Use a dummy type if not available
         
         if isinstance(layer, (ADMMLayer, FISTALayer)):
-            assert layer.z.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+            assert str(layer.z.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
                 "Auxiliary variable `z` should be on correct device"
             if isinstance(layer, ADMMLayer): # ADMM specific
-                assert layer.u.device == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+                assert str(layer.u.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
                     "Auxiliary variable `u` should be on correct device"
 
     def test_criterion_is_used(self, layer_factory, sparse_coding_data_generator):
@@ -186,19 +189,26 @@ class BaseSparseCodingTest(ABC):
         Verify that the configured criterion (loss function) is actually used
         during the training step.
         """
-        mock_criterion = MagicMock(return_value=torch.tensor(0.123))
         n_samples = 10
         n_features = 2
         n_functions = 3
         
         dictionary_D, _, target_y = sparse_coding_data_generator(n_samples, n_features, n_functions)
-        config = layer_factory.config_class(epochs=1, n_functions=n_functions, criterion=mock_criterion)
+        
+        # Create layer with default criterion (e.g., MSELoss)
+        config = layer_factory.config_class(epochs=1, n_functions=n_functions)
         layer = layer_factory.create(config)
+        
+        # Now, mock the forward method of the criterion instance that was created
+        mock_criterion_forward = MagicMock(return_value=torch.tensor(0.123))
+        layer.criterion.forward = mock_criterion_forward
         
         layer.train_step(target_y, dictionary_D)
         
-        mock_criterion.assert_called_once()
-        assert layer.losses[-1] == 0.123 # Check if the mock return value was used
+        # Assert that the mocked forward method was called
+        mock_criterion_forward.assert_called_once()
+        # Assert that the loss recorded is the value returned by the mock
+        assert layer.losses[-1] == pytest.approx(0.123) # Check if the mock return value was used
         
     def test_forward_pass_does_not_update_h(self, layer_factory, sparse_coding_data_generator):
         """
