@@ -22,7 +22,7 @@ from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_on
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-
+from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -121,10 +121,20 @@ class JensenShannonLossWrapper(torch.nn.Module):
 # LOGGER INSTANCE
 logger = setup_logger(level=logging.DEBUG)
 
-n_functions=10
+# SESM CONFIGURATION
+n_functions = 30
+n_features = 2
 
+# Device configuration
+device_map = {
+    DeviceTarget.GLOBAL: "cpu",
+    DeviceTarget.SPARSE_CODING_LAYER: "cpu",
+    DeviceTarget.DICTIONARY_LAYER: "cpu",
+    DeviceTarget.PARTITION_MANAGER: "cpu"
+}
 
 sparse_coding_config = ISTAConfig(
+    epochs=50,
     alpha=0.10,
     lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -154,31 +164,32 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 10,
+    epochs = 20,
     alpha = 0.1,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
     optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    mu_epochs = 10,
-    rho_epochs = 10,
+    mu_epochs = 20,
+    rho_epochs = 20,
     split_mu_rho = True,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
 )
 partition_config = UniformPartitionConfig(
-    T=1,
+    T=3,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     threshold=0
 )
 
 ssesm_config = SSESMConfig(
-    n_features = 2,
-    model_epochs = 5000,
+    n_features = n_features,
+    model_epochs = 50,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=100
+    log_interval=25,
+    permutation_times=20
 )
 
 # SESM CONFIGURATION
@@ -188,26 +199,14 @@ experiment = {
     "n_samples": 500,
     "seed": 45,
     "iter": 0,
-    "device_map": {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",  # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"     # Partition Manager en CPU
-    },
-    
-    #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
-    #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
-    #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
-    #"ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
-    #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
 }
+
 
 def show_data(X, y, c, marker, label, ax=None):
     if ax is None:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
     
-
     # Plot training data
     ax.scatter(X[:, 0], X[:, 1], y, 
                c=c, marker=marker, label=label)
@@ -219,7 +218,6 @@ def show_data(X, y, c, marker, label, ax=None):
 
     plt.show(block=False)
     return ax
-
 
 def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
     """
@@ -285,7 +283,7 @@ try:
 
         plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
-    plt.show(block=True)
+    plt.show(block=True)  
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')

@@ -1,3 +1,3 @@
-from pysesm.blocks.BlockManager import BlockManager
+from .DeviceManager import DeviceManager
 
-__all__ = [""]
+__all__ = ["DeviceManager"]

@@ -8,14 +8,27 @@ Authors: The SESM Team
 License: 
 '''
 
-from pysesm.blocks.PartitionBlock import PartitionBlock
+from .PartitionBlock import PartitionBlock
+from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
+from ..base_types import BaseConfig
+
+from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
+from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 from abc import ABC, abstractmethod
-from typing import Union, Callable, Iterator
+from dataclasses import dataclass
+from typing import Union, Callable, Iterator, Optional
 import torch
 from torch import Tensor
+import logging
 from numpy.typing import NDArray
 
+
+
+@dataclass
+class BlockManagerConfig(BaseConfig):
+    """Base configuration for all block manager configurations"""
+    pass
 
 class BlockManager(ABC):
     """
@@ -38,7 +51,10 @@ class BlockManager(ABC):
     blocks: Union[NDArray[PartitionBlock], None] # type: ignore
 
     @abstractmethod
-    def __init__(self):
+    def __init__(self,
+                 config: BlockManagerConfig,
+                 logger: logging.Logger, # Assume all block managers need a logger
+                 device_manager: Optional[DeviceManager] = None):
         """
         Abstract initializer for the BlockManager.
 
@@ -50,7 +66,12 @@ class BlockManager(ABC):
         Note: This method should initialize any required attributes like `blocks` to prepare
         the subclass for its intended functionality.
         """
-        pass
+
+        # Store these base attributes
+        self.config = config
+        self.logger = logger
+        self.device_manager = device_manager
+        self.blocks = None #
 
     @abstractmethod
     def _find_block(self, x: Tensor) -> Union[PartitionBlock, None]:
@@ -103,38 +124,53 @@ class BlockManager(ABC):
 
     @abstractmethod
     def _map_points(self, X: Tensor, y: Tensor):
-        """
-        Abstract method that processes each data point `(x, y)` to assign it to the appropriate block.
+        """Abstract method that processes each data point `(x, y)` to
+        assign it to the appropriate block.
 
-        This method iterates over all points in `X` and their corresponding labels or outputs in `y`,
-        locating the block to which each point belongs and assigning it to that block. If a block cannot
-        be found for a specific point, the behavior depends on the prediction type set in the SESM
-        configuration. Based on this configuration, the method may either:
+        This method iterates over all points in `X` and their
+        corresponding labels or outputs in `y`, locating the block to
+        which each point belongs and assigning it to that block. If a
+        block cannot be found for a specific point, the behavior
+        depends on the prediction type set in the SESM
+        configuration. Based on this configuration, the method may
+        either:
+        
         - Raise an error indicating the issue, or
         - Dynamically update the block arrangement to accommodate the point.
 
         Args:
             X (Tensor):
-                A tensor of shape `(n_samples, n_features)` containing the input points to be mapped to blocks.
-                Each row corresponds to one of the `n_samples` data points, with `n_features` dimensions per point.
-                For example, a dataset with 100 samples, each having 5 features, would have a shape of `(100, 5)`.
+                A tensor of shape `(n_samples, n_features)` containing
+                the input points to be mapped to blocks.  Each row
+                corresponds to one of the `n_samples` data points,
+                with `n_features` dimensions per point.  For example,
+                a dataset with 100 samples, each having 5 features,
+                would have a shape of `(100, 5)`.
 
             y (Tensor):
-                A tensor of shape `(n_samples,)` or `(n_samples, output_dim)` containing the corresponding labels,
-                outputs, or additional data associated with each point in `X`. The number of rows in `y` must match
-                the number of samples in `X`. For instance, for a regression task with scalar outputs, `y` would
-                have a shape of `(100,)`, while for a multi-output task with 3 outputs per sample, `y` would have
-                a shape of `(100, 3)`.
+                A tensor of shape `(n_samples,)` or `(n_samples,
+                output_dim)` containing the corresponding labels,
+                outputs, or additional data associated with each point
+                in `X`. The number of rows in `y` must match the
+                number of samples in `X`. For instance, for a
+                regression task with scalar outputs, `y` would have a
+                shape of `(100,)`, while for a multi-output task with
+                3 outputs per sample, `y` would have a shape of `(100,
+                3)`.
 
         Returns:
             None:
-                This method modifies the internal state of the block manager by assigning points to
-                blocks or updating the block arrangement if necessary.
+                This method modifies the internal state of the block
+                manager by assigning points to blocks or updating the
+                block arrangement if necessary.
 
         Note:
-            The implementation of this method depends on the SESM configuration, including how it
-            handles unmapped points. Custom error handling or block adjustment logic should be
-            implemented in the subclass.
+        
+            The implementation of this method depends on the SESM
+            configuration, including how it handles unmapped
+            points. Custom error handling or block adjustment logic
+            should be implemented in the subclass.
+
         """
         pass
 
@@ -143,14 +179,9 @@ class BlockManager(ABC):
         pass
 
     @abstractmethod
-    def init_ista_per_block(
-        self,
-        n_functions: int,
-        ista_alpha: float,
-        ista_lambd: float,
-        evaluation_func: Callable[[Tensor, Tensor], Tensor],
-        ista_optimizer: Callable[[Iterator[torch.nn.Parameter],float], torch.optim.Optimizer] = None
-    ):
+    def init_sparse_coding_per_block(self,
+                                     config: SparseCodingConfig,
+                                     evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
         pass
 
 
