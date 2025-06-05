@@ -29,11 +29,30 @@ DEFAULT_BLOCKS_PER_DIM = 4
 
 @dataclass
 class UniformPartitionConfig(BlockManagerConfig):
-    """Configuration specific to UniformPartitionManager."""
+    """
+    Configuration specific to UniformPartitionManager.
+
+    T ( Union[torch.Tensor, int]): Number of blocks per dimension (Default is 4)
+                  This can be an integer, if all dimensions should be partitioned the same way,
+                  or a torch.Tensor, with the number of blocks in each dimension.
+    initial_bounds: None or np.ndarray with the coordinates of the opposite corners of
+                  the bounding box where the data will lie in the input space.
+    threshold: DEPRECATED (UNUSED?  REMOVE IF NOT USED)
+    overlap_ratio (Optional[Union[float, torch.Tensor]]): None, a float value between 0..1 or
+                  a torch.Tensor with values between 0..1 denoting how much beyond
+                  the block_scope, but in normalized values, a block will expand to
+                  capture points in neighbor blocks, in order to smooth transicions
+                  between blocks.  None means no overlap desired.  A float value
+                  means the expansion will occur with the given ratio in all dimensions.
+                  A torch.Tensor specifies for each dimension the desired expansion.
+    
+
+    """
     T: Union[torch.Tensor, int] = DEFAULT_BLOCKS_PER_DIM    # Blocks per dimension
     initial_bounds: Optional[np.ndarray] = None # Initial space bounds
     threshold: float = 0
-
+    overlap_ratio: Optional[Union[float, torch.Tensor]] = None
+    
 class UniformPartitionManager(BlockManager):
     """
     A class to manage a uniform partitioning of the input space into
