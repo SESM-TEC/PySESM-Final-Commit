@@ -133,25 +133,25 @@ device_map = {
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
-sparse_coding_config = ISTAConfig(
-    epochs=50,
-    alpha=0.10,
-    lambd=0.00001,
-    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    power_iterations=10,
-    n_functions=n_functions,
-    criterion=torch.nn.MSELoss()
-)
-# sparse_coding_config = FISTAConfig(
-#     alpha = 0.020,
-#     lambd = 0.00001,
-#     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-#     power_iterations = 10,
-#     n_functions = n_functions,
-#     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
-#     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
-#     criterion = torch.nn.MSELoss(),
+# sparse_coding_config = ISTAConfig(
+#     epochs=50,
+#     alpha=0.10,
+#     lambd=0.00001,
+#     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+#     power_iterations=10,
+#     n_functions=n_functions,
+#     criterion=torch.nn.MSELoss()
 # )
+sparse_coding_config = FISTAConfig(
+    alpha = 0.020,
+    lambd = 0.00001,
+    step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    power_iterations = 10,
+    n_functions = n_functions,
+    restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+    momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+    criterion = torch.nn.MSELoss(),
+)
 # sparse_coding_config = ADMMConfig(
 #     epochs = 100,
 #     rho = 0.1,            # Penalty parameter
@@ -247,6 +247,7 @@ def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
             sparsity_ratio = (total_components - non_zero_components) / total_components * 100
             
             logger.info(f"  Bloque {block_index_str}:")
+            logger.info(f"    Amplitud: {block.amplitude}")
             logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
             logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
             logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
