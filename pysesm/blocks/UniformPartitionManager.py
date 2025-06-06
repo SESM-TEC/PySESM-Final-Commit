@@ -215,7 +215,7 @@ class UniformPartitionManager(BlockManager):
             self.logger.debug(f"[{self.__class__.__name__}] Blocks already exist. Skipping re-arrangement for new points outside bounds.")
             
 
-    def _map_points(self, X: torch.Tensor, y: torch.Tensor):
+    def _map_points(self, X: torch.Tensor, y: torch.Tensor, expand_scope:bool = True):
         """
         Maps input points to their respective sub-blocks.
 
@@ -237,6 +237,11 @@ class UniformPartitionManager(BlockManager):
         # and (N_samples,) -> list of (1,) which PartitionBlock.new_point will squeeze to ().
         y_list = list(y.split(1, dim=0))
 
+        if expand_scope:
+            overlap = self.overlap
+        else:
+            overlap = torch.zeros_like(self.overlap,device=self.device)
+        
         # Iterate over all blocks in the manager's grid
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
@@ -392,7 +397,7 @@ class UniformPartitionManager(BlockManager):
         self.blocks = test_blocks
 
         # 2. Map test points into test blocks. This populates new_pb.X, new_pb.y.
-        self._map_points(X, y)
+        self._map_points(X, y, expand_scope=False)
 
         # 3. Prepare target for inference using the transferred amplitude
         self._prepare_test_block_targets(self.blocks) # Pass self.blocks (which is test_blocks temporarily)
