@@ -46,7 +46,7 @@ class MockableSSESM(SSESM):
 
     # Sobrescribimos _predict_block para interceptar y usar el mock si está definido
     # Esto es más directo que mockear evaluation_func, ya que _predict_block es llamado por SSESM.predict
-    def _predict_block(self, block, dictionary_shape=None, custom_h=None) -> torch.Tensor:
+    def _predict_block(self, block, custom_h=None) -> torch.Tensor:
         block_idx_tuple = block.block_index # Asumiendo que block_index es una tupla
         if block_idx_tuple in self.mock_eval_outputs_per_block:
             # Devolvemos la salida mockeada para este bloque.
@@ -64,7 +64,7 @@ class MockableSSESM(SSESM):
             return mock_output_for_one_sample
         else:
             # Si no hay mock para este bloque, usar la implementación original.
-            return super()._predict_block(block, dictionary_shape, custom_h)
+            return super()._predict_block(block, custom_h)
 
 
 def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):

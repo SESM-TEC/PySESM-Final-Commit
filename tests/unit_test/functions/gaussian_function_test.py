@@ -504,6 +504,130 @@ def test_complex_3d_gaussian():
     assert torch.all(mu_grads == 0), "Mu gradients should be zero when mu_flag is False"
     assert not torch.all(rho_grads == 0), "Rho gradients should be non-zero when rho_flag is True"
 
+
+def test_gaussian_function_batch_evaluation_and_gradients():
+    """
+    Test GaussianFunction with 3D (batch) input X.
+    Verifies output shape, values, and gradient flow for mu and rho parameters.
+    """
+    n_features = 2
+    n_functions = 3  # Test with multiple functions in the dictionary
+    logger = logging.getLogger('test_gaussian_batch')
+
+    gaussian = GaussianFunction(
+        n_features=n_features,
+        n_functions=n_functions,
+        logger=logger,
+        eig_range=[0.5, 1.5],  # Allow some variation in eigenvalues
+        mu_range=[[-1.0, 1.0], [-1.0, 1.0]], # Allow variation in means
+    )
+    
+    # Initialize parameters (theta) and ensure they require gradients
+    theta = gaussian.initialize().requires_grad_(True)
+    
+    # Generate a batch of input data
+    n_batches = 4
+    n_samples_per_batch = 10
+    X_batch = torch.randn(n_batches, n_samples_per_batch, n_features, dtype=torch.float32)
+    X_batch.requires_grad_(True) # Ensure X also requires grad for full check
+
+    # --- Test Forward Pass (Output Shape and Values) ---
+    output_D = gaussian(X_batch, theta)
+    
+    # Expected output shape: (n_batches, n_samples_per_batch, n_functions)
+    assert output_D.shape == (n_batches, n_samples_per_batch, n_functions), \
+        f"Output shape mismatch. Expected {(n_batches, n_samples_per_batch, n_functions)}, got {output_D.shape}"
+    
+    # Values should be between 0 and 1
+    assert torch.all(output_D >= 0.0), "Output D should be non-negative"
+    assert torch.all(output_D <= 1.0), "Output D should be <= 1.0"
+
+    # --- Test Gradients for Theta (mu and rho) ---
+    # Case 1: Both mu and rho gradients enabled
+    theta.grad = None
+    output_D_for_grad = gaussian(X_batch, theta, rho_flag=True, mu_flag=True)
+    
+    # Simulate a loss that depends on output_D
+    mock_loss = torch.sum(output_D_for_grad**2) # Simple loss for backprop
+    mock_loss.backward()
+    
+    assert theta.grad is not None, "Theta gradients should not be None"
+    
+    # Check that both mu and rho parts of theta received gradients
+    num_rho_params_per_func = n_features * (n_features + 1) // 2
+    rho_grads = theta.grad[:num_rho_params_per_func, :]
+    mu_grads = theta.grad[-n_features:, :]
+
+    assert not torch.all(rho_grads == 0), "Rho gradients should be non-zero when enabled"
+    assert not torch.all(mu_grads == 0), "Mu gradients should be non-zero when enabled"
+
+    # Case 2: Only mu gradients enabled
+    theta.grad = None
+    output_D_mu_only = gaussian(X_batch, theta, rho_flag=False, mu_flag=True)
+    torch.sum(output_D_mu_only**2).backward()
+
+    rho_grads_mu_only = theta.grad[:num_rho_params_per_func, :]
+    mu_grads_mu_only = theta.grad[-n_features:, :]
+    
+    assert torch.all(rho_grads_mu_only == 0), "Rho gradients should be zero when rho_flag is False"
+    assert not torch.all(mu_grads_mu_only == 0), "Mu gradients should be non-zero when mu_flag is True"
+
+    # Case 3: Only rho gradients enabled
+    theta.grad = None
+    output_D_rho_only = gaussian(X_batch, theta, rho_flag=True, mu_flag=False)
+    torch.sum(output_D_rho_only**2).backward()
+
+    rho_grads_rho_only = theta.grad[:num_rho_params_per_func, :]
+    mu_grads_rho_only = theta.grad[-n_features:, :]
+
+    assert not torch.all(rho_grads_rho_only == 0), "Rho gradients should be non-zero when rho_flag is True"
+    assert torch.all(mu_grads_rho_only == 0), "Mu gradients should be zero when mu_flag is False"
+
+    # --- Test Gradients for X ---
+    X_batch.grad = None # Clear previous gradients on X
+    output_D_x_grad = gaussian(X_batch, theta, rho_flag=True, mu_flag=True)
+    torch.sum(output_D_x_grad**2).backward()
+    
+    assert X_batch.grad is not None, "X gradients should not be None"
+    assert not torch.all(X_batch.grad == 0), "X gradients should be non-zero"
+    assert X_batch.grad.shape == X_batch.shape, "X gradients shape mismatch"
+
+
+def test_gaussian_function_batch_vs_individual_consistency():
+    """
+    Verifies that processing a single sample as a batch (1, N_samples, N_features)
+    yields the same result as processing it individually (N_samples, N_features).
+    """
+    n_features = 2
+    n_functions = 5
+    logger = logging.getLogger('test_gaussian_consistency')
+
+    gaussian = GaussianFunction(
+        n_features=n_features,
+        n_functions=n_functions,
+        logger=logger,
+        eig_range=[0.8, 1.2],
+        mu_range=[[0.0, 0.0], [0.0, 0.0]],
+    )
+    
+    theta = gaussian.initialize()
+    
+    # Create a single set of 5 samples
+    X_single_batch = torch.randn(1, 5, n_features, dtype=torch.float32)
+    
+    # Process as a batch (n_batches=1)
+    output_batch = gaussian(X_single_batch, theta)
+    
+    # Process the same 5 samples individually (flattened)
+    X_individual = X_single_batch.squeeze(0) # (5, n_features)
+    output_individual = gaussian(X_individual, theta)
+
+    # Output from batch should be (1, 5, n_functions)
+    # Output from individual should be (5, n_functions)
+    # So, squeeze the batch output for comparison
+    assert torch.allclose(output_batch.squeeze(0), output_individual, atol=1e-7), \
+        "Batch evaluation (single batch) does not match individual evaluation"
+    
     
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
