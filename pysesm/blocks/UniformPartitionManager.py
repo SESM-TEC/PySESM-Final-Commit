@@ -105,6 +105,8 @@ class UniformPartitionManager(BlockManager):
         """Finds the block corresponding to a given point.
 
         This will return one block only, whose scope covers the point.
+        If a point lies exactly at the boundary between two blocks,
+        the block with the highest index is chosen.
 
         Args:
             X (torch.Tensor): A point in the input space.
@@ -174,7 +176,6 @@ class UniformPartitionManager(BlockManager):
         if (self.T <= 0).any():
             raise ValueError(f"All values in 'T' (blocks per dimension) must be positive integers. Got: {self.T}")
 
-        
         # When no points and no blocks have been created (first call)
         if self.blocks is None:
             # Check for user given initial bounds
@@ -191,7 +192,13 @@ class UniformPartitionManager(BlockManager):
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
+
             self.block_size = torch.div(delta, self.T.float()).to(self.device)
+
+            if self.config.overlap_ratio is None:
+                self.overlap = torch.zeros_like(self.block_size,device=self.device)
+            else:
+                self.overlap = self.block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
 
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=object) 
 
@@ -217,21 +224,54 @@ class UniformPartitionManager(BlockManager):
             y (torch.Tensor): Target data corresponding to the input points.
         """
         X = X.to(self.device)
+        y = y.to(self.device)
+
+        # Ensure y is always 2D (n_samples, output_dim) for consistent slicing later
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)
+        
+        assigned_points_mask = torch.zeros(X.shape[0], dtype=torch.bool, device=self.device)
 
         # y should be a torch.Tensor. Split it into a list of 1-row tensors for new_point.
         # This handles (N_samples, output_dim) -> list of (1, output_dim)
         # and (N_samples,) -> list of (1,) which PartitionBlock.new_point will squeeze to ().
         y_list = list(y.split(1, dim=0))
 
-        for i in range(X.shape[0]):
+        # Iterate over all blocks in the manager's grid
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
 
-            # FIX ME: we need something to get all posible blocks
-            selected_block = self._find_block(X[i])
-            if selected_block is not None:
-                selected_block.new_point(X[i], y_list[i], i)
-            else:
-                self.logger.warning(f"Point %s at index %s could not be mapped to any block. ", X[i], i)
+            lower_bound = block.block_scope[0]-self.overlap
+            upper_bound = block.block_scope[1]+self.overlap
+            
+            # Combine both checks to get points within the extended block
+            points_in_extended_block_mask = ( (X >= lower_bound) * (X <= upper_bound) ).all(dim=1)
+            
+            # Get the actual points (X_selected) and their corresponding targets (y_selected)
+            # and original positions (positions_selected)
+            X_selected = X[points_in_extended_block_mask]
+            y_selected = y[points_in_extended_block_mask]
+            # Get original indices of selected points
+            positions_selected = torch.nonzero(points_in_extended_block_mask).squeeze(1).tolist()
 
+            if X_selected.shape[0] > 0:
+                block.append_points(X_selected, y_selected, positions_selected)
+                assigned_points_mask[points_in_extended_block_mask] = True
+
+      
+        # After iterating through all blocks, identify points that were *never* assigned
+        unmapped_points_mask = ~assigned_points_mask
+        
+        # Log warnings for points that were not mapped to *any* block.
+        # This restores the original intent of the warning for out-of-bounds points.
+        if torch.any(unmapped_points_mask):
+            unmapped_X = X[unmapped_points_mask]
+            # Log each unmapped point (or a summary if many)
+            for i, point_x in enumerate(unmapped_X):
+                self.logger.warning(
+                    f"Point {point_x.tolist()} at original index {torch.nonzero(unmapped_points_mask).squeeze(1)[i].item()} "
+                    "could not be mapped to any block."
+                )
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """

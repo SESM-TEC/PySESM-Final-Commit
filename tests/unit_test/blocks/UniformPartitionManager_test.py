@@ -284,7 +284,7 @@ def test_map_points_out_of_bounds(create_manager, caplog):
     total_mapped_points = sum(len(b.X) for b in active_blocks)
 
     assert total_mapped_points == 1 # Only (0.1, 0.1) should be mapped
-    assert len(caplog.records) == 6 # Expecting 6 warnings for the 3 unmapped points 
+    assert len(caplog.records) == 3 # Expecting 3 warnings for the 3 unmapped points 
 
 def test_add_points_multiple_calls_fixed_bounds(create_manager, caplog):
     """

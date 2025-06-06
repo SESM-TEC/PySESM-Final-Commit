@@ -218,6 +218,63 @@ def test_partition_block_calculate_amplitude_and_target():
     assert pytest.approx(block.amplitude, rel=1e-6) == 1.0 / 3.0
     assert torch.allclose(block.target, torch.tensor([[1.0/3.0, 1.0]], device=cpu_device), atol=1e-6)
 
+
+# En tests/unit_test/blocks/PartitionBlock_test.py
+
+def test_append_points_to_block():
+    """Test appending multiple points to the PartitionBlock."""
+    space_origin = torch.tensor([0.0, 0.0], device='cpu')
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device='cpu')
+    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+
+    points_x = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
+    points_y = torch.tensor([[1.0], [2.0], [3.0]], device='cpu')
+    positions = [0, 1, 2]
+
+    block.append_points(points_x, points_y, positions)
+
+    assert len(block.X) == 3
+    assert torch.allclose(torch.stack(block.X), points_x)
+    assert torch.allclose(torch.stack(block.y), points_y)
+    assert block.positions == positions
+
+    # Test appending more points
+    more_points_x = torch.tensor([[0.2, 0.2], [0.8, 0.8]], device='cpu')
+    more_points_y = torch.tensor([[4.0], [5.0]], device='cpu')
+    more_positions = [3, 4]
+
+    block.append_points(more_points_x, more_points_y, more_positions)
+
+    assert len(block.X) == 5
+    assert torch.allclose(torch.stack(block.X), torch.cat((points_x, more_points_x)))
+    assert torch.allclose(torch.stack(block.y), torch.cat((points_y, more_points_y)))
+    assert block.positions == [0, 1, 2, 3, 4]
+
+def test_append_points_dimension_mismatch_raises_error():
+    """
+    Test that append_points raises ValueError if input dimensions mismatch.
+    """
+    space_origin = torch.tensor([0.0, 0.0], device='cpu')
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device='cpu')
+    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+
+    # Mismatch: points_x (3 samples), points_y (2 samples)
+    points_x_mismatch = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
+    points_y_mismatch = torch.tensor([[1.0], [2.0]], device='cpu')
+    positions_mismatch = [0, 1, 2]
+
+    with pytest.raises(ValueError, match="Dimension mismatch"):
+        block.append_points(points_x_mismatch, points_y_mismatch, positions_mismatch)
+
+    # Mismatch: points_x (3 samples), positions (2 samples)
+    points_x_mismatch2 = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
+    points_y_mismatch2 = torch.tensor([[1.0], [2.0], [3.0]], device='cpu')
+    positions_mismatch2 = [0, 1]
+
+    with pytest.raises(ValueError, match="Dimension mismatch"):
+        block.append_points(points_x_mismatch2, points_y_mismatch2, positions_mismatch2)
     
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
