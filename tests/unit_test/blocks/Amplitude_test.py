@@ -84,7 +84,7 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     partition_conf = UniformPartitionConfig(
         T=torch.tensor([2, 2], device=device, dtype=torch.int),
         initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
-        threshold=0
+        activity_threshold=0
     )
     dict_conf = GaussianDictConfig(epochs=1, alpha=0.1, eig_range=[0.1,1.0], mu_range=[-1.0,1.0])
     sc_conf = ISTAConfig(n_functions=n_functions, epochs=1, alpha=0.1, lambd=0.01)

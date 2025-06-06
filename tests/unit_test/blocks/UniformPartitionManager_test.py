@@ -37,7 +37,9 @@ def create_manager(common_device_manager):
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
     """
-    def _creator(T_val: Union[int, torch.Tensor], initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None, threshold_val: float=0):
+    def _creator(T_val: Union[int, torch.Tensor],
+                 initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None,
+                 threshold_val: float=0):
         # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
         if isinstance(initial_bounds_val, torch.Tensor):
             initial_bounds_np = initial_bounds_val.cpu().numpy()
@@ -47,7 +49,7 @@ def create_manager(common_device_manager):
         config = UniformPartitionConfig(
             T=T_val,
             initial_bounds=initial_bounds_np,
-            threshold=threshold_val
+            activity_threshold=threshold_val
         )
         return UniformPartitionManager(
             config=config,
@@ -68,7 +70,7 @@ def test_uniform_partition_manager_initialization(create_manager):
 
     assert manager.T == 4
 
-    assert manager.threshold == 0
+    assert manager.activity_threshold == 0
     assert manager.blocks is None
     assert manager.block_size is None
 
@@ -137,7 +139,7 @@ def test_map_points_assigns_and_processes_y(create_manager):
     manager._map_points(X, y)
 
     total_points_mapped = 0
-    mapped_blocks = [block for block in manager.blocks.flat if block.is_active]
+    mapped_blocks = [block for block in manager.blocks.flat if block.is_active()]
     assert len(mapped_blocks) > 0
 
     for block in mapped_blocks:
@@ -173,7 +175,7 @@ def test_add_points_full_workflow(create_manager):
     assert sum(len(b.X) for b in active_blocks) == len(X)
 
     for block in active_blocks:
-        assert block.is_active
+        assert block.is_active()
         assert block.X is not None and len(block.X) > 0
         assert block.y is not None and len(block.y) > 0
         assert block.normalized_X is not None # Should be set by _vectorized_normalization
@@ -257,7 +259,7 @@ def test_add_points_empty_input(create_manager):
 
     assert manager.blocks is not None # Blocks array should still be initialized spatially
     assert manager.blocks.shape == (2, 2)
-    assert all(not block.is_active for block in manager.blocks.flat) # No blocks should be active
+    assert all(not block.is_active() for block in manager.blocks.flat) # No blocks should be active
 
 
 def test_map_points_out_of_bounds(create_manager, caplog):
@@ -349,7 +351,7 @@ def test_retrieve_test_active_blocks_isolation_old(create_manager):
     # Store references to original manager's internal state BEFORE retrieve_test_active_blocks
     original_blocks_ref = manager.blocks
     # Get a reference to a specific original sparse coding layer
-    original_sc_layer_ref = original_blocks_ref[0, 0].sparse_coding_layer if original_blocks_ref[0,0].is_active else None
+    original_sc_layer_ref = original_blocks_ref[0, 0].sparse_coding_layer if original_blocks_ref[0,0].is_active() else None
 
     # Test data to be mapped into the test blocks
     X_test = torch.tensor([[0.15, 0.15], [0.25, 0.25], [0.7, 0.7]], device='cpu', dtype=torch.float32)
@@ -577,7 +579,7 @@ def test_map_points_y_scalar(create_manager):
     manager._prepare_block_targets()
 
     block = manager.blocks[0,0]
-    assert block.is_active
+    assert block.is_active()
     assert len(block.y) == 1
     assert block.y[0].shape == torch.Size([1]) # y in list maintains original shape
     

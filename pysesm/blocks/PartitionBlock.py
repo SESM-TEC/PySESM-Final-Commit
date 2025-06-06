@@ -118,32 +118,14 @@ class PartitionBlock:
         self.positions = []
 
 
-    @property
-    def is_active(self) -> bool:
+    def is_active(self,threshold=0) -> bool:
         """
         Determines if the block is active (contains any data points).
 
         Returns:
             bool: True if the block has points, False otherwise.
         """
-        return len(self.X) > 0
-
-    def is_point_in_block(self, point_x: torch.Tensor) -> bool:
-        """
-        Checks if a given point's N-dimensional coordinates fall within this block's `block_scope`.
-
-        Args:
-            point_x (torch.Tensor): The N-dimensional input features of the point to check.
-                                    Expected shape: (n_features,).
-
-        Returns:
-            bool: True if the point is within the block's N-dimensional bounds, False otherwise.
-        """
-        point_x = point_x.to(self.device)
-        # Check if all dimensions of point_x are >= lower bound AND <= upper bound
-        return torch.all(self.block_scope[0] <= point_x) and torch.all(
-            point_x <= self.block_scope[1]
-        )
+        return len(self.X) > threshold
 
     def normalize_points(self):
         """

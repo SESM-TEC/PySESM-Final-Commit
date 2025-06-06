@@ -48,11 +48,11 @@ def partition_block_factory(device_manager_fixture):
 @pytest.fixture
 def uniform_manager_factory(device_manager_fixture):
     """Factory para crear instancias de UniformPartitionManager."""
-    def _create_manager(T_val, initial_bounds_val_np, threshold_val=0.0):
+    def _create_manager(T_val, initial_bounds_val_np, threshold_val=0):
         config = UniformPartitionConfig(
             T=T_val,
             initial_bounds=initial_bounds_val_np,
-            threshold=threshold_val
+            activity_threshold=threshold_val
         )
         return UniformPartitionManager(
             config=config,
@@ -139,12 +139,10 @@ def test_pb_normalize_points_outside_conceptual_inside_scope(partition_block_fac
     # Punto ligeramente ANTES del origen conceptual (pero dentro de block_scope[0] si eps es el de máquina)
     # block_scope[0] es [0-eps, 0-eps]. Origen conceptual es [0,0].
     point_before_conceptual_origin = torch.tensor([0.5 * machine_eps, 0.5 * machine_eps], device=block.device)
-    assert block.is_point_in_block(point_before_conceptual_origin) # Debería estar en el scope con eps
     
     # Punto ligeramente DESPUÉS del fin conceptual (pero dentro de block_scope[1])
     # block_scope[1] es [1-eps, 1-eps]. Fin conceptual es [1,1].
     point_after_conceptual_end = torch.tensor([1.0 - 0.5 * machine_eps, 1.0 - 0.5 * machine_eps], device=block.device)
-    assert block.is_point_in_block(point_after_conceptual_end)
 
     block.new_point(point_before_conceptual_origin, torch.tensor([1.0], device=block.device), 0)
     block.new_point(point_after_conceptual_end, torch.tensor([1.0], device=block.device), 1)

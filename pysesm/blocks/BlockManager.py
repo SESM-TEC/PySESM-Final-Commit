@@ -70,7 +70,7 @@ class BlockManager(ABC):
         # Store these base attributes
         self.config = config
         self.logger = logger
-        self.device_manager = device_manager
+        self.device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
         self.blocks = None #
 
     @abstractmethod

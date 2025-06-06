@@ -74,7 +74,7 @@ def test_is_active():
     block_size = torch.tensor([1.0, 1.0], device='cpu')
     block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
 
-    assert not block.is_active
+    assert not block.is_active()
 
     point_x = torch.tensor([0.5, 0.5], device='cpu')
     point_y = torch.tensor([1.0], device='cpu')
@@ -82,20 +82,7 @@ def test_is_active():
 
     block.new_point(point_x, point_y, pos)
 
-    assert block.is_active
-
-def test_is_point_in_block():
-    """Test if a point is within the block's boundaries."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
-
-    point_inside = torch.tensor([0.5, 0.5], device='cpu')
-    point_outside = torch.tensor([1.5, 1.5], device='cpu')
-
-    assert block.is_point_in_block(point_inside)
-    assert not block.is_point_in_block(point_outside)
+    assert block.is_active()
 
 def test_normalize():
     """Test the normalization of points within the block."""
