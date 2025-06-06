@@ -179,7 +179,7 @@ dict_config = GaussianDictConfig(
 partition_config = UniformPartitionConfig(
     T=3,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    threshold=0
+    activity_threshold=0
 )
 
 ssesm_config = SSESMConfig(
