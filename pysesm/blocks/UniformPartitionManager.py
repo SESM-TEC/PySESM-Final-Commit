@@ -102,24 +102,28 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
-        """
-        Finds the block corresponding to a given point.
+        """Finds the block corresponding to a given point.
+
+        This will return one block only, whose scope covers the point.
 
         Args:
             X (torch.Tensor): A point in the input space.
 
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
+
         """
 
-        for index in np.ndindex(self.blocks.shape):
-            block: PartitionBlock = self.blocks[index]
-            if self._is_point_in_block(x,block):
-                return block
+        normalized = torch.floor( (x - self.initial_bounds[0]) / self.block_size).long()
 
-        self.logger.warning("Could not find a block for point %s", x)
-        return None
-
+        # Verificación rápida con operaciones vectorizadas
+        if torch.any(normalized < 0) or torch.any(normalized >= self.T):
+            self.logger.warning("Could not find a block for point %s", x)
+            return None
+    
+        index = tuple(normalized.cpu().numpy())
+        return self.blocks[index]
+        
     def _is_point_in_block(self,x: torch.Tensor,block:PartitionBlock) -> bool:
         """
         Checks if a given point's N-dimensional coordinates fall within this block's `block_scope`.
@@ -220,6 +224,8 @@ class UniformPartitionManager(BlockManager):
         y_list = list(y.split(1, dim=0))
 
         for i in range(X.shape[0]):
+
+            # FIX ME: we need something to get all posible blocks
             selected_block = self._find_block(X[i])
             if selected_block is not None:
                 selected_block.new_point(X[i], y_list[i], i)
