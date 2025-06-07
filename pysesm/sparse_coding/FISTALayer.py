@@ -18,10 +18,8 @@ from typing import Callable, Optional
 from enum import Enum, auto
 from math import sqrt
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
-
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
 
 class RestartStrategy(Enum):
     """Enumeration of restart strategies for FISTA algorithm."""
@@ -65,7 +63,6 @@ class FISTAConfig(SparseCodingConfig):
     momentum_scheme: MomentumScheme = MomentumScheme.ORIGINAL  
 
 
-@SparseCodingFactory.register("fista")
 class FISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA).
@@ -95,6 +92,7 @@ class FISTALayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: FISTAConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -110,6 +108,7 @@ class FISTALayer(SparseCodingBaseLayer):
             device: Device to run computations on.
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,
@@ -139,12 +138,12 @@ class FISTALayer(SparseCodingBaseLayer):
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
                 
-            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
             # Initialize h as zeros (common for ISTA/FISTA)
             self.h = torch.nn.Parameter(
                 torch.zeros(self.config.n_functions, 1).to(self.device), 
-                requires_grad=True
+                requires_grad=False
             )
         
         # Initialize auxiliary variables for FISTA
@@ -233,7 +232,7 @@ class FISTALayer(SparseCodingBaseLayer):
         # Manual FISTA update
         with torch.no_grad():
             # Forward pass using the auxiliary point z
-            z_pred = self.config.evaluation_func(dictionary, self.z)
+            z_pred = self.evaluation_func(dictionary, self.z)
             
             # Compute loss
             loss = self.criterion(z_pred, y)
@@ -301,7 +300,7 @@ class FISTALayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)
@@ -311,7 +310,7 @@ class FISTALayer(SparseCodingBaseLayer):
 
         return loss
     
-    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple FISTA iterations.
         
@@ -321,10 +320,10 @@ class FISTALayer(SparseCodingBaseLayer):
         
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of iterations.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        epochs = self.config.epochs
         # Reset iteration counter for fixed restart strategy
         self.iter_count = 0
         self.prev_loss = float('inf')

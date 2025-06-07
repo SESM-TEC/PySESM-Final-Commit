@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pysesm"
-version = "0.0.1"
+version = "0.1.0"
 description = "SESM (sparse encoded surrogate model) optimization tool"
 authors = [
-    {name = "Aldo Cambronero", email = "cambroneroaldo03@gmail.com"},
-    {name = "Joshua Gamboa", email = "joshgc.19@gmail.com"},
-    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"},
+    {name = "Cindy Calderón", email = "ccalderon@itcr.ac.cr"},
+    {name = "Juan Pablo Soto", email = "jusoto@itcr.ac.cr"},
     {name = "Pablo Alvarado", email = "palvarado@itcr.ac.cr"},
-    {name = "Cindy Calderón", email = "ccalderon@itcr.ac.cr"}
+    {name = "Joshua Gamboa", email = "joshgc.19@gmail.com"},
+    {name = "Aldo Cambronero", email = "cambroneroaldo03@gmail.com"},
+    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"}
 ]
 dependencies = [
     "numpy",

@@ -17,9 +17,8 @@ import torch
 from typing import Callable, Optional
 from dataclasses import dataclass
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
 
 __all__ = ['ISTALayer', 'ISTAConfig', 'StepSizeMethod']
 
@@ -42,7 +41,7 @@ class ISTAConfig(SparseCodingConfig):
         early_stopping_tol (float): Tolerance threshold for early stopping.
     """
     alpha: float = 0.1
-    lambd: float = 0.01
+    lambd: float = 0.00001
     step_size_method: StepSizeMethod = StepSizeMethod.POWER_ITERATION
     power_iterations: int = 10
     early_stopping: bool = False
@@ -50,7 +49,6 @@ class ISTAConfig(SparseCodingConfig):
 
 
 # Define the ISTA layer
-@SparseCodingFactory.register("classic_ista") 
 class ISTALayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing a sparse vector layer with learnable parameters.
@@ -75,6 +73,7 @@ class ISTALayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: ISTAConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -90,6 +89,7 @@ class ISTALayer(SparseCodingBaseLayer):
             device: Device for computation (CPU/GPU).
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,
@@ -114,13 +114,24 @@ class ISTALayer(SparseCodingBaseLayer):
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
                 
-            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
-            # Initialize h as zeros (common for ISTA)
-            self.h = torch.nn.Parameter(
-                torch.zeros(self.config.n_functions, 1).to(self.device), 
-                requires_grad=True
-            )
+            num_ones_en_h = 1
+
+            h_inicial_disperso = torch.zeros(self.config.n_functions, 1, device=self.device)
+
+            if self.config.n_functions > 0 and num_ones_en_h > 0:
+                # Asegurar que no intentas poner más unos que elementos disponibles
+                k_elementos_activos = min(num_ones_en_h, self.config.n_functions)
+
+                # Seleccionar k_elementos_activos índices aleatorios sin reemplazo
+                indices_activos = torch.randperm(self.config.n_functions, device=self.device)[:k_elementos_activos]
+
+                # Establecer esos índices a 1.0 en la columna 0
+                h_inicial_disperso[indices_activos, 0] = 1.0
+
+            self.h = torch.nn.Parameter(h_inicial_disperso, requires_grad=False)
+
 
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """
@@ -157,7 +168,7 @@ class ISTALayer(SparseCodingBaseLayer):
         # Manual ISTA update
         with torch.no_grad():
             # Forward pass
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             
             # Compute loss
             loss = self.criterion(y_pred, y)
@@ -205,7 +216,7 @@ class ISTALayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)
@@ -215,7 +226,7 @@ class ISTALayer(SparseCodingBaseLayer):
 
         return loss
     
-    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple ISTA iterations.
         
@@ -225,10 +236,10 @@ class ISTALayer(SparseCodingBaseLayer):
         
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of iterations.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        epochs = self.config.epochs
         for epoch in range(epochs):
             loss = self.train_step(y, dictionary, log_losses)
             

@@ -5,10 +5,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import os
+import torch
 
-from pysesm.models.SESM.SESM import SESM
+from pysesm.models.SESM import SESM
 
-def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
+def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngroup: str = "sesm"):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
@@ -38,11 +39,37 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax5.set_ylabel("Dictionary loss")
     ax5.set_title("Dictionary Loss (Model epochs)")
 
+    # Modificación para mostrar puntos por bloque con colores diferentes
     ax3 = fig.add_subplot(233)
-    ax3.scatter(X_train[:, 0], X_train[:, 1])
+    
+    # Verificar si el modelo tiene partition_manager (para SSESM)
+    if hasattr(model, 'partition_manager'):
+        # Obtener bloques activos
+        active_blocks = model.partition_manager.retrieve_active_blocks()
+        
+        # Generar colores únicos para cada bloque
+        import matplotlib.cm as cm
+        colors = cm.tab10(np.linspace(0, 1, len(active_blocks)))
+        
+        # Iterar sobre los bloques y plotear sus puntos
+        for i, block in enumerate(active_blocks):
+            if len(block.X) > 0:  # Solo si el bloque tiene puntos
+                # Usar las coordenadas originales (sin normalizar)
+                block_X = torch.stack(block.X).detach().cpu().numpy()
+                ax3.scatter(block_X[:, 0], block_X[:, 1], 
+                           c=[colors[i]], 
+                           label=f'Block {i}',
+                           alpha=0.7)
+        
+        ax3.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax3.set_title("Sampled positions by block")
+    else:
+        # Fallback para modelos sin partition_manager
+        ax3.scatter(X_train[:, 0], X_train[:, 1])
+        ax3.set_title("Sampled positions")
+    
     ax3.set_xlabel("X")
     ax3.set_ylabel("Y")
-    ax3.set_title("Sampled positions")
 
     # Ajuste de los límites de los ejes
     ax3.set_xlim([min(X_train[:, 0]), max(X_train[:, 0])])
@@ -64,7 +91,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax4.set_zlabel('y')
     ax4.legend()
 
-    ax4.set_title(f"Ground truth - {hypset}/{model.dfngroup}")
+    ax4.set_title(f"Ground truth - {hypset}/{dfngroup}")
 
     # Matplotlib para "Surrogate Model" (estática)
     Z_pred = Z.clone().reshape(N, N).detach().numpy()
@@ -76,7 +103,7 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset):
     ax2.set_zlabel('y')
     ax2.legend()
 
-    ax2.set_title(f"Surrogate Model - {hypset}/{model.dfngroup}")
+    ax2.set_title(f"Surrogate Model - {hypset}/{dfngroup}")
 
     plt.tight_layout()
     return fig
@@ -102,7 +129,7 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
     # Matplotlib subplots (no interactivas)
     fig = plot_surface(test_dataset,X_train,y_train,Z,model,hypset)
 
-    plt.savefig(f"{folder_name}/plots/{model.dfngroup}.{1}_static.png")
+    plt.savefig(f"{folder_name}/plots/{dfngroup}.{1}_static.png")
     plt.close(fig)
 
     # Plotly para la gráfica interactiva de la "Original Function"
@@ -117,11 +144,11 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
         marker=dict(size=5, color="red"),
     )
     fig_original.update_layout(
-        title=f"Original Function - {hypset}/{model.dfngroup}",
+        title=f"Original Function - {hypset}/{dfngroup}",
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
     )
     fig_original.write_html(
-        f"{folder_name}/plots/{model.dfngroup}.{1}_original.html"
+        f"{folder_name}/plots/{dfngroup}.{1}_original.html"
     )
 
     # Plotly para la gráfica interactiva del "Surrogate Model"
@@ -136,11 +163,11 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
         marker=dict(size=5, color="red"),
     )
     fig_surrogate.update_layout(
-        title=f"Surrogate Model - {hypset}/{model.dfngroup}",
+        title=f"Surrogate Model - {hypset}/{dfngroup}",
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
     )
     fig_surrogate.write_html(
-        f"{folder_name}/plots/{model.dfngroup}.{1}_surrogate.html"
+        f"{folder_name}/plots/{dfngroup}.{1}_surrogate.html"
     )
 
 

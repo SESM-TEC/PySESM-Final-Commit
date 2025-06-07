@@ -17,10 +17,8 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
-from pysesm.models.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.customization_factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.models.sparse_coding_utils import soft_threshold
-
+from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
+from .sparse_coding_utils import soft_threshold
 
 @dataclass
 class ADMMConfig(SparseCodingConfig):
@@ -47,7 +45,6 @@ class ADMMConfig(SparseCodingConfig):
     rel_tol: float = 1e-2    # Relative tolerance for stopping criteria
     lambda_scaling: float = 1.0  # Scaling factor for lambda to make it independent of rho
 
-@SparseCodingFactory.register("admm")
 class ADMMLayer(SparseCodingBaseLayer):
     """
     A custom PyTorch module implementing the ADMM algorithm for sparse coding.
@@ -81,6 +78,7 @@ class ADMMLayer(SparseCodingBaseLayer):
     def __init__(
             self,
             config: ADMMConfig,
+            evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: Optional[logging.Logger] = None,
             debug: bool = False,
             parameter_hook: Optional[Callable[[dict], None]] = None,
@@ -96,6 +94,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             device: Device to run computations on.
         """
         super().__init__(config=config,
+                         evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
                          parameter_hook=parameter_hook,
@@ -120,12 +119,12 @@ class ADMMLayer(SparseCodingBaseLayer):
             if h.shape[0] != self.config.n_functions:
                 raise ValueError(f"Dimension mismatch: h has {h.shape[0]} rows but n_functions is {self.config.n_functions}")
                 
-            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=True)
+            self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
             # Initialize h as zeros
             self.h = torch.nn.Parameter(
                 torch.zeros(self.config.n_functions, 1, device=self.device), 
-                requires_grad=True
+                requires_grad=False
             )
         
         # Initialize auxiliary variables for ADMM
@@ -338,7 +337,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             self.z = z_new
 
             # Compute current loss for tracking
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             loss = self.criterion(y_pred, y)
 
             if log_losses:
@@ -381,7 +380,7 @@ class ADMMLayer(SparseCodingBaseLayer):
 
         # Combine the words in the dictionary using self.h
         with torch.no_grad():
-            y_pred = self.config.evaluation_func(dictionary, self.h)
+            y_pred = self.evaluation_func(dictionary, self.h)
             assert y_pred.shape == y.shape, f"Shape mismatch: y_pred {y_pred.shape} != y {y.shape}"
             
             loss = self.criterion(y_pred, y)
@@ -392,7 +391,7 @@ class ADMMLayer(SparseCodingBaseLayer):
         return loss
 
     
-    def partial_fit(self, y: torch.Tensor, epochs: int, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
         """
         Performs multiple ADMM iterations.
 
@@ -401,10 +400,10 @@ class ADMMLayer(SparseCodingBaseLayer):
 
         Args:
             y (torch.Tensor): Target vector.
-            epochs (int): Number of ADMM iterations to perform.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
         """
+        epochs=self.config.epochs
         # Initialize cached factorization for efficiency across iterations
         self.cached_factorization = self._factorize_system_matrix(dictionary)
 
