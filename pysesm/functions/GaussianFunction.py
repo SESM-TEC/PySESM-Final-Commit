@@ -174,7 +174,7 @@ class GaussianFunction(SurrogateFunction):
         if not mu_flag:
             mu_raw = mu_raw.detach()
 
-        # Reshape mu for batching: (n_functions, n_features) -> (1, n_functions, 1, n_features)
+        # Reshape mu for batching: (n_features, n_functions) -> (1, n_functions, 1, n_features)
         # So it broadcasts with x (N_batches, n_samples_in_batch, n_features)
         mu = mu_raw.T.unsqueeze(0).unsqueeze(2) # (1, n_functions, 1, n_features)
 
@@ -191,17 +191,29 @@ class GaussianFunction(SurrogateFunction):
         n = self.n_features
         A = torch.zeros(self.n_functions, n, n, device=Theta.device)
         indices = torch.triu_indices(n, n, offset=0)
-        # FIXED: Use correct index order for upper triangular matrix
-        A[:, indices[0], indices[1]] = rho.T  # Use rho.T to match batch dimension: (n_functions, n_rho_params_per_func)
+        # Following the pattern from deprecated_call_
+        A[:, indices[1], indices[0]] = rho.T  # Use rho.T to match batch dimension: (n_functions, n_rho_params_per_func)
 
-        # The equation is exp(-0.5 || A'*(x-µ) ||_2^2)
-        # We need to compute A' @ (x-µ) = A.T @ (x-µ)
-        # But since we're doing (x-µ) @ A.T, we need A without transposing
+        # Reshape for batch matrix multiplication
+        # We need to match the pattern from deprecated_call_ where bmm operates on:
+        # x_mu: (n_functions, n_samples, n_features) 
+        # A: (n_functions, n_features, n_features)
 
-        # To perform `(N_batches, n_functions, n_samples_in_batch, n_features) @ (n_functions, n_features, n_features)`
-        # torch.matmul with broadcasting will handle this correctly
-        # (x_mu) @ A gives us the result we need for || A'*(x-µ) ||_2^2
-        A_t_x_mu = torch.matmul(x_mu, A)
+        # Current x_mu shape: (N_batches, n_functions, n_samples_in_batch, n_features)
+        # We need to reshape to combine batches and functions for bmm
+        # Then separate them back out
+
+        # Reshape x_mu to (N_batches * n_functions, n_samples_in_batch, n_features)
+        x_mu_reshaped = x_mu.reshape(n_batches * self.n_functions, n_samples_in_batch, self.n_features)
+
+        # Expand A to match: (n_functions, n_features, n_features) -> (N_batches * n_functions, n_features, n_features)
+        A_expanded = A.repeat(n_batches, 1, 1)
+
+        # Compute A'*(x-µ) using bmm as in deprecated_call_
+        A_t_x_mu = torch.bmm(x_mu_reshaped, A_expanded)
+
+        # Reshape back to (N_batches, n_functions, n_samples_in_batch, n_features)
+        A_t_x_mu = A_t_x_mu.reshape(n_batches, self.n_functions, n_samples_in_batch, self.n_features)
 
         # Compute squared L2 norm: ||A'*(x-µ)||_2^2
         # torch.sum(..., dim=-1) sums over the last dimension (n_features)
@@ -219,7 +231,8 @@ class GaussianFunction(SurrogateFunction):
         else: # original_x_dim == 3
             return result.permute(0, 2, 1) # (N_batches, N_samples_per_batch, N_functions)
     
-    def deprecated_call_(self, x, Theta, rho_flag=False, mu_flag=False):
+    
+    def old__call__(self, x, Theta, rho_flag=False, mu_flag=False):
         """
         DEPRECATED
         Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
