@@ -1,9 +1,9 @@
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
-BSESM Class
+BSESM Base Class
 
-Provides the batch version of SESM
+Provides the batched version of SESM
 
 Authors: The SESM Team 
 
@@ -24,6 +24,7 @@ from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, Sp
 from pysesm.device_manager.DeviceManager import DeviceManager # Ensure DeviceManager is imported
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
 from pysesm.factories.BlockManagerFactory import BlockManagerFactory
+from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 @dataclass
 class BSESMConfig(SESMConfig):
@@ -160,18 +161,6 @@ class BSESM(SESM):
         # It returns `filled_active_blocks_X` (N_total_points, N_features)
         # and `max_points_in_block`.
 
-        # Redesign:
-        # 1. `_fill_block_points` should return a list of (X, y) tensors for each block,
-        #    padded individually if needed, or structured for batching.
-        # 2. `_global_evaluation_func` will then iterate over blocks or use explicit batching.
-
-        # Given `dictionary` is `(N_total_points, N_functions)`, it's a concatenated matrix.
-        # `h_batch` is `(N_blocks, N_functions, 1)`.
-        # We need to split `dictionary` by blocks and multiply each part with its corresponding `h`.
-
-        # This requires knowing the `block_sizes_in_samples` for each block, including padding.
-        # This is where `max_points_in_block` from `_fill_block_points` is crucial.
-
         num_blocks = h_batch.shape[0]
         num_functions = h_batch.shape[1] # Should be N_functions
         
@@ -218,12 +207,14 @@ class BSESM(SESM):
                 0
             )
 
+        # Get output_dim from the first block's target (if available) or assume 1
+        output_dim = blocks[0].target.shape[1] if blocks[0].target is not None and blocks[0].target.dim() > 1 else 1
+        
         max_points_in_block = max(len(block.X) for block in blocks)
         
         # Prepare padding tensors
-        # Assuming n_features and output_dim (1) for padding
         padding_X_row = torch.zeros(1, self.n_features, device=self.device_manager.get_device(DeviceTarget.GLOBAL))
-        padding_y_row = torch.zeros(1, 1, device=self.device_manager.get_device(DeviceTarget.GLOBAL)) # Assuming output_dim=1
+        padding_y_row = torch.zeros(1, output_dim, device=self.device_manager.get_device(DeviceTarget.GLOBAL))
 
         # Lists to hold padded tensors for concatenation
         padded_X_list = []
@@ -338,7 +329,7 @@ class BSESM(SESM):
                 self.logger.info(
                     f"BSESM Global Epoch {epoch + 1}/{self.config.model_epochs}: "
                     f"Loss Global SC: {self.global_sparse_coding_layer.losses[-1]:.6f}, "
-                    f"Loss Dictionary: {self.dictionary_layer_losses[-1]:.6f}"
+                    f"Loss Dictionary: {self.dictionary_layer.losses[-1]:.6f}"
                 )
         
         self.partial_fit_count += 1
@@ -383,10 +374,12 @@ class BSESM(SESM):
 
         if not test_active_blocks:
             self.logger.warning("No active test blocks found. Returning empty prediction.")
-            return torch.empty(y.shape[0], 1, device=X.device, dtype=X.dtype) # Return appropriate empty tensor
+            # Return an empty tensor matching expected output shape and device
+            return torch.empty(y.shape[0], y.shape[1], device=X.device, dtype=X.dtype)
 
         # Aggregate X_test and y_test similarly to training, for a single forward pass
-        X_test_batch_normalized, y_test_batch_target, max_points_in_block = self._aggregate_block_data(test_active_blocks)
+        # Note: y_test_batch_target is not strictly needed for prediction, but _aggregate_block_data returns it.
+        X_test_batch_normalized, _, max_points_in_block = self._aggregate_block_data(test_active_blocks)
 
         # Create a batch of h vectors for prediction.
         # These come directly from the `sparse_coding_layer` of each test block.
@@ -418,15 +411,18 @@ class BSESM(SESM):
             ]
             
             # Apply denormalization using the block's amplitude
-            block_unnormalized_preds = block_normalized_preds / block.amplitude
+            # Ensure amplitude is a tensor if block_normalized_preds is >1D
+            amplitude_tensor = torch.tensor(block.amplitude, device=X.device, dtype=X.dtype)
+            block_unnormalized_preds = block_normalized_preds / amplitude_tensor
             y_pred_unnormalized_list.append(block_unnormalized_preds)
             
             current_point_idx += num_points_in_block_padded # Advance by padded size
 
         # Map predictions back to original global positions (based on original `y` indices)
-        y_final_predictions = torch.zeros_like(y, device=X.device, dtype=X.dtype) # Initialize with zeros
+        # Initialize output tensor with appropriate shape (N_samples, output_dim)
+        output_dim = y.shape[1] if y.dim() > 1 else 1 # Infer output_dim from y
+        y_final_predictions = torch.zeros(y.shape[0], output_dim, device=X.device, dtype=X.dtype)
         
-        point_in_batch_idx = 0
         for block_idx, block in enumerate(test_active_blocks):
             num_actual_points = len(block.X) # Number of actual points in this block
             
