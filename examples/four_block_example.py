@@ -12,13 +12,14 @@ import logging
 import torch
 import matplotlib.pyplot as plt
 from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
 from pysesm.sparse_coding import ADMMLayer, ADMMConfig
 from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
-from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
+from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
@@ -193,9 +194,19 @@ ssesm_config = SSESMConfig(
     permutation_times=50
 )
 
+bsesm_config = BSESMConfig(
+    n_features = n_features,
+    model_epochs = 20,
+    sparse_coding_config = sparse_coding_config,
+    dict_config = dict_config,
+    partition_config = partition_config,
+    log_interval=25,
+)
+
+
 # SESM CONFIGURATION
 experiment = {
-    "config": ssesm_config,
+    "config": bsesm_config,
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
@@ -260,7 +271,7 @@ def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
 
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(n_samples=experiment["n_samples"])
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)
@@ -269,12 +280,12 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 folder_name = f"results_one_block_{experiment['hyp_set']}"
 
 # INSTANTIATE THE MODELS
-ssesm_model = SSESM(**experiment,logger=logger)
-#bsesm_model = BSESM(**experiment,logger=logger)
+#ssesm_model = SSESM(**experiment,logger=logger)
+bsesm_model = BSESM(**experiment,logger=logger)
 
 try:
     # TRAIN AND TEST THE ALL MODELS
-    for model in [ssesm_model]: # bsesm_model
+    for model in [bsesm_model]: # ssesm_model
         logging.info("Training model {}".format(model.__class__.__name__))
         model_folder = f"{folder_name}_{model.__class__.__name__}"
         model.partial_fit(X_train, y_train)
