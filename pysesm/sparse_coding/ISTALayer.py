@@ -116,11 +116,22 @@ class ISTALayer(SparseCodingBaseLayer):
                 
             self.h = torch.nn.Parameter(h.to(self.device), requires_grad=False)
         else:
-            # Initialize h as zeros (common for ISTA)
-            self.h = torch.nn.Parameter(
-                torch.zeros(self.config.n_functions, 1).to(self.device), 
-                requires_grad=False
-            )
+            num_ones_en_h = 1
+
+            h_inicial_disperso = torch.zeros(self.config.n_functions, 1, device=self.device)
+
+            if self.config.n_functions > 0 and num_ones_en_h > 0:
+                # Asegurar que no intentas poner más unos que elementos disponibles
+                k_elementos_activos = min(num_ones_en_h, self.config.n_functions)
+
+                # Seleccionar k_elementos_activos índices aleatorios sin reemplazo
+                indices_activos = torch.randperm(self.config.n_functions, device=self.device)[:k_elementos_activos]
+
+                # Establecer esos índices a 1.0 en la columna 0
+                h_inicial_disperso[indices_activos, 0] = 1.0
+
+            self.h = torch.nn.Parameter(h_inicial_disperso, requires_grad=False)
+
 
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
         """

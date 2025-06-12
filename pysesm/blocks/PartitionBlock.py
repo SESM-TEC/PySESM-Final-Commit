@@ -12,10 +12,12 @@ License:
 
 import copy
 import torch
-from typing import Tuple,Optional # Keep Optional for explicit None types
+from typing import Tuple,Optional, Union # Keep Optional for explicit None types
 
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer
+
+# TODO: Why is X a list of tensors and not simply a tensor?  
 
 class PartitionBlock:
     """
@@ -108,7 +110,37 @@ class PartitionBlock:
         self.y.append(point_y.to(self.device))
         self.positions.append(pos)
 
+    def append_points(self, points_x: torch.Tensor, points_y: torch.Tensor, positions: list[int]):
+        """
+        Adds multiple data points (X, y) to this block along with their original indices.
+        Points are stored in their original, unnormalized form.
 
+        Args:
+            points_x (torch.Tensor): A tensor of N-dimensional input features for the points.
+                                     Expected shape: (n_samples_to_add, n_features).
+            points_y (torch.Tensor): A tensor of target values for the points.
+                                     Expected shape: (n_samples_to_add, output_dim) or (n_samples_to_add,).
+            positions (list[int]): A list of original indices of the points in the global dataset.
+                                   Length must match n_samples_to_add.
+        """
+        if points_x.shape[0] != points_y.shape[0] or points_x.shape[0] != len(positions):
+            raise ValueError(
+                f"Dimension mismatch: points_x ({points_x.shape[0]} samples), "
+                f"points_y ({points_y.shape[0]} samples), and positions ({len(positions)} samples) "
+                f"must have the same number of samples."
+            )
+
+        # Convert to list of tensors if needed (for consistency with `self.X` and `self.y` being lists)
+        # However, for efficiency, if these are always processed as stacked tensors,
+        # consider changing `self.X` and `self.y` to be single tensors that are concatenated.
+        # For now, sticking to the existing list-of-tensors pattern for `self.X` and `self.y`.
+
+        # Move to device and append
+        self.X.extend([p_x.to(self.device) for p_x in points_x])
+        self.y.extend([p_y.to(self.device) for p_y in points_y])
+        self.positions.extend(positions)
+
+        
     def clear_points(self):
         """Removes all data points and their derived values from the block."""
         self.X = []
@@ -118,32 +150,14 @@ class PartitionBlock:
         self.positions = []
 
 
-    @property
-    def is_active(self) -> bool:
+    def is_active(self,threshold=0) -> bool:
         """
         Determines if the block is active (contains any data points).
 
         Returns:
             bool: True if the block has points, False otherwise.
         """
-        return len(self.X) > 0
-
-    def is_point_in_block(self, point_x: torch.Tensor) -> bool:
-        """
-        Checks if a given point's N-dimensional coordinates fall within this block's `block_scope`.
-
-        Args:
-            point_x (torch.Tensor): The N-dimensional input features of the point to check.
-                                    Expected shape: (n_features,).
-
-        Returns:
-            bool: True if the point is within the block's N-dimensional bounds, False otherwise.
-        """
-        point_x = point_x.to(self.device)
-        # Check if all dimensions of point_x are >= lower bound AND <= upper bound
-        return torch.all(self.block_scope[0] <= point_x) and torch.all(
-            point_x <= self.block_scope[1]
-        )
+        return len(self.X) > threshold
 
     def normalize_points(self):
         """

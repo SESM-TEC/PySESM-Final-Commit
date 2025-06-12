@@ -146,8 +146,95 @@ class GaussianFunction(SurrogateFunction):
 
         return Theta
 
+
     def __call__(self, x, Theta, rho_flag=False, mu_flag=False):
         """
+        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
+        and all functions. Handles 2D (N_samples, N_features) or
+        3D (N_batches, N_samples_per_batch, N_features) input x.
+        """
+        original_x_dim = x.dim()
+        if original_x_dim == 2:
+            # Reshape x from (N_samples, N_features) to (1, N_samples, N_features) for consistent batching
+            x = x.unsqueeze(0)
+        elif original_x_dim != 3:
+            raise ValueError(f"Input x must be 2D (N_samples, N_features) or 3D (N_batches, N_samples_per_batch, N_features), got {x.shape}")
+
+        n_batches, n_samples_in_batch, n_features_in_x = x.shape
+        assert n_features_in_x == self.n_features, f"Input x features mismatch. Expected {self.n_features}, got {n_features_in_x}"
+
+        # Split parameters
+        num_rho_params_per_func = self.n_features * (self.n_features + 1) // 2
+        rho = Theta[:num_rho_params_per_func, :]  # (n_rho_params_per_func, n_functions)
+        mu_raw = Theta[-self.n_features:, :] # (n_features, n_functions)
+
+        # Handle gradient flow control
+        if not rho_flag:
+            rho = rho.detach()
+        if not mu_flag:
+            mu_raw = mu_raw.detach()
+
+        # Reshape mu for batching: (n_features, n_functions) -> (1, n_functions, 1, n_features)
+        # So it broadcasts with x (N_batches, n_samples_in_batch, n_features)
+        mu = mu_raw.T.unsqueeze(0).unsqueeze(2) # (1, n_functions, 1, n_features)
+
+        # Expand x and mu to align for element-wise subtraction and batching
+        # x: (N_batches, n_samples_in_batch, n_features) -> (N_batches, 1, n_samples_in_batch, n_features)
+        # mu: (1, n_functions, 1, n_features)
+        x_expanded = x.unsqueeze(1) # (N_batches, 1, n_samples_in_batch, n_features)
+
+        # Compute x-µ for all functions and samples at once
+        # Result: (N_batches, n_functions, n_samples_in_batch, n_features)
+        x_mu = x_expanded - mu
+
+        # Create batch of triangular matrices A directly
+        n = self.n_features
+        A = torch.zeros(self.n_functions, n, n, device=Theta.device)
+        indices = torch.triu_indices(n, n, offset=0)
+        # Following the pattern from deprecated_call_
+        A[:, indices[1], indices[0]] = rho.T  # Use rho.T to match batch dimension: (n_functions, n_rho_params_per_func)
+
+        # Reshape for batch matrix multiplication
+        # We need to match the pattern from deprecated_call_ where bmm operates on:
+        # x_mu: (n_functions, n_samples, n_features) 
+        # A: (n_functions, n_features, n_features)
+
+        # Current x_mu shape: (N_batches, n_functions, n_samples_in_batch, n_features)
+        # We need to reshape to combine batches and functions for bmm
+        # Then separate them back out
+
+        # Reshape x_mu to (N_batches * n_functions, n_samples_in_batch, n_features)
+        x_mu_reshaped = x_mu.reshape(n_batches * self.n_functions, n_samples_in_batch, self.n_features)
+
+        # Expand A to match: (n_functions, n_features, n_features) -> (N_batches * n_functions, n_features, n_features)
+        A_expanded = A.repeat(n_batches, 1, 1)
+
+        # Compute A'*(x-µ) using bmm as in deprecated_call_
+        A_t_x_mu = torch.bmm(x_mu_reshaped, A_expanded)
+
+        # Reshape back to (N_batches, n_functions, n_samples_in_batch, n_features)
+        A_t_x_mu = A_t_x_mu.reshape(n_batches, self.n_functions, n_samples_in_batch, self.n_features)
+
+        # Compute squared L2 norm: ||A'*(x-µ)||_2^2
+        # torch.sum(..., dim=-1) sums over the last dimension (n_features)
+        # Result: (N_batches, n_functions, n_samples_in_batch)
+        squared_norms = torch.sum(A_t_x_mu ** 2, dim=-1)
+
+        # Compute final exponential
+        # Result: (N_batches, n_functions, n_samples_in_batch)
+        result = torch.exp(-0.5 * squared_norms)
+
+        # Reshape to (N_total_points, N_functions) or (N_batches, N_samples_per_batch, N_functions)
+        # based on original_x_dim for consistency with DictBaseLayer.forward expectations.
+        if original_x_dim == 2:
+            return result.permute(0, 2, 1).squeeze(0) # (1, N_samples, N_functions) -> (N_samples, N_functions)
+        else: # original_x_dim == 3
+            return result.permute(0, 2, 1) # (N_batches, N_samples_per_batch, N_functions)
+    
+    
+    def old__call__(self, x, Theta, rho_flag=False, mu_flag=False):
+        """
+        DEPRECATED
         Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
         and all functions; this is minus one half of the square of the
         L2 norm of the triangular matrix A transposed times x minus

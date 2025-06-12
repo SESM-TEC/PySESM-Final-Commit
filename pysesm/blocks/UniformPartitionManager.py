@@ -29,11 +29,28 @@ DEFAULT_BLOCKS_PER_DIM = 4
 
 @dataclass
 class UniformPartitionConfig(BlockManagerConfig):
-    """Configuration specific to UniformPartitionManager."""
-    T: Union[torch.Tensor, int] = DEFAULT_BLOCKS_PER_DIM    # Blocks per dimension
-    initial_bounds: Optional[np.ndarray] = None # Initial space bounds
-    threshold: float = 0
-
+    """Configuration for UniformPartitionManager.
+    
+    This class defines the configuration parameters needed to set up uniform
+    partitioning of the input space into blocks with optional overlap between
+    adjacent blocks for smooth transitions.
+    """
+    
+    # Number of blocks per dimension - can be int (uniform) or tensor (per-dim)
+    T: Union[torch.Tensor, int] = DEFAULT_BLOCKS_PER_DIM
+    
+    # Bounding box coordinates: array of shape (2, n_dims) with [min, max] corners
+    # None means bounds will be inferred from data
+    initial_bounds: Optional[np.ndarray] = None
+    
+    # Number of points in a block that must be surpassed to be considered active.
+    activity_threshold: int = 0
+    
+    # Block overlap ratio (0-1) for smooth transitions between blocks
+    # None=no overlap, float=uniform overlap, tensor=per-dimension overlap
+    overlap_ratio: Optional[Union[float, torch.Tensor]] = None
+    
+    
 class UniformPartitionManager(BlockManager):
     """
     A class to manage a uniform partitioning of the input space into
@@ -43,38 +60,25 @@ class UniformPartitionManager(BlockManager):
     blocks, assigns points to these blocks, and configures or adjusts
     local models within each block.
 
-    Args:
-        logger (logging.Logger): Logger instance for recording messages and warnings.
-        config (UniformPartitionConfig): A configuration object for this manager
-        initial_bounds (np.ndarray, optional): Initial bounds for the partitioning, shaped as (2, n_features).
-            - The first row contains the lower bounds.
-            - The second row contains the upper bounds.
-            If not provided, it is automatically calculated from the input data.
-        threshold (float, optional): Threshold for determining block activity (default is 0).
-        device_manager:
-
     """
 
     CONFIG_CLASS = UniformPartitionConfig 
 
     
-    def __init__(
-        self,
-        config: UniformPartitionConfig,
-        logger: logging.Logger,
-        device_manager: Optional[DeviceManager] = None,
-        sparse_coding_layer_hook = None
-    ):
+    def __init__(self,
+                 config: UniformPartitionConfig,
+                 logger: logging.Logger,
+                 device_manager: Optional[DeviceManager] = None,
+                 sparse_coding_layer_hook = None
+                 ):
         """
         Initializes the UniformPartitionManager with the provided parameters.
 
         Args:
+            config (UniformPartitionConfig): configuration of the partition manager.
             logger (logging.Logger): Logger instance for recording messages and warnings.
-            T (torch.Tensor): A tensor defining the number of blocks per dimension.
-            n_functions (int): Number of functions or features of interest in each block.
-            initial_bounds (np.ndarray, optional): Initial bounds for the partitioning.
-                If not provided, bounds are automatically derived from the data.
-            threshold (float, optional): Threshold for determining block activity.
+            device_manager (DeviceManager): which memory the tensors should use
+            sparse_coding_layer_hook: function to be attached to all block's sparse coding layers
         """
         super().__init__(config=config, logger=logger, device_manager=device_manager)
         
@@ -87,7 +91,7 @@ class UniformPartitionManager(BlockManager):
                 raise ValueError(f"All values in 'T' (blocks per dimension) must be positive integers. Got: {self.T}")
         
         self.initial_bounds = config.initial_bounds
-        self.threshold = config.threshold
+        self.activity_threshold = config.activity_threshold
 
         self.blocks = None
         self.block_size = None
@@ -98,24 +102,47 @@ class UniformPartitionManager(BlockManager):
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
-        """
-        Finds the block corresponding to a given point.
+        """Finds the block corresponding to a given point.
+
+        This will return one block only, whose scope covers the point.
+        If a point lies exactly at the boundary between two blocks,
+        the block with the highest index is chosen.
 
         Args:
             X (torch.Tensor): A point in the input space.
 
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
+
         """
 
-        for index in np.ndindex(self.blocks.shape):
-            block: PartitionBlock = self.blocks[index]
-            if block.is_point_in_block(x):
-                return block
+        normalized = torch.floor( (x - self.initial_bounds[0]) / self.block_size).long()
 
-        self.logger.warning("Could not find a block for point %s", x)
-        return None
+        # Verificación rápida con operaciones vectorizadas
+        if torch.any(normalized < 0) or torch.any(normalized >= self.T):
+            self.logger.warning("Could not find a block for point %s", x)
+            return None
+    
+        index = tuple(normalized.cpu().numpy())
+        return self.blocks[index]
+        
+    def _is_point_in_block(self,x: torch.Tensor,block:PartitionBlock) -> bool:
+        """
+        Checks if a given point's N-dimensional coordinates fall within this block's `block_scope`.
 
+        Args:
+            point_x (torch.Tensor): The N-dimensional input features of the point to check.
+                                    Expected shape: (n_features,).
+
+        Returns:
+            bool: True if the point is within the block's N-dimensional bounds, False otherwise.
+        """
+        x = x.to(self.device)
+        # Check if all dimensions of point_x are >= lower bound AND <= upper bound
+        return torch.all(block.block_scope[0] <= x) and torch.all(x <= block.block_scope[1])
+        
+
+    
     def _update_block_arrangement(self, X: torch.Tensor) -> None:
         """
         Updates the arrangement of blocks based on the input data.
@@ -126,12 +153,11 @@ class UniformPartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
         """
         
-        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
         if self.initial_bounds is not None and isinstance(self.initial_bounds, np.ndarray):
             # If it's still None at this point, it will be inferred later.
             # If it's already a Tensor, it's fine.
-            self.initial_bounds = torch.from_numpy(self.initial_bounds).to(device)
+            self.initial_bounds = torch.from_numpy(self.initial_bounds).to(self.device)
 
         # If no T is given initially (i.e., self.T is None), or if it's a single integer:
         if self.T is None or isinstance(self.T, int):
@@ -141,33 +167,38 @@ class UniformPartitionManager(BlockManager):
             if isinstance(T_val_to_use, int) and T_val_to_use <= 0:
                 raise ValueError(f"Default or provided integer 'T' ({T_val_to_use}) must be a positive integer.")
             
-            self.T = torch.tensor([T_val_to_use for _ in range(num_features)], device=device)
+            self.T = torch.tensor([T_val_to_use for _ in range(num_features)], device=self.device)
 
         # Ensure T is a tensor for subsequent operations
-        self.T = self.T.to(device)
+        self.T = self.T.to(self.device)
 
         # Validate that all T values are positive after conversion
         if (self.T <= 0).any():
             raise ValueError(f"All values in 'T' (blocks per dimension) must be positive integers. Got: {self.T}")
 
-        
         # When no points and no blocks have been created (first call)
         if self.blocks is None:
             # Check for user given initial bounds
             if self.initial_bounds is None:
                 self.initial_bounds = torch.vstack(
                     [torch.min(X, dim=0).values, torch.max(X, dim=0).values]
-                ).to(device)   # Calculates the range covered by the X vector
+                ).to(self.device)   # Calculates the range covered by the X vector
                 self.logger.warning(
                     f"[{self.__class__.__name__}] No initial bounds provided, using calculated one {self.initial_bounds}"
                 )
             else:
                 # If initial_bounds was provided and is now a tensor, ensure it's on device
-                self.initial_bounds = self.initial_bounds.to(device)
+                self.initial_bounds = self.initial_bounds.to(self.device)
 
             # Space to be partitioned
             delta = self.initial_bounds[1] - self.initial_bounds[0]
-            self.block_size = torch.div(delta, self.T.float()).to(device)
+
+            self.block_size = torch.div(delta, self.T.float()).to(self.device)
+
+            if self.config.overlap_ratio is None:
+                self.overlap = torch.zeros_like(self.block_size,device=self.device)
+            else:
+                self.overlap = self.block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
 
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=object) 
 
@@ -175,16 +206,16 @@ class UniformPartitionManager(BlockManager):
                 self.blocks[index] = PartitionBlock(space_origin = self.initial_bounds[0],
                                                     block_index = index, 
                                                     block_size = self.block_size,
-                                                    device=device)
+                                                    device=self.device)
         else:
-            new_max_x = torch.max(X).to(device)
-            new_min_x = torch.min(X).to(device)
+            new_max_x = torch.max(X).to(self.device)
+            new_min_x = torch.min(X).to(self.device)
 
             # TODO: We need to fix this and reset all blocks with the new box if the new limits are large enough
             self.logger.debug(f"[{self.__class__.__name__}] Blocks already exist. Skipping re-arrangement for new points outside bounds.")
             
 
-    def _map_points(self, X: torch.Tensor, y: torch.Tensor):
+    def _map_points(self, X: torch.Tensor, y: torch.Tensor, expand_scope:bool = True):
         """
         Maps input points to their respective sub-blocks.
 
@@ -192,22 +223,60 @@ class UniformPartitionManager(BlockManager):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             y (torch.Tensor): Target data corresponding to the input points.
         """
+        X = X.to(self.device)
+        y = y.to(self.device)
 
-        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-        X = X.to(device)
+        # Ensure y is always 2D (n_samples, output_dim) for consistent slicing later
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)
+        
+        assigned_points_mask = torch.zeros(X.shape[0], dtype=torch.bool, device=self.device)
 
         # y should be a torch.Tensor. Split it into a list of 1-row tensors for new_point.
         # This handles (N_samples, output_dim) -> list of (1, output_dim)
         # and (N_samples,) -> list of (1,) which PartitionBlock.new_point will squeeze to ().
         y_list = list(y.split(1, dim=0))
 
-        for i in range(X.shape[0]):
-            selected_block = self._find_block(X[i])
-            if selected_block is not None:
-                selected_block.new_point(X[i], y_list[i], i)
-            else:
-                self.logger.warning(f"Point %s at index %s could not be mapped to any block. ", X[i], i)
+        if expand_scope:
+            overlap = self.overlap
+        else:
+            overlap = torch.zeros_like(self.overlap,device=self.device)
+        
+        # Iterate over all blocks in the manager's grid
+        for index in np.ndindex(self.blocks.shape):
+            block = self.blocks[index]
 
+            lower_bound = block.block_scope[0]-self.overlap
+            upper_bound = block.block_scope[1]+self.overlap
+            
+            # Combine both checks to get points within the extended block
+            points_in_extended_block_mask = ( (X >= lower_bound) * (X <= upper_bound) ).all(dim=1)
+            
+            # Get the actual points (X_selected) and their corresponding targets (y_selected)
+            # and original positions (positions_selected)
+            X_selected = X[points_in_extended_block_mask]
+            y_selected = y[points_in_extended_block_mask]
+            # Get original indices of selected points
+            positions_selected = torch.nonzero(points_in_extended_block_mask).squeeze(1).tolist()
+
+            if X_selected.shape[0] > 0:
+                block.append_points(X_selected, y_selected, positions_selected)
+                assigned_points_mask[points_in_extended_block_mask] = True
+
+      
+        # After iterating through all blocks, identify points that were *never* assigned
+        unmapped_points_mask = ~assigned_points_mask
+        
+        # Log warnings for points that were not mapped to *any* block.
+        # This restores the original intent of the warning for out-of-bounds points.
+        if torch.any(unmapped_points_mask):
+            unmapped_X = X[unmapped_points_mask]
+            # Log each unmapped point (or a summary if many)
+            for i, point_x in enumerate(unmapped_X):
+                self.logger.warning(
+                    f"Point {point_x.tolist()} at original index {torch.nonzero(unmapped_points_mask).squeeze(1)[i].item()} "
+                    "could not be mapped to any block."
+                )
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
@@ -253,7 +322,7 @@ class UniformPartitionManager(BlockManager):
                 block.sparse_coding_layer = SparseCodingFactory.create(
                     config = config,
                     logger = self.logger,
-                    device= self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                    device= self.device,
                     parameter_hook=self.sparse_coding_layer_hook,
                     evaluation_func=evaluation_func
             )
@@ -268,7 +337,7 @@ class UniformPartitionManager(BlockManager):
         return [
             self.blocks[index]
             for index in np.ndindex(self.blocks.shape)
-            if self.blocks[index].is_active
+            if self.blocks[index].is_active(self.activity_threshold)
         ]
 
 
@@ -316,9 +385,8 @@ class UniformPartitionManager(BlockManager):
         Returns:
             List[PartitionBlock]: A list of active blocks corresponding to the test data.
         """
-        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-        X = X.to(device)
-        y = y.to(device)
+        X = X.to(self.device)
+        y = y.to(self.device)
 
 
         # 1. Create the new test block structure and transfer learned properties
@@ -329,7 +397,7 @@ class UniformPartitionManager(BlockManager):
         self.blocks = test_blocks
 
         # 2. Map test points into test blocks. This populates new_pb.X, new_pb.y.
-        self._map_points(X, y)
+        self._map_points(X, y, expand_scope=False)
 
         # 3. Prepare target for inference using the transferred amplitude
         self._prepare_test_block_targets(self.blocks) # Pass self.blocks (which is test_blocks temporarily)

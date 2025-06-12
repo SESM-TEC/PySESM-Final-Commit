@@ -69,6 +69,11 @@ def common_device_manager(common_logger):
 
 def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_evaluation_func, common_device_manager):
     """Test GaussianDictLayer's ability to find correct mean with fixed covariance."""
+
+    seed_value = 42  # Puedes elegir cualquier entero
+    torch.manual_seed(seed_value)
+    np.random.seed(seed_value)
+
     n_features = 2
     n_functions = 1
     

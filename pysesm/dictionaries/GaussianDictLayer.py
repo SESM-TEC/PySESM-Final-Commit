@@ -87,7 +87,7 @@ class GaussianDictLayer(DictBaseLayer):
 
 
     def _train_with_strategy(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
-                           dictionary_shape: tuple = None, log_losses: bool = True): # dictionary_shape is None now for DictBaseLayer
+                           log_losses: bool = True): 
         """
         Implements the training strategy for Gaussian dictionary parameters (mu and rho).
         Uses a split training strategy based on `split_mu_rho` config.
@@ -96,16 +96,16 @@ class GaussianDictLayer(DictBaseLayer):
             # Training mu (mean) parameters
             if self.config.mu_epochs > 0:
                 for epoch in range(self.config.mu_epochs):
-                    loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=False)
+                    loss = self._train_epoch(X, y, h, log_losses, mu_flag=True, rho_flag=False)
 
             # Training rho (covariance) parameters
             if self.config.rho_epochs > 0:
                 for epoch in range(self.config.rho_epochs):
-                    loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=False, rho_flag=True)
+                    loss = self._train_epoch(X, y, h, log_losses, mu_flag=False, rho_flag=True)
         else:
             # Joint training of all parameters
             for epoch in range(self.config.epochs):
-                loss = self._train_epoch(X, y, h, dictionary_shape, log_losses, mu_flag=True, rho_flag=True)
+                loss = self._train_epoch(X, y, h, log_losses, mu_flag=True, rho_flag=True)
 
     # --- Override _add_hook_info to provide mu/rho specific info ---
     def _add_hook_info(self, hook_info: dict, **eval_kwargs):

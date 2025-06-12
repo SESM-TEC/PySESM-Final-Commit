@@ -118,8 +118,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         pass
     
     @abstractmethod
-    def _train_with_strategy(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
-                           dictionary_shape: tuple, log_losses: bool):
+    def _train_with_strategy(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, log_losses: bool):
         """
         Implement the specific training strategy for this dictionary type.
         
@@ -131,7 +130,6 @@ class DictBaseLayer(torch.nn.Module, ABC):
             X: Input data
             y: Target data  
             h: Sparse coding vector (detached)
-            dictionary_shape: Shape for dictionary evaluation
             log_losses: Whether to log training losses
         """
         pass
@@ -153,7 +151,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             self.optimizer = self.config.optimizer_factory([self.theta_params], lr=self.config.alpha)
     
     def _train_epoch(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
-                    dictionary_shape: tuple, log_losses: bool, **eval_kwargs):
+                    log_losses: bool, **eval_kwargs):
         """
         Perform a single training epoch.
         
@@ -165,7 +163,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         
         self.optimizer.zero_grad()
         
-        self.dictionary = self.forward(X, dictionary_shape, **eval_kwargs)
+        self.dictionary = self.forward(X, **eval_kwargs)
         
         # Calculate prediction using the current dictionary and h
         # IMPORTANT: h should already be detached to prevent gradient conflicts
@@ -183,8 +181,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             hook_info = {
                 'epoch': len(self.losses),
                 'theta_params': self.theta_params.clone().detach(),
-                'loss': loss.item(),
-                'dictionary_shape': dictionary_shape
+                'loss': loss.item()
             }
             # Subclasses can add more specific info to hook_info
             self._add_hook_info(hook_info, **eval_kwargs)
@@ -211,7 +208,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             self.dictionary = self._evaluate_dictionary(X, self.theta_params)
     
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
-                   dictionary_shape: tuple = None, log_losses: bool = True) -> None:
+                    log_losses: bool = True) -> None:
         """
         Public interface for training the dictionary.
         
@@ -222,18 +219,16 @@ class DictBaseLayer(torch.nn.Module, ABC):
             X: Input data
             y: Target data
             h: Sparse coding vector (should be detached)
-            dictionary_shape: Optional shape for dictionary evaluation
             log_losses: Whether to log training losses
         """
-        self._train_with_strategy(X, y, h, dictionary_shape, log_losses)
+        self._train_with_strategy(X, y, h, log_losses)
     
-    def forward(self, X: torch.Tensor, dictionary_shape: tuple = None, **kwargs) -> torch.Tensor:
+    def forward(self, X: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Evaluate dictionary at given points.
         
         Args:
             X: Input coordinates
-            dictionary_shape: Optional shape for output
             **kwargs: Additional evaluation arguments
             
         Returns:
@@ -241,4 +236,4 @@ class DictBaseLayer(torch.nn.Module, ABC):
         """
         X = X.to(self.device)
         evaluated_dictionary = self._evaluate_dictionary(X, self.theta_params, **kwargs)
-        return evaluated_dictionary if not dictionary_shape else evaluated_dictionary.view(dictionary_shape)
+        return evaluated_dictionary

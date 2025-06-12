@@ -1,120 +1,207 @@
-from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
+# tests/unit_test/sparse_coding/ista_layer_test.py
+import pytest
 import torch
 import logging
 import numpy as np
 from scipy.stats import multivariate_normal
 
-def test_ista_perfect_dictionary():
-    """Test ISTA optimization with a perfect unnormalized Gaussian dictionary"""
-    # Setup
-    n_functions = 1
-    logger = logging.getLogger('test')
+
+# Import the specific layer and config
+from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
+
+# Import the base test class
+from base_sparse_coding_test import BaseSparseCodingTest
+from pysesm.enums.DeviceTargetEnum import DeviceTarget # For device manager
+
+# --- Concrete Tests for ISTALayer ---
+
+class TestISTALayer(BaseSparseCodingTest):
+    """
+    Concrete tests for ISTALayer, inheriting common programming correctness tests
+    from BaseSparseCodingTest.
+    """
     
-    # Create synthetic data from a known 2D Gaussian
-    n_samples = 100
-    mean = np.array([0.5, -0.3])
-    cov = np.array([[1.0, 0.3], [0.3, 0.8]])
-    
-    # Generate random points
-    X = np.random.multivariate_normal(mean, cov, n_samples)
-    
-    # Get normalized Gaussian values
-    gaussian_values = multivariate_normal.pdf(X, mean=mean, cov=cov)
-    # Get value at the mean for denormalization
-    peak_value = multivariate_normal.pdf(mean, mean=mean, cov=cov)
-    # Denormalize by dividing by value at mean - this gives us exp(-0.5(x-μ)'Σ⁻¹(x-μ))
-    unnormalized_gaussian = gaussian_values / peak_value
-    
-    dictionary = torch.tensor(unnormalized_gaussian, dtype=torch.float32).reshape(-1, 1)
-    
-    # Target y should be exactly dictionary when h=1
-    y = dictionary.clone()
-    
-    # Initialize ISTA layer
-    ista = ISTALayer(ISTAConfig(n_functions=n_functions,
-                                epochs=100,
-                                alpha=0.1,
-                                lambd=0.00001,  # Small lambda since we want h≈1
-                                step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-                                power_iterations=10,                                
-                                criterion=torch.nn.MSELoss()),
-                     evaluation_func=lambda d, h: torch.matmul(d, h),
-                     logger=logger)
+    @pytest.fixture
+    def layer_factory(self, common_logger, common_device_manager, common_evaluation_func):
+        """
+        Factory for ISTALayer instances. This fixture provides the specific
+        implementation details needed by the abstract BaseSparseCodingTest.
+        """
+        class ISTALayerFactory:
+            config_class = ISTAConfig
+            def create(self, config,**kwargs):
+                return ISTALayer(
+                    config=config,
+                    evaluation_func=common_evaluation_func,
+                    logger=common_logger,
+                    device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                    **kwargs
+                )
+        return ISTALayerFactory()
+
+    # --- ISTA-specific Programming Stress Tests ---
+
+    def test_ista_h_initialization_strategy(self, layer_factory):
+        """
+        Verify ISTA's specific `h` initialization: one 1.0, rest 0.0, if n_functions > 0.
+        This tests the custom initialization logic within ISTALayer.setup().
+        """
+        n_functions_test = 5
+        config = layer_factory.config_class(n_functions=n_functions_test)
+        layer = layer_factory.create(config)
+
+        # Check if exactly one element is 1.0 and others are 0.0
+        # This assumes the specific initialization logic in ISTALayer's setup()
+        assert torch.sum(layer.h == 1.0).item() == 1, \
+            "Expected exactly one element of h to be 1.0 for ISTA default init"
+        assert torch.sum(layer.h == 0.0).item() == (n_functions_test - 1), \
+            "Expected remaining elements of h to be 0.0 for ISTA default init"
+        assert layer.h.requires_grad is False # Still no gradients
+
+    def test_ista_h_update_logic_simple_case(self, layer_factory, sparse_coding_data_generator):
+        """
+        A simplified test to ensure the `h` update logic (gradient step + soft thresholding)
+        is executed without errors and alters `h` as expected for a single step.
+        This does not test numerical convergence, but operation flow.
+        """
+        n_samples = 10
+        n_features = 2
+        n_functions = 3
         
-    ista.h.data = torch.tensor([[0.5]])  # Start h below target
-    
-    # Test optimization
-    for _ in range(100):
-        ista.train_step(y, dictionary)
-    
-    # Verify h converges close to 1
-    final_h = ista.h.item()
-    assert abs(final_h - 1.0) < 0.1, f"h should converge to 1, got {final_h}"
+        dictionary_D, _, target_y = sparse_coding_data_generator(n_samples, n_features, n_functions)
+        
+        # Configure with a manual alpha for predictable step size
+        config = layer_factory.config_class(
+            epochs=1, # Only one epoch
+            alpha=0.1, # Manual step size
+            lambd=0.01, # Small lambda for mild shrinkage
+            step_size_method=StepSizeMethod.MANUAL,
+            n_functions=n_functions
+        )
+        layer = layer_factory.create(config)
+        
+        initial_h = layer.h.data.clone() # Store initial h
+        
+        layer.train_step(target_y, dictionary_D) # Perform one step
+        
+        # Verify h has changed
+        assert not torch.allclose(layer.h.data, initial_h), "h should have been updated after one train step"
+        assert layer.h.requires_grad is False, "`h` should remain requires_grad=False after update"
 
-def test_ista_sparse_selection():
-    """Test ISTA's ability to select correct unnormalized Gaussian when data clearly comes from it"""
-    logger = logging.getLogger('test')
 
-    rndseed = 63
-    torch.manual_seed(rndseed)  # PyTorch seed
-    np.random.seed(rndseed)     # NumPy seed
-    
-     # Create random uniform points in [-2, 2] x [-2, 2]
-    n_samples = 100
-    X = torch.rand(n_samples, 2) * 4 - 2  # This scales [0,1] to [-2,2]
-    
-    # Define three different Gaussians
-    mean1 = np.array([0.5, -0.3])    # Target Gaussian
-    mean2 = np.array([-1.5, 1.0])    # Distractor 1
-    mean3 = np.array([1.5, 1.0])     # Distractor 2
-    
-    cov1 = np.array([[0.1, 0.03], [0.03, 0.3]])
-    cov2 = np.array([[0.1, -0.01], [-0.01, 0.1]])
-    cov3 = np.array([[0.1, 0.0], [0.0, 0.1]])
-    
-    means = [mean1, mean2, mean3]
-    covs = [cov1, cov2, cov3]
-    n_functions = len(means)
+        
 
-    # Create dictionary with three Gaussian components
-    dictionary = torch.zeros((n_samples, 3), dtype=torch.float32)
-    
-    # Evaluate each Gaussian at all points
-    for i, (mean, cov) in enumerate(zip(means, covs)):
-        values = multivariate_normal.pdf(X.numpy(), mean=mean, cov=cov)
-        peak = multivariate_normal.pdf(mean, mean=mean, cov=cov)
-        dictionary[:, i] = torch.tensor(values / peak, dtype=torch.float32)
-    
-    # Target y should match first Gaussian only
-    y = dictionary[:, 0].clone().unsqueeze(-1)
-    
-    # Initialize ISTA layer
-    ista = ISTALayer(ISTAConfig(n_functions=n_functions,
-                                epochs=100,
-                                alpha=0.1,
-                                lambd=0.00001,  # Small lambda since we want h≈1
-                                step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-                                power_iterations=10,                                
-                                criterion=torch.nn.MSELoss()),
-                     evaluation_func=lambda d, h: torch.matmul(d, h),
-                     logger=logger)
-    
-    # Initialize h with random values as a column vector
-    ista.h.data = torch.ones(n_functions, 1) / n_functions
-    
-    # Run optimization
-    for _ in range(400):
-        ista.train_step(y, dictionary)
-    
-    # Verify results
-    h_final = ista.h.detach()
-    
-    # First component should be close to 1
-    assert abs(h_final[0, 0] - 1.0) < 0.2, f"First component should be close to 1, got {h_final[0, 0]}"
-    
-    # Other components should be close to 0
-    assert torch.all(torch.abs(h_final[1:, 0]) < 0.2), \
-        f"Other components should be close to 0, got {h_final[1:, 0]}"
+    def test_ista_perfect_dictionary(self):
+        """Test ISTA optimization with a perfect unnormalized Gaussian dictionary"""
+        # Setup
+        n_functions = 1
+        logger = logging.getLogger('test')
+
+        # Create synthetic data from a known 2D Gaussian
+        n_samples = 100
+        mean = np.array([0.5, -0.3])
+        cov = np.array([[1.0, 0.3], [0.3, 0.8]])
+
+        # Generate random points
+        X = np.random.multivariate_normal(mean, cov, n_samples)
+
+        # Get normalized Gaussian values
+        gaussian_values = multivariate_normal.pdf(X, mean=mean, cov=cov)
+        # Get value at the mean for denormalization
+        peak_value = multivariate_normal.pdf(mean, mean=mean, cov=cov)
+        # Denormalize by dividing by value at mean - this gives us exp(-0.5(x-μ)'Σ⁻¹(x-μ))
+        unnormalized_gaussian = gaussian_values / peak_value
+
+        dictionary = torch.tensor(unnormalized_gaussian, dtype=torch.float32).reshape(-1, 1)
+
+        # Target y should be exactly dictionary when h=1
+        y = dictionary.clone()
+
+        # Initialize ISTA layer
+        ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                    epochs=100,
+                                    alpha=0.1,
+                                    lambd=0.00001,  # Small lambda since we want h≈1
+                                    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+                                    power_iterations=10,                                
+                                    criterion=torch.nn.MSELoss()),
+                         evaluation_func=lambda d, h: torch.matmul(d, h),
+                         logger=logger)
+
+        ista.h.data = torch.tensor([[0.5]])  # Start h below target
+
+        # Test optimization
+        for _ in range(100):
+            ista.train_step(y, dictionary)
+
+        # Verify h converges close to 1
+        final_h = ista.h.item()
+        assert abs(final_h - 1.0) < 0.1, f"h should converge to 1, got {final_h}"
+
+    def test_ista_sparse_selection(self):
+        """Test ISTA's ability to select correct unnormalized Gaussian when data clearly comes from it"""
+        logger = logging.getLogger('test')
+
+        rndseed = 63
+        torch.manual_seed(rndseed)  # PyTorch seed
+        np.random.seed(rndseed)     # NumPy seed
+
+         # Create random uniform points in [-2, 2] x [-2, 2]
+        n_samples = 100
+        X = torch.rand(n_samples, 2) * 4 - 2  # This scales [0,1] to [-2,2]
+
+        # Define three different Gaussians
+        mean1 = np.array([0.5, -0.3])    # Target Gaussian
+        mean2 = np.array([-1.5, 1.0])    # Distractor 1
+        mean3 = np.array([1.5, 1.0])     # Distractor 2
+
+        cov1 = np.array([[0.1, 0.03], [0.03, 0.3]])
+        cov2 = np.array([[0.1, -0.01], [-0.01, 0.1]])
+        cov3 = np.array([[0.1, 0.0], [0.0, 0.1]])
+
+        means = [mean1, mean2, mean3]
+        covs = [cov1, cov2, cov3]
+        n_functions = len(means)
+
+        # Create dictionary with three Gaussian components
+        dictionary = torch.zeros((n_samples, 3), dtype=torch.float32)
+
+        # Evaluate each Gaussian at all points
+        for i, (mean, cov) in enumerate(zip(means, covs)):
+            values = multivariate_normal.pdf(X.numpy(), mean=mean, cov=cov)
+            peak = multivariate_normal.pdf(mean, mean=mean, cov=cov)
+            dictionary[:, i] = torch.tensor(values / peak, dtype=torch.float32)
+
+        # Target y should match first Gaussian only
+        y = dictionary[:, 0].clone().unsqueeze(-1)
+
+        # Initialize ISTA layer
+        ista = ISTALayer(ISTAConfig(n_functions=n_functions,
+                                    epochs=100,
+                                    alpha=0.1,
+                                    lambd=0.00001,  # Small lambda since we want h≈1
+                                    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+                                    power_iterations=10,                                
+                                    criterion=torch.nn.MSELoss()),
+                         evaluation_func=lambda d, h: torch.matmul(d, h),
+                         logger=logger)
+
+        # Initialize h with random values as a column vector
+        ista.h.data = torch.ones(n_functions, 1) / n_functions
+
+        # Run optimization
+        for _ in range(400):
+            ista.train_step(y, dictionary)
+
+        # Verify results
+        h_final = ista.h.detach()
+
+        # First component should be close to 1
+        assert abs(h_final[0, 0] - 1.0) < 0.2, f"First component should be close to 1, got {h_final[0, 0]}"
+
+        # Other components should be close to 0
+        assert torch.all(torch.abs(h_final[1:, 0]) < 0.2), \
+            f"Other components should be close to 0, got {h_final[1:, 0]}"
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
 SSESM Base Class
 
-Provides the basic functionality of the Sequential SESM.
+Provides the sequential version of SESM
 
 Authors: The SESM Team 
 
@@ -31,19 +31,18 @@ class SSESMConfig(SESMConfig):
     Configuration for SSESM model, extending base SESMConfig.
     
     Attributes:
-        permutation_times (int): Number of times to permute the dataset for training
-                                 in the sequential partial fit loop.
-        dfngroup (Optional[Any]): Unclear purpose. Placeholder for potentially grouping
-                                  dictionary functions or data. Consider removing if unused.
+        permutation_times (int): Number of times to permute the dataset for
+                                 training in the sequential partial fit loop.
     """
     permutation_times: int = 1
 
 
 class SSESM(SESM):
     """
-    A PyTorch module extending the SESM architecture to implement a surrogate model
-    using a sequential and block-partitioned approach. This class is designed for
-    function approximation and surrogate modeling tasks with dynamic sub-block partitioning.
+    A PyTorch module extending the SESM architecture to implement
+    a surrogate model using a sequential and block-partitioned
+    approach. This class is designed for function approximation and
+    surrogate modeling tasks with dynamic sub-block partitioning.
     """
 
     CONFIG_CLASS = SSESMConfig
