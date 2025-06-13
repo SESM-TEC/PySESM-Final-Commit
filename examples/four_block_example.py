@@ -204,9 +204,11 @@ bsesm_config = BSESMConfig(
 )
 
 
+which_sesm="bsesm"
+
 # SESM CONFIGURATION
 experiment = {
-    "config": bsesm_config,
+    "config": bsesm_config if which_sesm=="bsesm" else ssesm_config,
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
@@ -280,23 +282,27 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 folder_name = f"results_one_block_{experiment['hyp_set']}"
 
 # INSTANTIATE THE MODELS
-#ssesm_model = SSESM(**experiment,logger=logger)
-bsesm_model = BSESM(**experiment,logger=logger)
+if which_sesm=="bsesm":
+    model = BSESM(**experiment,logger=logger)
+else:
+    model = SSESM(**experiment,logger=logger)
+
 
 try:
     # TRAIN AND TEST THE ALL MODELS
-    for model in [bsesm_model]: # ssesm_model
-        logging.info("Training model {}".format(model.__class__.__name__))
-        model_folder = f"{folder_name}_{model.__class__.__name__}"
-        model.partial_fit(X_train, y_train)
+    logging.info("Training model {}".format(model.__class__.__name__))
+    model_folder = f"{folder_name}_{model.__class__.__name__}"
+    model.partial_fit(X_train, y_train)
+    if which_sesm=="ssesm":
         show_all_h(model, logger)
-        y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
+    y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
+    
+    logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-        logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
+    plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
-        plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
-
-    plt.show(block=True)  
+    plt.show(block=True)
+    
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')
