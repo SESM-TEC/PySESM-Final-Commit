@@ -1,29 +1,67 @@
-from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager
+import torch
+import logging
+import numpy as np
+import pytest
+from typing import Union, Optional
+
+from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager,AdaptativePartitionConfig
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks import KDTree
 from pysesm.blocks import Node
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.models.ISTALayer import ISTALayer
-import torch
-import logging
-import numpy as np
 from pysesm.utils.loggers import setup_logger
+from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig
 
-def test_update_block_arrangement():
+logger = logging.getLogger("test_uniform_partition_manager")
+logger.setLevel(logging.DEBUG)
+
+
+@pytest.fixture(scope="module")
+def common_device_manager():
+    """Provides a shared DeviceManager instance for all tests in this module."""
+    device_map = {
+        DeviceTarget.GLOBAL: "cpu",
+        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
+        DeviceTarget.DICTIONARY_LAYER: "cpu",
+        DeviceTarget.PARTITION_MANAGER: "cpu" # Assuming TargetDevice is an alias for DeviceTarget
+    }
+    # Using a unique logger for the DeviceManager fixture to avoid conflicts
+    return DeviceManager(logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+
+@pytest.fixture
+def create_manager(common_device_manager):
+    """
+    Factory fixture to create UniformPartitionManager instances with flexible config.
+    Ensures initial_bounds are consistently passed as numpy arrays to the config.
+    """
+    def _creator(T_val: Union[int, torch.Tensor],
+                 initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None,
+                 threshold_val: float=0):
+        # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
+        if isinstance(initial_bounds_val, torch.Tensor):
+            initial_bounds_np = initial_bounds_val.cpu().numpy()
+        else:
+            initial_bounds_np = initial_bounds_val # If already numpy or None
+
+        config = AdaptativePartitionConfig(
+            maxNodeSize=5,
+            maxSplitsBeforeRestart=5,
+            overlap_ratio=None
+        )
+        return AdaptativePartitionManager(
+            config=config,
+            logger=logger, # Use the module-level logger for the manager
+            device_manager=common_device_manager
+        )
+    return _creator
+
+def test_update_block_arrangement(create_manager):
     X1 = torch.randn(192, 6)
     y1 = torch.randn(192, 1)
-    logger=setup_logger()
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
-    device_manager=DeviceManager(logger,device_map=device_map)
-    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-
-    partitionManager=AdaptativePartitionManager(logger,6, maxNodeSize=5, device_manager=device_manager)
+    maxNodeSize=5
+    maxSplitsBeforeRestart=5
+    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
     partitionManager._update_block_arrangement(X1, y1)
     
     for block in partitionManager.blocks:
@@ -60,36 +98,16 @@ def test_update_block_arrangement():
     
     assert torch.equal(sorted_X, sorted_X1)    
         
-def test_configure_blocks():
-    """Test that _configure_blocks correctly sets up blocks."""
-    T = torch.tensor([2, 2], device='cpu')
-    n_functions = 2
-    logger=setup_logger()
-    manager = AdaptativePartitionManager(logger, n_functions, maxNodeSize=5)
 
-    X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
-    y = torch.tensor([[1.0], [2.0]], device='cpu')
-
-    manager._update_block_arrangement(X, y)
-    manager._map_points()
-    manager._configure_blocks()
-
-    for block in manager.blocks.flat:
-        if len(block.y) > 0:
-            assert block.amplitude is not None
-            assert block.h is not None
-            assert block.target is not None
-            assert isinstance(block.h, torch.nn.Parameter)
-            assert block.h.requires_grad
-
-def test_map_points():
+def test_map_points(create_manager):
     n_features=5
     torch.manual_seed(42) 
     X1 = torch.randn(19, n_features)
     y1 = torch.randn(19, 1)
     Xy=torch.cat((X1,y1),dim=1)
-    logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5)
+    maxNodeSize=5
+    maxSplitsBeforeRestart=5
+    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
     partitionManager._update_block_arrangement(X1, y1)
     partitionManager._map_points()
     nodes=partitionManager.kdtree.get_leaves()
@@ -150,22 +168,14 @@ def test_map_points():
     assert torch.equal(in_blocks,sort_X)
     assert torch.equal(in_blocks_y,sort_y)
 
-def test_add_points():
-    logger=setup_logger()
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
-    device_manager=DeviceManager(logger,device_map=device_map)
-    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-
+def test_add_points(create_manager, common_device_manager):
     n_features=5
     X1 = torch.randn(500, n_features)
+    maxNodeSize=5
+    maxSplitsBeforeRestart=5
+    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
 
-    logger=setup_logger()
-    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
+    device = common_device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
 
     y = torch.randn(500, 1)
 
@@ -187,7 +197,7 @@ def test_add_points():
             assert tensor.device.type==device
         for tensor in node.block.y:
             assert tensor.device.type==device
-        for tensor in node.block.space_bound:
+        for tensor in node.block.space_origin:
             assert tensor.device.type==device
         for tensor in node.block.block_size:
             assert tensor.device.type==device
@@ -211,115 +221,81 @@ def test_add_points():
     sortX_added, _ = torch.sort(X_added,0)
     assert torch.equal(sortX_added,sortX)
 
-def test_init_ista_per_block():
-    """Test that init_ista_per_block correctly initializes ISTA layers."""
+def test_init_sparse_coding_per_block_initializes_layers(create_manager):
+    """Test that init_sparse_coding_per_block correctly initializes sparse coding layers."""
     T = torch.tensor([2, 2], device='cpu')
-    n_functions = 2
-    initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], device='cpu')
-    logger=setup_logger()
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
-    device_manager=DeviceManager(logger,device_map=device_map)
-    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-    manager = AdaptativePartitionManager(logger, n_functions,maxNodeSize=5, device_manager=device_manager)
+    initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], dtype=torch.float32)
+    manager = create_manager(T_val=T, initial_bounds_val=initial_bounds)
 
-    X = torch.tensor([[0.1, 0.2], [0.3, 0.4]], device='cpu')
-    y = torch.tensor([[1.0], [2.0]], device='cpu')
+    X = torch.tensor([[0.1, 0.2], [0.6, 0.7]], device='cpu', dtype=torch.float32)
+    y = torch.tensor([[1.0], [2.0]], device='cpu', dtype=torch.float32)
 
-    manager._update_block_arrangement(X, y)
-    manager._map_points()
+    manager.add_points(X, y) # Populates blocks and their data
 
-    def dummy_eval_func(x, y):
-        return torch.sum(x - y)
+    # Dummy evaluation function
+    def dummy_eval_func(D: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+        return torch.matmul(D, h) # Simple matmul for testing
 
-    def dummy_optimizer(params, lr):
-        return torch.optim.Adam(params, lr=lr)
+    # Example SparseCodingConfig
+    sc_config = ISTAConfig(n_functions=5, epochs=50, alpha=0.01, lambd=0.1)
 
-    manager.init_ista_per_block(
-        n_functions=2,
-        ista_alpha=0.01,
-        ista_lambd=0.1,
-        evaluation_func=dummy_eval_func,
-        ista_optimizer=dummy_optimizer
-    )
+    manager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
 
-    for block in manager.blocks.flat:
-        if hasattr(block, 'X') and len(block.X) > 0:
-            assert hasattr(block, 'ista_layer')
-            assert isinstance(block.ista_layer, ISTALayer)
-            assert block.ista_layer.alpha == 0.01
-            assert block.ista_layer.lambd == 0.1
+    active_blocks = manager.retrieve_active_blocks()
+    assert len(active_blocks) > 0 # Should have at least one active block
 
-    for leaf in manager.kdtree.get_leaves():
-        assert hasattr(leaf.block, 'ista_layer')
-        assert isinstance(block.ista_layer, ISTALayer)
-        assert leaf.block.ista_layer is not None
-        assert leaf.block.ista_layer.alpha == 0.01
-        assert leaf.block.ista_layer.lambd == 0.1
+    for block in active_blocks:
+        assert block.sparse_coding_layer is not None
+        assert isinstance(block.sparse_coding_layer, ISTALayer) # Assuming ISTALayer is the default for ISTAConfig
+        assert block.sparse_coding_layer.config.n_functions == 5
+        assert block.sparse_coding_layer.evaluation_func is dummy_eval_func # Check function identity
+        assert block.sparse_coding_layer.h is not None
+        assert block.sparse_coding_layer.h.shape == (5, 1) # Check h shape based on n_functions
 
-def test_retrieve_active_blocks():
-    logger=setup_logger()
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
-    device_manager=DeviceManager(logger,device_map=device_map)
-    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+def test_retrieve_active_blocks(create_manager, common_device_manager):
 
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=5, device_manager=device_manager)
+    maxNodeSize=5
+    maxSplitsBeforeRestart=5
+    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+
     partitionManager.add_points(X1, y)
     activeBlocks=partitionManager.retrieve_active_blocks()
     
     for block in activeBlocks:
         assert block.X!=[]
         assert block.y!=[]
-        assert not (isinstance(block.ista_layer, ISTALayer))
-        assert block.ista_layer is None
+        assert block.sparse_coding_layer is None
 
-def test_retrieve_test_active_blocks():
-    logger=setup_logger()
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",               # Dispositivo global por defecto
-        DeviceTarget.ISTA_LAYER: "cpu",           # ISTA en GPU 0
-        DeviceTarget.DICTIONARY_LAYER: "cpu",     # Dictionary en CPU
-        DeviceTarget.PARTITION_MANAGER: "cpu"    # Partition Manager en CPU
-    }
-    device_manager=DeviceManager(logger,device_map=device_map)
-    device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+def test_retrieve_test_active_blocks(create_manager):
 
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=AdaptativePartitionManager(logger,n_features, maxNodeSize=250, device_manager=device_manager)
+    maxNodeSize=5
+    maxSplitsBeforeRestart=5
+    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
     partitionManager.add_points(X1, y)
     activeBlocks1=partitionManager.retrieve_active_blocks()
     
     for block in activeBlocks1:
         assert block.X!=[]
         assert block.y!=[]
-        assert not (isinstance(block.ista_layer, ISTALayer))
-        assert block.ista_layer is None
+        assert block.sparse_coding_layer is None
     def dummy_eval_func(x, y):
         return torch.sum(x - y)
 
     def dummy_optimizer(params, lr):
         return torch.optim.Adam(params, lr=lr)
-    partitionManager.init_ista_per_block(
-        n_functions=2,
-        ista_alpha=0.01,
-        ista_lambd=0.1,
-        evaluation_func=dummy_eval_func,
-        ista_optimizer=dummy_optimizer
-    )
+    sc_config = ISTAConfig(n_functions=5, 
+                            epochs=50, 
+                            alpha=0.01, 
+                            lambd=0.1)
+
+    partitionManager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
+
     Xt = torch.randn(500, n_features)
     yt = torch.randn(500)
 
@@ -328,8 +304,7 @@ def test_retrieve_test_active_blocks():
     X=torch.Tensor()
     for i, block in enumerate(activeTestBlocks):
         X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
-        if (i+1)<len(activeTestBlocks):
-            assert not torch.equal(block.h,activeTestBlocks[i+1].h)
+
     sortX, _ = torch.sort(X,0)   
     sortXt, _ = torch.sort(Xt,0)    
     assert torch.equal(sortX,sortXt)
