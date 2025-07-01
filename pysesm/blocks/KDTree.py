@@ -7,24 +7,41 @@ Provides a kd-tree data structure.
 
 Author: Hender Valdivia
 '''
+from typing import Callable
 
 from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from typing import Union
+from pysesm.blocks.SESMData import SESMData
 import torch
 
+class dummyData():
+    def __init__(self, X: torch.Tensor, y: torch.Tensor):
+        self.X=X
+        self.y=y
+        self.split_point=None
+        self.block=None
+        self.test_data=None
+        self.test_y=None
+        self.dim=0
+        self._updateBounds()
+    def _updateBounds(self):
+        "Update the bounds to fit the internal data"
+        upperBounds, _ = torch.max(self.X, dim=0)
+        lowerBounds, _ = torch.min(self.X, dim=0)
+        self.bounds = torch.stack((upperBounds,lowerBounds),dim=0)   
+
 class KDTree():
-    def __init__(self, data: torch.Tensor, maxNodeSize: int = 500, device=None):
+    def __init__(self, data: torch.Tensor, y: torch.Tensor, maxNodeSize: int = 500, data_wrapper: Callable = dummyData,device=None):
         """
         data (Tensor): Tensor holding all data points
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
         device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
-        self.root = Node(data.to(self.device))
-        self.maxNodeSize=maxNodeSize
-        self.total_nodes=1
-        
+        self.root: Node = Node(data.to(self.device), y.to(self.device), data_wrapper)
+        self.maxNodeSize: int = maxNodeSize
+        self.data_wrapper=data_wrapper
+
         self._splitDataInNodes(self.root)
         
     def _splitDataInNodes(self, node: Node) -> None:
@@ -33,21 +50,21 @@ class KDTree():
         It stops when the children nodes have maxNodeSize points or less
         """
         
-        if node is None or node.data.size(0) <= self.maxNodeSize:
+        if node is None or node.Data.X.size(0) <= self.maxNodeSize:
             return      
         # Calculate median only for the dimension we need
-        node.split_point = torch.median(node.data[:,node.dim]).item()
+        node.split_point = torch.median(node.Data.X[:,node.Data.dim]).item()
 
         # Create combined data (necessary for interface)
-        data=torch.cat((node.data, node.y), dim=1)
+        data=torch.cat((node.Data.X, node.Data.y), dim=1)
 
         # Create mask of data over threshold only once and reuse its inverse
-        mask = data[:, node.dim] >= node.split_point
+        mask = data[:, node.Data.dim] >= node.split_point
         not_mask = ~mask
-        node.right = Node(data[mask])
-        node.left = Node(data[not_mask])        
+        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper)
+        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper)        
 
-        node.data = None
+        node.Data.data = None
         node.bounds = None
         node.block=None
         
@@ -63,10 +80,10 @@ class KDTree():
         """
         if node is None:
             node=self.root
-        if node.data is None:
-            if x[node.dim].item() >= node.split_point:
+        if node.Data.X is None:
+            if x[node.Data.dim].item() >= node.split_point:
                 return self._find_node(x, node.right)
-            if x[node.dim].item() < node.split_point:
+            if x[node.Data.dim].item() < node.split_point:
                 return self._find_node(x, node.left)
         else:
             return node
@@ -84,22 +101,22 @@ class KDTree():
 
         x=x.unsqueeze(0)
         y=y.unsqueeze(0)
-        node.data=torch.cat((node.data,x))
-        node.y=torch.cat((node.y,y))
+        node.Data.X=torch.cat((node.Data.X,x))
+        node.Data.y=torch.cat((node.Data.y,y))
 
-        if node.data.size()[0] > self.maxNodeSize:
+        if node.Data.X.size()[0] > self.maxNodeSize:
             self._splitDataInNodes(node)
 
-            left_bound=node.left.bounds[0]-node.left.bounds[1]
-            right_bound=node.right.bounds[0]-node.right.bounds[1]
-            node.left.block=PartitionBlock(
-                node.left.bounds[1],
+            left_bound=node.left.Data.bounds[0]-node.left.Data.bounds[1]
+            right_bound=node.right.Data.bounds[0]-node.right.Data.bounds[1]
+            node.left.Data.block=PartitionBlock(
+                node.left.Data.bounds[1],
                 (1,),
                 left_bound,
                 device=self.device)
             
-            node.right.block=PartitionBlock(
-                node.right.bounds[1],
+            node.right.Data.block=PartitionBlock(
+                node.right.Data.bounds[1],
                 (2,),
                 right_bound,
                 device=self.device)
@@ -135,10 +152,10 @@ class KDTree():
         Args:
             node (Node): Starting node, usually the root node
         """
-        if node.test_data is None or node.data is not None:
+        if node.test_data is None or node.Data.data is not None:
             return
         test_Data=torch.cat((node.test_data,node.test_y),dim=1)
-        mask = test_Data[:, node.dim] >= node.split_point
+        mask = test_Data[:, node.Data.dim] >= node.split_point
 
         node.right.test_data = test_Data[mask][:,:-1]
         node.right.test_y = test_Data[mask][:,-1:]

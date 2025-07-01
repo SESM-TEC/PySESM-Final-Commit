@@ -8,30 +8,24 @@ Provides a kd-tree node
 Author: Hender Valdivia
 '''
 
+from typing import Callable
 import torch
-from pysesm.blocks.KdSESMData import KdSESMData
+from pysesm.blocks.SESMData import SESMData
 
 class Node():
-    def __init__(self, Data : torch.Tensor, parent = None):
+    def __init__(self, Data: torch.Tensor, y: torch.Tensor, data_wrapper: Callable, parent=None):
         """
-        This is a node of a tree, it has standard node attributes:
-            data: Dataset holding all but the last columns of the given Data
-            y:    Labels, corresponding to the last column of the given Data
-            right, left: Right and left child nodes
-            
-        Aditionally, nodes have some attributes needed for its specific use:
-        
-            split_point (float): Limit value in the greatestVarDim that is used to split the data. 
-            dim (int): Dimension where the data has the greatest variance
-            bounds (torch.Tensor): Space limits of each dimension.  
-        """       
-        self.Data=KdSESMData(Data)
-        self.left=None
-        self.right=None 
-        self.parent=parent
+        Args:
+            Data (torch.Tensor): Input dataset.
+            parent (Node): Optional parent node.
+            data_wrapper (Callable): A class or function to wrap/process the Data (e.g., KdSESMData).
+        """
+        self.Data: Callable = data_wrapper(Data, y)
+        self.left: Node = None
+        self.right: Node = None 
+        self.parent: Node = parent
 
         
-    def __getattr__(self, attribute):
-        return getattr(self.Data, attribute)
+    
 
     
