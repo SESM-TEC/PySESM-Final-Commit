@@ -57,8 +57,8 @@ def create_manager(common_device_manager):
     return _creator
 
 def test_update_block_arrangement(create_manager):
-    X1 = torch.randn(192, 6)
-    y1 = torch.randn(192, 1)
+    X1 = torch.randn(19, 6)
+    y1 = torch.randn(19, 1)
     maxNodeSize=5
     maxSplitsBeforeRestart=5
     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
@@ -71,15 +71,15 @@ def test_update_block_arrangement(create_manager):
     leaves=partitionManager.kdtree.get_leaves()
     X=torch.Tensor()
     for leaf in leaves:
-        X=torch.cat((leaf.data, X))
+        X=torch.cat((leaf.Data.X, X))
     
     sorted_X, _ =torch.sort(X,0)
     sorted_X1, _ =torch.sort(X1,0)
     
     assert torch.equal(sorted_X, sorted_X1)    
 
-    X2 = torch.randn(192, 6)
-    y2 = torch.randn(192, 1)
+    X2 = torch.randn(19, 6)
+    y2 = torch.randn(19, 1)
     partitionManager._update_block_arrangement(X2,y2)
     
     X_added=torch.cat((X1,X2))
@@ -91,7 +91,7 @@ def test_update_block_arrangement(create_manager):
     leaves=partitionManager.kdtree.get_leaves()
     X=torch.Tensor()
     for leaf in leaves:
-        X=torch.cat((leaf.data, X))
+        X=torch.cat((leaf.Data.X, X))
     
     sorted_X, _ =torch.sort(X,0)
     sorted_X1, _ =torch.sort(X_added,0)
@@ -114,11 +114,11 @@ def test_map_points(create_manager):
     in_blocks=[]
     in_blocks_y=[]
     for node in nodes:
-        assert node.block.X != []
-        assert node.block.y != []
-        for x in node.block.X:
+        assert node.Data.block.X != []
+        assert node.Data.block.y != []
+        for x in node.Data.block.X:
             in_blocks.append(x)
-        for yi in node.block.y:
+        for yi in node.Data.block.y:
             in_blocks_y.append(yi)
     for block in partitionManager.blocks:
         assert block.X !=[]
@@ -144,13 +144,13 @@ def test_map_points(create_manager):
     in_blocks_y=[]
     contador=0
     for node in leaves:
-        assert node.block.X != []
-        assert node.block.y != []
-        assert node.block.positions != []
-        for x in node.block.X:
+        assert node.Data.block.X != []
+        assert node.Data.block.y != []
+        assert node.Data.block.positions != []
+        for x in node.Data.block.X:
             in_blocks.append(x)
             contador+=1
-        for yi in node.block.y:
+        for yi in node.Data.block.y:
             in_blocks_y.append(yi)
     for block in partitionManager.blocks:
         assert block.X !=[]
@@ -189,24 +189,24 @@ def test_add_points(create_manager, common_device_manager):
     X=torch.Tensor().to(device)
 
     for node in leaves:
-        assert node.block is not None
-        assert node.block.X != []
-        assert node.block.y != []
-        assert node.block.positions != []
-        for tensor in node.block.X:
+        assert node.Data.block is not None
+        assert node.Data.block.X != []
+        assert node.Data.block.y != []
+        assert node.Data.block.positions != []
+        for tensor in node.Data.block.X:
             assert tensor.device.type==device
-        for tensor in node.block.y:
+        for tensor in node.Data.block.y:
             assert tensor.device.type==device
-        for tensor in node.block.space_origin:
+        for tensor in node.Data.block.space_origin:
             assert tensor.device.type==device
-        for tensor in node.block.block_size:
+        for tensor in node.Data.block.block_size:
             assert tensor.device.type==device
-        for tensor in node.block.block_scope:
+        for tensor in node.Data.block.block_scope:
             assert tensor.device.type==device
-        assert node.y.device.type==device
-        assert node.data.device.type==device
+        assert node.Data.y.device.type==device
+        assert node.Data.X.device.type==device
 
-        X=torch.cat((X,torch.stack(node.block.X,dim=0)),dim=0)
+        X=torch.cat((X,torch.stack(node.Data.block.X,dim=0)),dim=0)
     sortX, _ = torch.sort(X,0)   
     sortX2, _ = torch.sort(X2,0)
     sortX1, _ = torch.sort(X1,0)
@@ -302,7 +302,7 @@ def test_retrieve_test_active_blocks(create_manager):
     activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
 
     X=torch.Tensor()
-    for i, block in enumerate(activeTestBlocks):
+    for _, block in enumerate(activeTestBlocks):
         X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
 
     sortX, _ = torch.sort(X,0)   

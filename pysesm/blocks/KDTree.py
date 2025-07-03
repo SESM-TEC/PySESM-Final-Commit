@@ -16,13 +16,13 @@ import torch
 
 class dummyData():
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
-        self.X=X
-        self.y=y
-        self.split_point=None
-        self.block=None
-        self.test_data=None
-        self.test_y=None
-        self.dim=0
+        self.X: torch.Tensor=X
+        self.y: torch.Tensor=y
+        self.split_point: float=None
+        self.block: PartitionBlock=None
+        self.test_data: torch.Tensor=None
+        self.test_y: torch.Tensor=None
+        self.dim: int=0
         self._updateBounds()
     def _updateBounds(self):
         "Update the bounds to fit the internal data"
@@ -38,7 +38,7 @@ class KDTree():
         device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
-        self.root: Node = Node(data.to(self.device), y.to(self.device), data_wrapper)
+        self.root: Node = Node(data.to(self.device), y, data_wrapper)
         self.maxNodeSize: int = maxNodeSize
         self.data_wrapper=data_wrapper
 
@@ -53,20 +53,20 @@ class KDTree():
         if node is None or node.Data.X.size(0) <= self.maxNodeSize:
             return      
         # Calculate median only for the dimension we need
-        node.split_point = torch.median(node.Data.X[:,node.Data.dim]).item()
+        node.Data.split_point = torch.median(node.Data.X[:,node.Data.dim]).item()
 
         # Create combined data (necessary for interface)
         data=torch.cat((node.Data.X, node.Data.y), dim=1)
 
         # Create mask of data over threshold only once and reuse its inverse
-        mask = data[:, node.Data.dim] >= node.split_point
+        mask = data[:, node.Data.dim] >= node.Data.split_point
         not_mask = ~mask
         node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper)
         node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper)        
 
-        node.Data.data = None
-        node.bounds = None
-        node.block=None
+        node.Data.X = None
+        node.Data.bounds = None
+        node.Data.block=None
         
         self._splitDataInNodes(node.left)
         self._splitDataInNodes(node.right)
@@ -81,9 +81,9 @@ class KDTree():
         if node is None:
             node=self.root
         if node.Data.X is None:
-            if x[node.Data.dim].item() >= node.split_point:
+            if x[node.Data.dim].item() >= node.Data.split_point:
                 return self._find_node(x, node.right)
-            if x[node.Data.dim].item() < node.split_point:
+            if x[node.Data.dim].item() < node.Data.split_point:
                 return self._find_node(x, node.left)
         else:
             return node
@@ -104,7 +104,7 @@ class KDTree():
         node.Data.X=torch.cat((node.Data.X,x))
         node.Data.y=torch.cat((node.Data.y,y))
 
-        if node.Data.X.size()[0] > self.maxNodeSize:
+        if not (node.Data.X.size(0) <= self.maxNodeSize):
             self._splitDataInNodes(node)
 
             left_bound=node.left.Data.bounds[0]-node.left.Data.bounds[1]
@@ -114,12 +114,14 @@ class KDTree():
                 (1,),
                 left_bound,
                 device=self.device)
-            
+
             node.right.Data.block=PartitionBlock(
                 node.right.Data.bounds[1],
                 (2,),
                 right_bound,
                 device=self.device)
+            assert node.right.Data.block is not None
+            assert node.left.Data.block is not None
     
     def get_leaves(self,  leaves : list = None, node = None) -> list:
         """
@@ -152,19 +154,19 @@ class KDTree():
         Args:
             node (Node): Starting node, usually the root node
         """
-        if node.test_data is None or node.Data.data is not None:
+        if node.Data.test_data is None or node.Data.X is not None:
             return
-        test_Data=torch.cat((node.test_data,node.test_y),dim=1)
-        mask = test_Data[:, node.Data.dim] >= node.split_point
+        test_Data=torch.cat((node.Data.test_data,node.Data.test_y),dim=1)
+        mask = test_Data[:, node.Data.dim] >= node.Data.split_point
 
-        node.right.test_data = test_Data[mask][:,:-1]
-        node.right.test_y = test_Data[mask][:,-1:]
+        node.right.Data.test_data = test_Data[mask][:,:-1]
+        node.right.Data.test_y = test_Data[mask][:,-1:]
 
-        node.left.test_data = test_Data[~mask][:,:-1]
-        node.left.test_y = test_Data[~mask][:,-1:]
+        node.left.Data.test_data = test_Data[~mask][:,:-1]
+        node.left.Data.test_y = test_Data[~mask][:,-1:]
 
-        node.test_data = None
-        node.test_y = None
+        node.Data.test_data = None
+        node.Data.test_y = None
         
         self._splitDataInNodes_test(node.left)
         self._splitDataInNodes_test(node.right)

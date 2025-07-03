@@ -21,6 +21,7 @@ from copy import deepcopy
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.blocks.SESMData import SESMData
 
 from dataclasses import dataclass
 from typing import Union, Callable, Iterator, Type
@@ -60,6 +61,9 @@ class AdaptativePartitionConfig(BlockManagerConfig):
 
     #Not implemented yet
     overlap_ratio: float = 0.1
+
+    #Data object in the nodes of the kdtree
+    data_object=SESMData
     
 class AdaptativePartitionManager(BlockManager):
     def __init__(
@@ -93,6 +97,7 @@ class AdaptativePartitionManager(BlockManager):
         self.splits=0
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
         self.kdtree=None
+        self.data_object=config.data_object
         self.device_manager=device_manager
         self.device="cpu"
         if self.device_manager is not None:
@@ -110,7 +115,7 @@ class AdaptativePartitionManager(BlockManager):
         """
         node = self.kdtree._find_node(x)
         if node is not None:
-            return node.block
+            return node.Data.block
         else:
             self.logger.warning("Could not find a block for point %s", x)
             return None #Check type, should be PartitionBlock its node
@@ -132,14 +137,14 @@ class AdaptativePartitionManager(BlockManager):
         #Initialize the kdtree if it doesn't exist and configure it
         if self.kdtree is None: 
             self.splits=0
-            self.kdtree = KDTree(Xy, self.maxNodeSize, device=self.device)
+            self.kdtree = KDTree(X,y, self.maxNodeSize,self.data_object, device=self.device)
             treeNodes=self.kdtree.get_leaves()
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  
 
             for index in np.ndindex(self.blocks.shape):
                 node=treeNodes[index[0]]
-                block_size=node.bounds[0]-node.bounds[1]
+                block_size=node.Data.bounds[0]-node.Data.bounds[1]
                 if self.config.overlap_ratio is None:
                     self.overlap = torch.zeros_like(block_size,device=self.device)
                 else:
@@ -147,13 +152,13 @@ class AdaptativePartitionManager(BlockManager):
                 
                 self.total_blocks+=1
                 self.blocks[index] = PartitionBlock(
-                space_origin=node.bounds[1],  
+                space_origin=node.Data.bounds[1],  
                 block_index= index, 
                 block_size=block_size,
                 device=self.device
                 )
 
-                node.block=self.blocks[index] #Define node blocks
+                node.Data.block=self.blocks[index] #Define node blocks
         
         #Given a kdtree, update the space coverage
         else:  
@@ -167,8 +172,8 @@ class AdaptativePartitionManager(BlockManager):
                 
                 for index in np.ndindex(self.blocks.shape):
                     node=treeNodes[index[0]]
-                    node.block.block_index=index
-                    self.blocks[index]=node.block
+                    node.Data.block.block_index=index
+                    self.blocks[index]=node.Data.block
                 self.total_blocks=len(treeNodes)
 
         #After many splits, recreate the kdtree to avoid any bias
@@ -178,8 +183,8 @@ class AdaptativePartitionManager(BlockManager):
             y=torch.Tensor()
             
             for node in treeNodes: 
-                X=torch.cat((X,node.data),dim=0)
-                y=torch.cat((y,node.y),dim=0)
+                X=torch.cat((X,node.Data.X),dim=0)
+                y=torch.cat((y,node.Data.y),dim=0)
 
             self.kdtree = None
             self.splits = 0
@@ -192,9 +197,9 @@ class AdaptativePartitionManager(BlockManager):
         """
         treeNodes=self.kdtree.get_leaves()
         for _ , node in enumerate(treeNodes):
-            node.block.clear_points()
-            for i, _ in enumerate(node.data):
-                node.block.new_point(node.data[i],node.y[i],i)
+            node.Data.block.clear_points()
+            for i, _ in enumerate(node.Data.X):
+                node.Data.block.new_point(node.Data.X[i],node.Data.y[i],i)
 
         for idx in np.ndindex(self.blocks.shape):
             block = self.blocks[idx]
@@ -276,31 +281,32 @@ class AdaptativePartitionManager(BlockManager):
         pos=0
         for index in np.ndindex(self.blocks.shape):
             node=treeLeaves[index[0]]
-            if node.test_data is not None:
-                node.block.clear_points()
-                new_pb = PartitionBlock(
-                    space_origin=node.block.space_origin,
-                    block_index=node.block.block_index,
-                    block_size=node.block.block_size,
-                    device=node.block.device
+            if node.Data.test_data is not None:
+                node.Data.block.clear_points()
+                new_pb = PartitionBlock(    
+                    space_origin=node.Data.block.space_origin,
+                    block_index=node.Data.block.block_index,
+                    block_size=node.Data.block.block_size,
+                    device=node.Data.block.device
                 )
                 # Transfer the learned sparse_coding_layer and amplitude from original training block
-                new_pb.sparse_coding_layer = node.block.sparse_coding_layer
-                new_pb.amplitude = node.block.amplitude
+                new_pb.sparse_coding_layer = node.Data.block.sparse_coding_layer
+                new_pb.amplitude = node.Data.block.amplitude
                 test_blocks[index] = new_pb
-                for i, _ in enumerate(node.test_data):
-                    test_blocks[index].new_point(node.test_data[i], node.test_y[i],pos)
+                for i, _ in enumerate(node.Data.test_data):
+                    test_blocks[index].new_point(node.Data.test_data[i], node.Data.test_y[i],pos)
                     pos+=1
+                
 
         for idx in np.ndindex(test_blocks.shape):
             block = test_blocks[idx]
-            if len(block.y) > 0:  # Only if block has points
+            if block is not None and len(block.y) > 0:  # Only if block has points
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
 
         # Selects blocks that weren't assigned any test data
         test_blocks = np.array(
             [test_blocks[index] for index in np.ndindex(test_blocks.shape) 
-            if test_blocks[index].is_active()],
+            if test_blocks[index] is not None and test_blocks[index].is_active()],
             dtype=object)
             
         return test_blocks
@@ -322,8 +328,8 @@ class AdaptativePartitionManager(BlockManager):
         y = y.to(device).unsqueeze(-1)
 
         #Configures test data and starts splitting the data without changing the tree
-        self.kdtree.root.test_data=X
-        self.kdtree.root.test_y=y
+        self.kdtree.root.Data.test_data=X
+        self.kdtree.root.Data.test_y=y
         self.kdtree._splitDataInNodes_test(self.kdtree.root)
               
         test_blocks=self._create_test_block_structure()

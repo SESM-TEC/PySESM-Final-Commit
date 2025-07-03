@@ -15,6 +15,7 @@ class SESMData():
         self.block=None
         self.test_data=None
         self.test_y=None
+        self.overlap=None
         self._updateBounds()
         self.dim=self.greatestVarDim()
 
