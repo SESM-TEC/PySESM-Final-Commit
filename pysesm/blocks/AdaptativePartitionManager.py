@@ -26,24 +26,6 @@ from pysesm.blocks.SESMData import SESMData
 from dataclasses import dataclass
 from typing import Union, Callable, Iterator, Type
 
-def squeeze_factor(y: np.ndarray):
-    """
-    Calculates a squeezing factor for a given set of values.
-
-    Args:
-        y (np.ndarray): An array containing numeric values.
-
-    Returns:
-        float: The squeezing factor. If the maximum value in y exceeds 1, returns 1 / max(y).
-        Otherwise, returns 1.0.
-    """
-    e_f = 0.0
-    max_y = torch.stack(y).abs().max()
-    if max_y > 1:
-        e_f = 1 / max_y
-    else:
-        e_f = 1.0
-    return e_f
 
 @dataclass
 class AdaptativePartitionConfig(BlockManagerConfig):
@@ -97,7 +79,6 @@ class AdaptativePartitionManager(BlockManager):
         self.splits=0
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
         self.kdtree=None
-        self.data_object=config.data_object
         self.device_manager=device_manager
         self.device="cpu"
         if self.device_manager is not None:
@@ -137,29 +118,29 @@ class AdaptativePartitionManager(BlockManager):
         #Initialize the kdtree if it doesn't exist and configure it
         if self.kdtree is None: 
             self.splits=0
-            self.kdtree = KDTree(X,y, self.maxNodeSize,self.data_object, device=self.device)
+            self.kdtree = KDTree(X,y, self.maxNodeSize,self.config.data_object, device=self.device)
             treeNodes=self.kdtree.get_leaves()
 
             self.blocks = np.empty(len(treeNodes), dtype=object)  
 
             for index in np.ndindex(self.blocks.shape):
                 node=treeNodes[index[0]]
-                block_size=node.Data.bounds[0]-node.Data.bounds[1]
-                if self.config.overlap_ratio is None:
-                    self.overlap = torch.zeros_like(block_size,device=self.device)
-                else:
-                    self.overlap = block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
-                
+                block_size=node.Data.bounds[1]-node.Data.bounds[0]
+
                 self.total_blocks+=1
                 self.blocks[index] = PartitionBlock(
-                space_origin=node.Data.bounds[1],  
+                space_origin=node.Data.bounds[0],  
                 block_index= index, 
                 block_size=block_size,
                 device=self.device
                 )
 
                 node.Data.block=self.blocks[index] #Define node blocks
-        
+                if self.config.overlap_ratio is None:
+                    node.Data.overlap = torch.zeros_like(node.Data.bounds,device=self.device)
+                else:
+                    node.Data.overlap = node.Data.bounds * torch.tensor(self.config.overlap_ratio,device=self.device)
+                
         #Given a kdtree, update the space coverage
         else:  
             for row in torch.cat((X,y),dim=1):
@@ -174,6 +155,12 @@ class AdaptativePartitionManager(BlockManager):
                     node=treeNodes[index[0]]
                     node.Data.block.block_index=index
                     self.blocks[index]=node.Data.block
+                    if node.Data.overlap is None:
+                        if self.config.overlap_ratio is None:
+                            node.Data.overlap = torch.zeros_like(node.Data.block.block_size,device=self.device)
+                        else:
+                            node.Data.overlap = node.Data.block.block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
+                
                 self.total_blocks=len(treeNodes)
 
         #After many splits, recreate the kdtree to avoid any bias
@@ -196,15 +183,34 @@ class AdaptativePartitionManager(BlockManager):
         Maps kdtree leaf nodes data to their blocks.
         """
         treeNodes=self.kdtree.get_leaves()
+
+        X=torch.Tensor()
+        Y=torch.Tensor()
+        for node in treeNodes:
+            X=torch.cat((node.Data.X, X))
+            Y=torch.cat((node.Data.y, Y))
+
         for _ , node in enumerate(treeNodes):
             node.Data.block.clear_points()
-            for i, _ in enumerate(node.Data.X):
-                node.Data.block.new_point(node.Data.X[i],node.Data.y[i],i)
+            if expand_scope:
+                node.Data.bounds = node.Data.bounds + node.Data.overlap * torch.tensor([-1, 1]).view(2, 1)
+                node.Data.block.block_scope = node.Data.bounds.detach().clone()
+
+            mask = (X >= node.Data.bounds[0]) & (X <= node.Data.bounds[1])
+            # Only keep rows where all dimensions are within bounds
+            mask_extended = mask.all(dim=1)
+            
+            X_selected=X[mask_extended]
+            Y_selected = Y[mask_extended]
+
+            for i, _ in enumerate(X_selected):
+                node.Data.block.new_point(X_selected[i],Y_selected[i],i)
 
         for idx in np.ndindex(self.blocks.shape):
             block = self.blocks[idx]
             if len(block.y) > 0:  # Only if block has points
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
+
 
     def _prepare_block_targets(self):
         """

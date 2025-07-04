@@ -23,12 +23,13 @@ class dummyData():
         self.test_data: torch.Tensor=None
         self.test_y: torch.Tensor=None
         self.dim: int=0
+        self.overlap : torch.Tensor =None
         self._updateBounds()
     def _updateBounds(self):
         "Update the bounds to fit the internal data"
         upperBounds, _ = torch.max(self.X, dim=0)
         lowerBounds, _ = torch.min(self.X, dim=0)
-        self.bounds = torch.stack((upperBounds,lowerBounds),dim=0)   
+        self.bounds = torch.stack((lowerBounds,upperBounds),dim=0)   
 
 class KDTree():
     def __init__(self, data: torch.Tensor, y: torch.Tensor, maxNodeSize: int = 500, data_wrapper: Callable = dummyData,device=None):
@@ -107,16 +108,16 @@ class KDTree():
         if not (node.Data.X.size(0) <= self.maxNodeSize):
             self._splitDataInNodes(node)
 
-            left_bound=node.left.Data.bounds[0]-node.left.Data.bounds[1]
-            right_bound=node.right.Data.bounds[0]-node.right.Data.bounds[1]
+            left_bound=node.left.Data.bounds[1]-node.left.Data.bounds[0]
+            right_bound=node.right.Data.bounds[1]-node.right.Data.bounds[0]
             node.left.Data.block=PartitionBlock(
-                node.left.Data.bounds[1],
+                node.left.Data.bounds[0],
                 (1,),
                 left_bound,
                 device=self.device)
 
             node.right.Data.block=PartitionBlock(
-                node.right.Data.bounds[1],
+                node.right.Data.bounds[0],
                 (2,),
                 right_bound,
                 device=self.device)
