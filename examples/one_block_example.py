@@ -12,17 +12,18 @@ import logging
 import torch
 import matplotlib.pyplot as plt
 from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
 from pysesm.sparse_coding import ADMMLayer, ADMMConfig
 from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
-from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
+from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-
+from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -121,10 +122,20 @@ class JensenShannonLossWrapper(torch.nn.Module):
 # LOGGER INSTANCE
 logger = setup_logger(level=logging.DEBUG)
 
-n_functions=10
+# SESM CONFIGURATION
+n_functions = 10
+n_features = 2
 
+# Device configuration
+device_map = {
+    DeviceTarget.GLOBAL: "cpu",
+    DeviceTarget.SPARSE_CODING_LAYER: "cpu",
+    DeviceTarget.DICTIONARY_LAYER: "cpu",
+    DeviceTarget.PARTITION_MANAGER: "cpu"
+}
 
 sparse_coding_config = ISTAConfig(
+    epochs=50,
     alpha=0.10,
     lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -154,8 +165,8 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 10,
-    alpha = 0.1,
+    epochs = 4,
+    alpha = 0.01,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
@@ -169,11 +180,12 @@ dict_config = GaussianDictConfig(
 partition_config = UniformPartitionConfig(
     T=1,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    activity_threshold=0
+    activity_threshold=0,
+    overlap_ratio=0.25
 )
 
 ssesm_config = SSESMConfig(
-    n_features = 2,
+    n_features = n_features,
     model_epochs = 5000,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
@@ -181,9 +193,21 @@ ssesm_config = SSESMConfig(
     log_interval=100
 )
 
+bsesm_config = BSESMConfig(
+    n_features = n_features,
+    model_epochs = 20,
+    sparse_coding_config = sparse_coding_config,
+    dict_config = dict_config,
+    partition_config = partition_config,
+    log_interval=25,
+)
+
+
+which_sesm="ssesm"
+
 # SESM CONFIGURATION
 experiment = {
-    "config": ssesm_config,
+    "config": bsesm_config if which_sesm=="bsesm" else ssesm_config,
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
@@ -249,6 +273,7 @@ def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
             sparsity_ratio = (total_components - non_zero_components) / total_components * 100
             
             logger.info(f"  Bloque {block_index_str}:")
+            logger.info(f"    Amplitud: {block.amplitude}")
             logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
             logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
             logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
@@ -260,7 +285,7 @@ def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
 
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(experiment)
+trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(n_samples=experiment["n_samples"])
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)
@@ -269,23 +294,27 @@ trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_
 folder_name = f"results_one_block_{experiment['hyp_set']}"
 
 # INSTANTIATE THE MODELS
-ssesm_model = SSESM(**experiment,logger=logger)
-#bsesm_model = BSESM(**experiment,logger=logger)
+if which_sesm=="bsesm":
+    model = BSESM(**experiment,logger=logger)
+else:
+    model = SSESM(**experiment,logger=logger)
+
 
 try:
     # TRAIN AND TEST THE ALL MODELS
-    for model in [ssesm_model]: # bsesm_model
-        logging.info("Training model {}".format(model.__class__.__name__))
-        model_folder = f"{folder_name}_{model.__class__.__name__}"
-        model.partial_fit(X_train, y_train)
+    logging.info("Training model {}".format(model.__class__.__name__))
+    model_folder = f"{folder_name}_{model.__class__.__name__}"
+    model.partial_fit(X_train, y_train)
+    if which_sesm=="ssesm":
         show_all_h(model, logger)
-        y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
+    y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
-        logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
+    logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
-        plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
+    plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
     plt.show(block=True)
+
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')
