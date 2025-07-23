@@ -296,13 +296,13 @@ try:
     if which_sesm=="ssesm":
         show_all_h(model, logger)
     y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
-    
+
     logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
 
     plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
     plt.show(block=True)
-    
+
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')
