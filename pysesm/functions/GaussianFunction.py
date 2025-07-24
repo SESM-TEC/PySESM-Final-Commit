@@ -67,11 +67,31 @@ class GaussianFunction(SurrogateFunction):
     eig_range: list[float]
     mu_range: list[float]
 
-    def __init__(self, n_features, n_functions, logger, **kwargs):
-        super().__init__(
-            n_features=n_features, n_functions=n_functions, logger=logger, **kwargs
-        )
+    def __init__(self, n_features, n_functions, logger, mu_range=[-1, 1], eig_range=[0.1, 0.5]):
+        super().__init__(n_features=n_features, 
+                         n_functions=n_functions, 
+                         logger=logger)
         self.theta_size = int(n_features * (n_features + 3) / 2)
+        self.mu_range = self._fix_range(mu_range)
+        self.eig_range = self._fix_range(eig_range)
+        
+
+    def _fix_range(self, range):
+        # Expand the range one for each function
+        fixed = torch.tensor(range)
+        if fixed.ndim == 1:
+            if len(fixed) != 2:
+                raise ValueError(
+                    f"If providing a single range, it must be [from, to], got {range}"
+                )
+            # Expand single range to all dimensions
+            fixed = fixed.expand(self.n_features, 2)
+        elif fixed.shape != (self.n_features, 2):
+            raise ValueError(
+                f"range must be either [from, to] or have shape ({self.n_features}, 2) "
+                f"for per-dimension ranges, got shape {fixed.shape}"
+            )
+        return fixed
 
 
     def initialize(self) -> torch.nn.Parameter:
@@ -80,45 +100,34 @@ class GaussianFunction(SurrogateFunction):
         statistical properties given at construction time:
         mu_range: 
         - Means (mu) uniformly distributed in mu_range
-          
-
         - Covariance matrices with controlled eigenvalue distribution
         """
+               
+        # Reminder tensor has (planes,rows,columns) 
 
-        # Validate and process mu_range
-        mu_range = torch.tensor(self.mu_range)
-        if mu_range.ndim == 1:
-            if len(mu_range) != 2:
-                raise ValueError(
-                    f"If providing a single range, mu_range must be [from, to], got {mu_range}"
-                )
-            # Expand single range to all dimensions
-            mu_range = mu_range.expand(self.n_features, 2)
-        elif mu_range.shape != (self.n_features, 2):
-            raise ValueError(
-                f"mu_range must be either [from, to] or have shape ({self.n_features}, 2) "
-                f"for per-dimension ranges, got shape {mu_range.shape}"
-            )
-        
-        # Initialize means using per-dimension ranges
-        mu = torch.zeros(self.n_features, self.n_functions)
-        for i in range(self.n_features):
-            mu[i] = torch.rand(self.n_functions) * \
-                    (mu_range[i, 1] - mu_range[i, 0]) + mu_range[i, 0]
+        # Vectorized initialization of mu
+        mu_min_vals = self.mu_range[:, 0]
+        mu_spans = self.mu_range[:, 1] - mu_min_vals
+        mu = torch.rand(self.n_features, self.n_functions) * mu_spans.unsqueeze(1) + mu_min_vals.unsqueeze(1)
 
-        # Generate completely random matrices and orthogonalize them
+        # Generate random orthogonal matrices Q_all
         Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
         Q_all, _ = torch.linalg.qr(Q_all)
 
-        # Generate eigenvalues in specified range (these are variances)
-        D_all = torch.rand(self.n_functions, self.n_features) * \
-                (self.eig_range[1] - self.eig_range[0]) + self.eig_range[0]
-        # Convert to precision eigenvalues (1/variance)
-        D_precision = 1.0 / D_all
-        D_precision = torch.diag_embed(D_precision)
+        # Vectorized initialization of eigenvalues (D_all)
+        eig_min_vals = self.eig_range[:, 0]
+        eig_spans = self.eig_range[:, 1] - eig_min_vals
+        D_all = torch.rand(self.n_functions, self.n_features) * eig_spans + eig_min_vals
+        
+        # Convert variances to precision eigenvalues
+        D_precision_vec = 1.0 / D_all  # Shape: (n_functions, n_features)
 
-        # Now when we compute Q D Q', we get the precision matrix directly
-        Sigma_inv_all = torch.bmm(torch.bmm(Q_all, D_precision), Q_all.transpose(1, 2))
+        # Paso 1: Calcular Q @ D eficientemente escalando las columnas de Q.
+        # unsqueeze(2) -> (B, N, 1) escala las columnas.
+        Temp = Q_all * D_precision_vec.unsqueeze(2)
+
+        # Paso 2: Multiplicar el resultado por Q.T
+        Sigma_inv_all = torch.bmm(Temp, Q_all.transpose(1, 2))
         
         # Batch Cholesky decomposition
         L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2)

@@ -5,6 +5,85 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
+def test_initialize_parameter_properties():
+    """
+    Verifica que initialize() genera parámetros 'mu' y 'rho' cuyas
+    propiedades estadísticas respetan los rangos 'mu_range' y 'eig_range'.
+    """
+    # 1. Arrange: Configurar parámetros no triviales
+    n_features = 3
+    n_functions = 10
+    logger = logging.getLogger('test_initialize')
+    
+    # Rangos diferentes por dimensión para una prueba robusta
+    mu_range_list = [[-1.0, 1.0], [10.0, 20.0], [100.0, 100.0]]
+    eig_range_list = [[0.1, 0.5], [2.0, 3.0], [10.0, 10.0]]
+
+    gaussian = GaussianFunction(
+        n_features=n_features,
+        n_functions=n_functions,
+        logger=logger,
+        mu_range=mu_range_list,
+        eig_range=eig_range_list
+    )
+
+    # 2. Act: Llamar al método que queremos probar
+    theta = gaussian.initialize()
+
+    # 3. Assert: Deconstruir theta y verificar las propiedades
+
+    # -- Verificación de Mu --
+    mu_params = theta[-n_features:, :] # Shape: (n_features, n_functions)
+    assert mu_params.shape == (n_features, n_functions)
+
+    mu_range_tensor = torch.tensor(mu_range_list)
+    for i in range(n_features):
+        min_val, max_val = mu_range_tensor[i, 0], mu_range_tensor[i, 1]
+        feature_mus = mu_params[i, :]
+        assert torch.all(feature_mus >= min_val), f"Mu en la dimensión {i} está por debajo del mínimo"
+        assert torch.all(feature_mus <= max_val), f"Mu en la dimensión {i} está por encima del máximo"
+
+    # -- Verificación de los Eigenvalores de la Covarianza (a partir de Rho) --
+    num_rho_params = n_features * (n_features + 1) // 2
+    rho_params = theta[:num_rho_params, :] # Shape: (num_rho_params, n_functions)
+    
+    eig_range_tensor = torch.tensor(eig_range_list)
+    min_eig_vals = eig_range_tensor[:, 0]
+    max_eig_vals = eig_range_tensor[:, 1]
+
+    # Iterar sobre cada una de las n_functions (cada palabra del diccionario)
+    for j in range(n_functions):
+        rho_j = rho_params[:, j]
+        
+        # Reconstruir la matriz triangular superior A
+        A_j = torch.zeros(n_features, n_features)
+        indices = torch.triu_indices(n_features, n_features)
+        # La forma en que se reconstruye A depende de cómo se almacenó en __call__
+        # Basado en el código actual de __call__, parece ser A[:, indices[1], indices[0]] = rho.T
+        # lo que significa que el llenado es por columnas de la matriz triangular.
+        # Vamos a reconstruirlo de la misma forma que lo haría to_triu_matrix
+        A_j[indices[0], indices[1]] = rho_j
+
+        # Reconstruir la matriz de precisión G y la de covarianza Sigma
+        # Nota: el `initialize` usa A de Cholesky(G) tal que G = A.T @ A.
+        # Sin embargo, el __call__ usa una transposición diferente. Se debe ser consistente.
+        # Asumamos la lógica de `initialize`: G = A.T @ A
+        G_j = torch.matmul(A_j.T, A_j)
+        Sigma_j = torch.linalg.inv(G_j)
+
+        # Calcular los eigenvalores de la matriz de covarianza
+        eigvals_j = torch.linalg.eigvalsh(Sigma_j)
+        
+        # Verificar que los eigenvalores están en el rango correcto.
+        # Los eigenvalores no tienen un orden garantizado, así que los ordenamos.
+        sorted_eigvals = torch.sort(eigvals_j).values
+        
+        assert torch.all(sorted_eigvals >= min_eig_vals), \
+            f"Eigenvalores para la función {j} están por debajo del rango. Obtenido: {sorted_eigvals}, Esperado >: {min_eig_vals}"
+        assert torch.all(sorted_eigvals <= max_eig_vals), \
+            f"Eigenvalores para la función {j} están por encima del rango. Obtenido: {sorted_eigvals}, Esperado <: {max_eig_vals}"
+
+
 def test_gaussian_fixed_parameters():
     """Test that GaussianFunction produces correct values with fixed parameters"""
     n_features = 2

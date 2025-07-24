@@ -34,7 +34,7 @@ class SurrogateFunction(ABC):
     """
 
     @abstractmethod
-    def __init__(self, n_features: int, n_functions: int, logger: Logger, **kwargs):
+    def __init__(self, n_features: int, n_functions: int, logger: Logger):
         """
         Function that initializes the approximate surrogate function with the given parameters
 
@@ -58,53 +58,7 @@ class SurrogateFunction(ABC):
         self.n_functions = n_functions
         self.logger = logger
 
-        for attr, attr_type in self.__annotations__.items():
-            if attr not in kwargs.keys():
-                logger.error(
-                    "When initializing the surrogate function {} the attribute {} was not found. Kwargs = {}"
-                    ", Required attributes = {}".format(
-                        self.__class__.__name__,
-                        attr,
-                        kwargs,
-                        self.__annotations__.items(),
-                    )
-                )
-                raise AttributeError(
-                    f"To initialize the class {self.__class__.__name__} the attribute {attr} is required"
-                )
-            
-
-            value = kwargs[attr]
-            # Get the base type (list) and its type parameter (float)
-            origin_type = get_origin(attr_type)
-            type_args = get_args(attr_type)
-            
-            # Check if it's a generic type (like list[float])
-            if origin_type is not None:
-                # Check if the value is instance of the base type (list)
-                if not isinstance(value, origin_type):
-                    logger.warning(
-                        f"When initializing the surrogate function {self.__class__.__name__} "
-                        f"the attribute {attr} had wrong container type. "
-                        f"Expected {origin_type}, got {type(value)}."
-                    )
-                # For lists, check each element's type
-                elif origin_type is list and type_args:
-                    expected_item_type = type_args[0]
-                    if not all(isinstance(item, expected_item_type) for item in value):
-                        logger.warning(
-                            f"When initializing the surrogate function {self.__class__.__name__} "
-                            f"the attribute {attr} contains elements of wrong type. "
-                            f"Expected list of {expected_item_type}, got list containing "
-                            f"types {[type(item) for item in value]}"
-                        )
-            # For non-generic types, do a simple isinstance check
-            elif not isinstance(value, attr_type):
-                logger.warning(
-                    f"When initializing the surrogate function {self.__class__.__name__} "
-                    f"the attribute {attr} had wrong type. Expected {attr_type}, got {type(value)}"
-                )
-            setattr(self, attr, kwargs[attr])
+       
 
     @abstractmethod
     def initialize(self) -> torch.nn.Parameter:
