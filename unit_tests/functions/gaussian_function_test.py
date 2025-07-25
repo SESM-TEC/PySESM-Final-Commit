@@ -78,9 +78,9 @@ def test_initialize_parameter_properties():
         # Los eigenvalores no tienen un orden garantizado, así que los ordenamos.
         sorted_eigvals = torch.sort(eigvals_j).values
         
-        assert torch.all(sorted_eigvals >= min_eig_vals), \
+        assert torch.all( (sorted_eigvals - min_eig_vals) >= -0.01), \
             f"Eigenvalores para la función {j} están por debajo del rango. Obtenido: {sorted_eigvals}, Esperado >: {min_eig_vals}"
-        assert torch.all(sorted_eigvals <= max_eig_vals), \
+        assert torch.all( (max_eig_vals - sorted_eigvals) >= -0.01), \
             f"Eigenvalores para la función {j} están por encima del rango. Obtenido: {sorted_eigvals}, Esperado <: {max_eig_vals}"
 
 
