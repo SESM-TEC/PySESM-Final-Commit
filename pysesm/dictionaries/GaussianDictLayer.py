@@ -52,7 +52,6 @@ class GaussianDictLayer(DictBaseLayer):
             n_functions=n_functions,
             eig_range=config.eig_range,
             mu_range=config.mu_range,
-            device=device,
             logger=logger
         )
         
