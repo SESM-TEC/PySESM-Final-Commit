@@ -2,19 +2,26 @@ from logging import Logger
 
 from abc import ABC, abstractmethod
 import torch
-from typing import get_origin, get_args, List
+from typing import List, Union
 
 class SurrogateFunction(ABC):
     """
     Abstract base class for defining surrogate functions within the SESM (Sparse-Encoded Surrogate Model) architecture.
 
     A surrogate function is designed to approximate a target function by evaluating multiple input points (tensors `x`)
-    based on provided parameters.
+    based on provided parameters.  
     For example, a linear function implementation might evaluate a set of points using
     a defined slope and intercept, producing outputs accordingly.
 
     This class serves as a base for implementing such surrogate functions, supporting their integration into the SESM
     architecture, where sparse encoding and linear combinations of dictionary functions are key components.
+    It establishes a contract for all surrogate functions, such as Gaussian,
+    Polynomial, etc. It provides a polymorphic evaluation interface (`__call__`) that
+    transparently handles different input data structures (dense tensors, NestedTensors
+    for irregular batches, or lists of tensors).
+
+    Inherited classes only need to implement the `evaluate` method, which contains the
+    mathematical logic for a single 2D data tensor.    
 
     Attributes:
         n_features (int):
@@ -58,7 +65,13 @@ class SurrogateFunction(ABC):
         self.n_functions = n_functions
         self.logger = logger
 
-       
+    @staticmethod
+    def _is_nested(X: torch.Tensor) -> bool:
+        """
+        Private helper to robustly check if a tensor is a NestedTensor.
+        This encapsulates the check in a single place.
+        """
+        return getattr(X,"is_nested",False)
 
     @abstractmethod
     def initialize(self) -> torch.nn.Parameter:
@@ -83,32 +96,75 @@ class SurrogateFunction(ABC):
         """
         pass
     
-    @abstractmethod
-    def __call__(self, *args, **kwargs) -> torch.Tensor:
+    # The magic of torch.compile will optimize the inner loop when working
+    # with NestedTensors, fusing operations for high performance.
+    @torch.compile
+    def __call__(
+        self,
+        X: Union[torch.Tensor, List[torch.Tensor]],
+        *args, **kwargs
+    ) -> Union[torch.Tensor, List[torch.Tensor]]:
         """
-        Abstract method to evaluate the surrogate function.
+        Evaluates the surrogate function on a dataset.
 
-        This method processes a batch of input samples and evaluates them across all the functions
-        available in the internal dictionary, producing a tensor of size `(n_samples, n_functions)`.
-        Each row corresponds to the evaluation of a single input sample across all the surrogate
-        functions.
+        This is the main, polymorphic entry point. It can handle different
+        input data structures by delegating the evaluation logic for a single
+        tensor to the `evaluate` method.
 
         Args:
-            *args:
-                Positional arguments required for evaluating the surrogate function.
-                Typically, this includes the input tensor `X` of shape `(n_samples, n_features)`, where `n_samples`
-                is the number of input points and `n_features` is the dimensionality of each point.
-            **kwargs:
-                Additional keyword arguments that provide flexibility for passing optional parameters
-                or configurations needed during evaluation.
+            X: The input data. It can be:
+                - A standard `torch.Tensor` of shape (n_samples, n_features).
+                - A `torch.nested.NestedTensor` for batches of irregular size.
+                - A `list[torch.Tensor]` where each tensor is a batch.
+            *args: Additional positional arguments to pass to the `evaluate` method.
+            **kwargs: Additional keyword arguments to pass to the `evaluate` method.
 
         Returns:
-            torch.Tensor:
-                A tensor of shape `(n_samples, n_functions)` where each element `(i, j)` represents
-                the result of applying the `j`-th function to the `i`-th input sample.
+            The evaluated output, maintaining the input data structure
+            (Tensor, NestedTensor, or list of Tensors).
+        """
+        if isinstance(X, torch.Tensor) and not self._is_nested(X) and X.dim() == 2:
+            # Base case: a single data tensor (n_samples, n_features).
+            return self.evaluate(X, *args, **kwargs)
 
-        Notes:
-            - Subclasses must implement this method to define the logic for evaluating each input
-              sample across the surrogate functions, using the model's internal parameters.
+        elif self._is_nested(X):
+            # NestedTensor case: unpack, process, and repack.
+            # torch.compile will optimize this loop.
+            list_of_tensors = X.unbind()
+            results = [self.evaluate(tensor, *args, **kwargs) for tensor in list_of_tensors]
+            return torch.nested.as_nested_tensor(results, layout=torch.jagged, device=X.device)
+
+        elif isinstance(X, list):
+            # List of tensors case: process each one.
+            # torch.compile can also optimize this pattern.
+            return [self.evaluate(tensor, *args, **kwargs) for tensor in X]
+
+        else:
+            # Handle edge cases or unsupported types.
+            if self._is_nested(X) and X.dim() == 2:
+                 # A 2D tensor can sometimes be flagged as nested; treat it as a regular tensor.
+                 return self.evaluate(X, *args, **kwargs)
+            
+            raise TypeError(
+                f"Unsupported input type for SurrogateFunction: {type(X)} "
+                f"with dimensions {X.dim() if isinstance(X, torch.Tensor) else 'N/A'}"
+            )
+
+    @abstractmethod
+    def evaluate(self, X: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        """
+        Abstract method to evaluate the function on a single 2D data tensor.
+
+        Child classes MUST implement this method. It defines the specific evaluation
+        logic (e.g., Gaussian, Polynomial) for an input tensor of shape
+        (n_samples, n_features) and must return a tensor of shape (n_samples, n_functions).
+
+        Args:
+            X (torch.Tensor): The input tensor of shape (n_samples, n_features).
+            *args: Additional positional arguments (e.g., Theta).
+            **kwargs: Additional keyword arguments (e.g., mu_flag).
+
+        Returns:
+            torch.Tensor: The output tensor of shape (n_samples, n_functions).
         """
         pass

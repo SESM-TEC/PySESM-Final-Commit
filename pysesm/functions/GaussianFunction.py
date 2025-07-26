@@ -15,6 +15,7 @@ License:
 
 import numpy as np
 import torch
+from typing import List, Union, TypeAlias
 
 from pysesm.functions.SurrogateFunction import SurrogateFunction
 from pysesm.utils.linalg import (
@@ -24,11 +25,15 @@ from pysesm.utils.linalg import (
     gram_schmidt,
 )
 
+# Define a descriptive type alias for the range structure
+RangeType: TypeAlias = Union[List[float], List[List[float]]]
 
 class GaussianFunction(SurrogateFunction):
     """
-    Compute the unnormalized Gaussians for a given set of points.
-    Each Gaussian corresponds to a dictionary word, and is equivalent
+    A surrogate function composed of a set of unnormalized Gaussian functions.
+
+    This computes the unnormalized Gaussians for a given set of points.
+    Each Gaussian corresponds to a dictionary word, and it is equivalent
     to:
 
     exp(-0.5 (x-µ)' G (x-µ)
@@ -45,6 +50,10 @@ class GaussianFunction(SurrogateFunction):
 
     Theta holds the parameters for all words in a dictionary.
 
+    This class implements the `evaluate` method for a single 2D tensor of data,
+    as required by the SurrogateFunction base class. The polymorphic `__call__`
+    method, which handles batched inputs (like NestedTensors), is inherited.
+
     Parameters
     ----------
     mu_range : list or array-like
@@ -56,16 +65,17 @@ class GaussianFunction(SurrogateFunction):
            Example: [[0, 1], [-1, 0]] specifies different ranges for each dimension
            Must have length n_features if provided in this format.
 
-    eig_range : list[float]
+    eig_range : list[float] or array-like
         A list of two values [min, max] specifying the range for the eigenvalues
         of the covariance matrix. These values represent variances, not precisions.
+        It can also be a list of ranges, as mu_range.
         Example: [0.5, 0.5] will create Gaussians with variance 0.5 in all directions
                 [0.1, 1.0] will create Gaussians with variances randomly chosen 
                 between 0.1 and 1.0 for each eigendirection
     """
 
-    eig_range: list[float]
-    mu_range: list[float]
+    eig_range: RangeType
+    mu_range: RangeType
 
     def __init__(self, n_features, n_functions, logger, mu_range=[-1, 1], eig_range=[0.1, 0.5]):
         super().__init__(n_features=n_features, 
@@ -156,45 +166,60 @@ class GaussianFunction(SurrogateFunction):
         return Theta
 
 
-    def __call__(self, x, Theta, rho_flag=False, mu_flag=False):
+    def evaluate(self, X: torch.Tensor, 
+                 Theta: torch.nn.Parameter,
+                 rho_flag=False, mu_flag=False) -> torch.Tensor:
         """
-        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
-        and all functions. Handles 2D (N_samples, N_features) or
-        3D (N_batches, N_samples_per_batch, N_features) input x.
-        """
-        original_x_dim = x.dim()
-        if original_x_dim == 2:
-            # Reshape x from (N_samples, N_features) to (1, N_samples, N_features) for consistent batching
-            x = x.unsqueeze(0)
-        elif original_x_dim != 3:
-            raise ValueError(f"Input x must be 2D (N_samples, N_features) or 3D (N_batches, N_samples_per_batch, N_features), got {x.shape}")
+        Evaluates a set of Gaussian functions on a single data tensor of dim=2
+        (N_samples, N_features)
 
-        n_batches, n_samples_in_batch, n_features_in_x = x.shape
-        assert n_features_in_x == self.n_features, f"Input x features mismatch. Expected {self.n_features}, got {n_features_in_x}"
+        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
+        and all functions.        
+
+        This method implements the core logic for an input of shape
+        (n_samples, n_features) and returns a tensor of shape (n_samples, n_functions).
+        For evaluation on irregular batches, use the inherited `__call__` method.
+
+        Args:
+            X (torch.Tensor): The input tensor of shape (n_samples, n_features).
+            Theta (torch.nn.Parameter): The parameter tensor containing rho and mu.
+            rho_flag (bool): If True, gradients for rho parameters will be enabled.
+            mu_flag (bool): If True, gradients for mu parameters will be enabled.
+
+        Returns:
+            torch.Tensor: The output tensor of shape (n_samples, n_functions).
+        """
+        if X.dim() != 2 or X.shape[1] != self.n_features:
+            raise ValueError(
+                f"Input X must be a 2D tensor of shape (n_samples, n_features). "
+                f"Got shape {X.shape} for n_features={self.n_features}."
+            )
+        
+        n_samples = X.shape[0]
 
         # Split parameters
         num_rho_params_per_func = self.n_features * (self.n_features + 1) // 2
-        rho = Theta[:num_rho_params_per_func, :]  # (n_rho_params_per_func, n_functions)
-        mu_raw = Theta[-self.n_features:, :] # (n_features, n_functions)
+        rho = Theta[:num_rho_params_per_func, :]
+        mu = Theta[-self.n_features:, :]
 
         # Handle gradient flow control
         if not rho_flag:
             rho = rho.detach()
         if not mu_flag:
-            mu_raw = mu_raw.detach()
+            mu = mu.detach()
 
-        # Reshape mu for batching: (n_features, n_functions) -> (1, n_functions, 1, n_features)
-        # So it broadcasts with x (N_batches, n_samples_in_batch, n_features)
-        mu = mu_raw.T.unsqueeze(0).unsqueeze(2) # (1, n_functions, 1, n_features)
+        # Reshape mu for broadcasting: (n_features, n_functions) -> (n_functions, n_features)
+        mu_expanded = mu.T
 
-        # Expand x and mu to align for element-wise subtraction and batching
-        # x: (N_batches, n_samples_in_batch, n_features) -> (N_batches, 1, n_samples_in_batch, n_features)
-        # mu: (1, n_functions, 1, n_features)
-        x_expanded = x.unsqueeze(1) # (N_batches, 1, n_samples_in_batch, n_features)
+        # Expand X and mu to align for element-wise subtraction and batching
+        # X: (n_samples, n_features) -> (n_functions, n_samples, n_features)
+        # mu: (n_functions, n_features) -> (n_functions, 1, n_features)
+        x_expanded = X.unsqueeze(0).expand(self.n_functions, n_samples, self.n_features)
+        mu_expanded = mu_expanded.unsqueeze(1).expand(self.n_functions, n_samples, self.n_features)
 
         # Compute x-µ for all functions and samples at once
-        # Result: (N_batches, n_functions, n_samples_in_batch, n_features)
-        x_mu = x_expanded - mu
+        # Result: (n_functions, n_samples, n_features)
+        x_mu = x_expanded - mu_expanded
 
         # Create batch of triangular matrices A directly
         n = self.n_features
@@ -203,108 +228,21 @@ class GaussianFunction(SurrogateFunction):
         # Following the pattern from deprecated_call_
         A[:, indices[1], indices[0]] = rho.T  # Use rho.T to match batch dimension: (n_functions, n_rho_params_per_func)
 
-        # Reshape for batch matrix multiplication
-        # We need to match the pattern from deprecated_call_ where bmm operates on:
-        # x_mu: (n_functions, n_samples, n_features) 
-        # A: (n_functions, n_features, n_features)
-
-        # Current x_mu shape: (N_batches, n_functions, n_samples_in_batch, n_features)
-        # We need to reshape to combine batches and functions for bmm
-        # Then separate them back out
-
-        # Reshape x_mu to (N_batches * n_functions, n_samples_in_batch, n_features)
-        x_mu_reshaped = x_mu.reshape(n_batches * self.n_functions, n_samples_in_batch, self.n_features)
-
-        # Expand A to match: (n_functions, n_features, n_features) -> (N_batches * n_functions, n_features, n_features)
-        A_expanded = A.repeat(n_batches, 1, 1)
-
-        # Compute A'*(x-µ) using bmm as in deprecated_call_
-        A_t_x_mu = torch.bmm(x_mu_reshaped, A_expanded)
-
-        # Reshape back to (N_batches, n_functions, n_samples_in_batch, n_features)
-        A_t_x_mu = A_t_x_mu.reshape(n_batches, self.n_functions, n_samples_in_batch, self.n_features)
-
+        # Compute A'*(x-µ) using bmm
+        # Original logic was torch.bmm(x_mu, A).
+        # x_mu: (n_functions, n_samples, n_features)
+        # A: (n_functions, n_features, n_features) -> A is (B, M, P) and x_mu is (B, N, M)
+        # torch.bmm(x_mu, A) computes (x_mu @ A_T) element-wise for the batch.
+        # This is preserved.
+        A_t_x_mu = torch.bmm(x_mu, A)
+        
         # Compute squared L2 norm: ||A'*(x-µ)||_2^2
-        # torch.sum(..., dim=-1) sums over the last dimension (n_features)
-        # Result: (N_batches, n_functions, n_samples_in_batch)
+        # Sum over the last dimension (n_features)
+        # Result: (n_functions, n_samples)
         squared_norms = torch.sum(A_t_x_mu ** 2, dim=-1)
-
         # Compute final exponential
         # Result: (N_batches, n_functions, n_samples_in_batch)
-        result = torch.exp(-0.5 * squared_norms)
-
-        # Reshape to (N_total_points, N_functions) or (N_batches, N_samples_per_batch, N_functions)
-        # based on original_x_dim for consistency with DictBaseLayer.forward expectations.
-        if original_x_dim == 2:
-            return result.permute(0, 2, 1).squeeze(0) # (1, N_samples, N_functions) -> (N_samples, N_functions)
-        else: # original_x_dim == 3
-            return result.permute(0, 2, 1) # (N_batches, N_samples_per_batch, N_functions)
-    
-    
-    def old__call__(self, x, Theta, rho_flag=False, mu_flag=False):
-        """
-        DEPRECATED
-        Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
-        and all functions; this is minus one half of the square of the
-        L2 norm of the triangular matrix A transposed times x minus
-        the mean value.
-
-        This is equivalent to the traditional Mahalanobis distance but
-        much more efficient to compute.
-        
-        Args:
-            x: Input tensor as traditional design matrix n_samples x n_features
-            Theta: Parameter tensor containing rho and mu
-            rho_flag: Whether rho parameters are being optimized
-            mu_flag: Whether mu parameters are being optimized
-        
-        Returns:
-            Tensor of shape (n_samples, n_functions) containing the evaluated gaussians
-
-        """
-
-        assert x.shape[1] == self.n_features, f"Input x should have shape [n_samples, n_features], got {x.shape}"
-
-        # Split parameters
-        rho = Theta[:-self.n_features, :]  # (n_rho_params, n_functions)
-
-        # Starting with Theta[-self.n_features:, :] which is [n_features, n_functions]
-        mu = Theta[-self.n_features:, :].T  # [n_functions, n_features]
-        mu = mu.reshape(self.n_functions, 1, self.n_features)  # [n_functions, 1, n_features]
-        
-        # Handle gradient flow control
-        if not rho_flag:
-            rho = rho.detach()
-        if not mu_flag:
-            mu = mu.detach()
-        
-        # Convert x to shape (n_functions, n_features, n_samples) by repeating        
-        x_expanded = x.unsqueeze(0)                     # Add functions dim -> [1, n_samples, n_features]
-        x_expanded = x_expanded.repeat(self.n_functions, 1, 1)  # [n_functions, n_samples, n_features]
-
-        # Compute x-µ for all functions at once
-        x_mu = x_expanded - mu  # (n_functions, n_features, n_samples)
-        
-        # Create batch of triangular matrices A directly
-        n = self.n_features
-        A = torch.zeros(self.n_functions, n, n, device=Theta.device)
-        indices = torch.triu_indices(n, n, offset=0)
-        A[:, indices[1], indices[0]] = rho.T  # Use rho.T to match batch dimension
-        
-        # Compute A'*(x-µ) for all functions and samples at once
-        A_t_x_mu = torch.bmm(x_mu,A)
-        
-        # Compute squared L2 norm: ||A'*(x-µ)||_2^2
-        squared_norms = torch.sum(A_t_x_mu ** 2, dim=2)  # (n_functions, n_samples)
-        
-        # Compute final exponential
         result = torch.exp(-0.5 * squared_norms).T
-        
-        # Debug statistics
-        #with torch.no_grad():
-        #    self.logger.debug(f"Squared norms - min: {squared_norms.min():.4f}, max: {squared_norms.max():.4f}")
-        #    self.logger.debug(f"Result - min: {result.min():.4f}, max: {result.max():.4f}")
-        
-        return result
 
+        return result
 

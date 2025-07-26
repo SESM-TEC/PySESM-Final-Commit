@@ -4,6 +4,32 @@ import logging
 import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
+import time
+from typing import Any, Union, List
+
+# --- Fixtures ---
+
+@pytest.fixture(scope="module")
+def module_logger() -> logging.Logger:
+    """Provides a shared logger for all tests in this module."""
+    logger = logging.getLogger("test_gaussian_function_batch")
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+
+@pytest.fixture(scope="module")
+def gaussian_function_fixture(module_logger: logging.Logger) -> Union[torch.Tensor, List[torch.Tensor]]:
+    """Provides an initialized instance of GaussianFunction."""
+    return GaussianFunction(
+        n_features=2,
+        n_functions=5,
+        logger=module_logger
+    )
+
 
 def test_initialize_parameter_properties():
     """
@@ -607,15 +633,27 @@ def test_gaussian_function_batch_evaluation_and_gradients():
     # Generate a batch of input data
     n_batches = 4
     n_samples_per_batch = 10
-    X_batch = torch.randn(n_batches, n_samples_per_batch, n_features, dtype=torch.float32)
-    X_batch.requires_grad_(True) # Ensure X also requires grad for full check
+    X_raw = torch.randn(n_batches, n_samples_per_batch, n_features, dtype=torch.float32,requires_grad=True)
+
+    X_batch = torch.nested.as_nested_tensor([t for t in torch.unbind(X_raw, dim=0)],layout=torch.jagged)
 
     # --- Test Forward Pass (Output Shape and Values) ---
     output_D = gaussian(X_batch, theta)
     
-    # Expected output shape: (n_batches, n_samples_per_batch, n_functions)
-    assert output_D.shape == (n_batches, n_samples_per_batch, n_functions), \
-        f"Output shape mismatch. Expected {(n_batches, n_samples_per_batch, n_functions)}, got {output_D.shape}"
+    # We must unbind the nested tensor to check the shapes of its components.
+    assert gaussian._is_nested(output_D), "Output should be a nested_tensor"
+    output_tensors_list = output_D.unbind()
+
+    # Check the number of tensors in the batch (the outer dimension)
+    assert len(output_tensors_list) == n_batches, \
+        f"Expected {n_batches} tensors in the batch, but got {len(output_tensors_list)}"
+
+    # Check the shape of EACH tensor within the batch
+    for i, tensor in enumerate(output_tensors_list):
+        expected_shape = (n_samples_per_batch, n_functions)
+        assert tensor.shape == expected_shape, \
+            f"Shape mismatch for tensor {i} in the batch. Expected {expected_shape}, got {tensor.shape}"
+
     
     # Values should be between 0 and 1
     assert torch.all(output_D >= 0.0), "Output D should be non-negative"
@@ -627,7 +665,8 @@ def test_gaussian_function_batch_evaluation_and_gradients():
     output_D_for_grad = gaussian(X_batch, theta, rho_flag=True, mu_flag=True)
     
     # Simulate a loss that depends on output_D
-    mock_loss = torch.sum(output_D_for_grad**2) # Simple loss for backprop
+    #mock_loss = sum(torch.sum(t ** 2) for t in output_D_for_grad.unbind()) # Simple loss for backprop
+    mock_loss = torch.sum(output_D_for_grad**2)
     mock_loss.backward()
     
     assert theta.grad is not None, "Theta gradients should not be None"
@@ -663,13 +702,14 @@ def test_gaussian_function_batch_evaluation_and_gradients():
     assert torch.all(mu_grads_rho_only == 0), "Mu gradients should be zero when mu_flag is False"
 
     # --- Test Gradients for X ---
-    X_batch.grad = None # Clear previous gradients on X
+    X_raw.grad = None # Clear previous gradients on X
     output_D_x_grad = gaussian(X_batch, theta, rho_flag=True, mu_flag=True)
-    torch.sum(output_D_x_grad**2).backward()
+    loss=torch.sum(output_D_x_grad**2)
+    loss.backward()
     
-    assert X_batch.grad is not None, "X gradients should not be None"
-    assert not torch.all(X_batch.grad == 0), "X gradients should be non-zero"
-    assert X_batch.grad.shape == X_batch.shape, "X gradients shape mismatch"
+    assert X_raw.grad is not None, "X gradients should not be None"
+    assert not torch.all(X_raw.grad == 0), "X gradients should be non-zero"
+    assert X_raw.grad.shape == X_raw.shape, "X gradients shape mismatch"
 
 
 def test_gaussian_function_batch_vs_individual_consistency():
@@ -692,21 +732,156 @@ def test_gaussian_function_batch_vs_individual_consistency():
     theta = gaussian.initialize()
     
     # Create a single set of 5 samples
-    X_single_batch = torch.randn(1, 5, n_features, dtype=torch.float32)
-    
+    X_tensor = torch.randn(1, 5, n_features, dtype=torch.float32)
+    X_single_batch = torch.nested.as_nested_tensor([t for t in torch.unbind(X_tensor, dim=0)],layout=torch.jagged)
+
     # Process as a batch (n_batches=1)
     output_batch = gaussian(X_single_batch, theta)
     
     # Process the same 5 samples individually (flattened)
-    X_individual = X_single_batch.squeeze(0) # (5, n_features)
+    X_individual = X_tensor.squeeze(0) # (5, n_features)
     output_individual = gaussian(X_individual, theta)
 
     # Output from batch should be (1, 5, n_functions)
     # Output from individual should be (5, n_functions)
     # So, squeeze the batch output for comparison
-    assert torch.allclose(output_batch.squeeze(0), output_individual, atol=1e-7), \
+    assert torch.allclose(torch.unbind(output_batch,dim=0)[0], output_individual, atol=1e-7), \
         "Batch evaluation (single batch) does not match individual evaluation"
     
+# --- Tests for Correctness of Inherited __call__ ---
+
+def test_call_with_nested_tensor_is_consistent(gaussian_function_fixture: torch.Tensor | List[torch.Tensor]):
+    """
+    Tests that calling the function with a NestedTensor produces the same result
+    as evaluating each constituent tensor individually.
+    """
+    g_func = gaussian_function_fixture
+    theta = g_func.initialize()
+
+    tensors_list = [torch.randn(10, 2), torch.randn(5, 2), torch.randn(20, 2)]
+    nested_tensor_input = torch.nested.nested_tensor(tensors_list, layout=torch.jagged)
+
+    # 1. Evaluate using the inherited __call__ with NestedTensor
+    nested_output = g_func(nested_tensor_input, theta)
+    
+    # 2. Evaluate each tensor individually using the specific `evaluate` method
+    manual_loop_output = [g_func.evaluate(t, theta) for t in tensors_list]
+
+    # 3. Compare the results
+    assert g_func._is_nested(nested_output)
+    unbound_nested_output = nested_output.unbind()
+    
+    assert len(unbound_nested_output) == len(manual_loop_output)
+    for i in range(len(tensors_list)):
+        assert torch.allclose(unbound_nested_output[i], manual_loop_output[i], atol=1e-7)
+        assert unbound_nested_output[i].shape[0] == tensors_list[i].shape[0]
+        assert unbound_nested_output[i].shape[1] == g_func.n_functions
+
+def test_call_with_list_of_tensors_is_consistent(gaussian_function_fixture: torch.Tensor | List[torch.Tensor]):
+    """
+    Tests that calling the function with a list of tensors produces the same result
+    as evaluating each tensor individually.
+    """
+    g_func = gaussian_function_fixture
+    theta = g_func.initialize()
+
+    tensors_list = [torch.randn(12, 2), torch.randn(3, 2), torch.randn(15, 2)]
+
+    # 1. Evaluate using the inherited __call__ with the list
+    list_output = g_func(tensors_list, theta)
+    
+    # 2. Evaluate each tensor individually
+    manual_loop_output = [g_func.evaluate(t, theta) for t in tensors_list]
+
+    # 3. Compare the results
+    assert isinstance(list_output, list)
+    assert len(list_output) == len(manual_loop_output)
+    for i in range(len(tensors_list)):
+        assert torch.allclose(list_output[i], manual_loop_output[i], atol=1e-7)
+
+def test_call_with_nested_tensor_gradients(gaussian_function_fixture: torch.Tensor | List[torch.Tensor]):
+    """
+    Tests that gradients flow correctly through a batched evaluation
+    using a NestedTensor. This replaces the old gradient test for 3D tensors.
+    """
+    g_func = gaussian_function_fixture
+    theta = g_func.initialize().requires_grad_(True)
+
+    tensors_list = [torch.randn(8, 2), torch.randn(4, 2)]
+    nested_tensor_input = torch.nested.nested_tensor(tensors_list, layout=torch.jagged,requires_grad=True)
+    
+    # Evaluate with gradients enabled for all parameters
+    nested_output = g_func(nested_tensor_input, theta, rho_flag=True, mu_flag=True)
+
+    # The output of a NestedTensor evaluation is another NestedTensor.
+    # To compute a scalar loss for backpropagation, we can sum over all elements of all tensors.
+    scalar_loss = torch.sum(nested_output**2)
+    scalar_loss.backward()
+
+    # Assert that Theta has received gradients
+    assert theta.grad is not None
+    assert not torch.all(theta.grad == 0)
+
+
+    # 1. Check the .grad attribute of the LEAF tensor, which is `nested_tensor_input`.
+    assert nested_tensor_input.grad is not None, "The .grad of the leaf NestedTensor should be populated."
+
+    # 2. The .grad attribute is itself a NestedTensor. Unbind it to check the components.
+    unbound_grads = nested_tensor_input.grad.unbind()
+
+    # 3. Assert that each component of the gradient exists and is non-zero.
+    assert unbound_grads[0] is not None
+    assert unbound_grads[1] is not None
+
+    assert not torch.all(nested_tensor_input.grad == 0)
+
+# --- Test for Performance Demonstration of @torch.compile ---
+def test_torch_compile_performance_on_nested_tensor(gaussian_function_fixture: GaussianFunction, module_logger: logging.Logger):
+    """
+    Demonstrates the performance gain from @torch.compile on a NestedTensor.
+    This test uses a larger workload to make the benefits of compilation apparent.
+    """
+    g_func = gaussian_function_fixture
+    theta = g_func.initialize()
+
+    # --- CORRECCIÓN 1: Aumentar la carga de trabajo significativamente ---
+    num_tensors = 5000  
+    tensor_size_range = (100, 500) # Tamaños de tensor más grandes
+    tensors_list = [torch.randn(torch.randint(*tensor_size_range, (1,)).item(), 2) for _ in range(num_tensors)]
+    nested_tensor_input = torch.nested.nested_tensor(tensors_list, layout=torch.jagged)
+
+    # --- 1. Time the uncompiled, manual Python loop ---
+    start_time_loop = time.perf_counter()
+    for tensor in tensors_list:
+        _ = g_func.evaluate(tensor, theta)
+    end_time_loop = time.perf_counter()
+    python_loop_time = end_time_loop - start_time_loop
+    module_logger.info(f"Performance Test: Manual Python loop took {python_loop_time:.6f} seconds.")
+
+    # --- 2. Time the compiled __call__ method ---
+    # --- CORRECCIÓN 2: Usar el modo 'reduce-overhead' para JIT más rápido ---
+    # Esto compila la función localmente para el test.
+    compiled_call = torch.compile(g_func.__call__, mode="reduce-overhead")
+
+    # Warm-up call for JIT compilation.
+    module_logger.info("Performance Test: Running warm-up call for torch.compile...")
+    _ = compiled_call(g_func,nested_tensor_input, theta)
+    module_logger.info("Performance Test: Warm-up complete.")
+
+    # Now, time the second, optimized call
+    start_time_compiled = time.perf_counter()
+    _ = compiled_call(g_func,nested_tensor_input, theta)
+    end_time_compiled = time.perf_counter()
+    compiled_call_time = end_time_compiled - start_time_compiled
+    module_logger.info(f"Performance Test: Compiled __call__ took {compiled_call_time:.6f} seconds.")
+
+    # Assert that the compiled version is significantly faster.
+    speedup_factor = python_loop_time / compiled_call_time
+    module_logger.info(f"Performance Test: Achieved a speedup factor of {speedup_factor:.2f}x.")
+    
+    # La aserción ahora debería pasar con una carga de trabajo más realista.
+    assert compiled_call_time < python_loop_time * 0.5, \
+        "The @torch.compile version was not significantly faster than the manual Python loop."
     
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
