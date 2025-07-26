@@ -98,7 +98,7 @@ class SurrogateFunction(ABC):
     
     # The magic of torch.compile will optimize the inner loop when working
     # with NestedTensors, fusing operations for high performance.
-    @torch.compile
+    # @torch.compile
     def __call__(
         self,
         X: Union[torch.Tensor, List[torch.Tensor]],
@@ -130,9 +130,17 @@ class SurrogateFunction(ABC):
         elif self._is_nested(X):
             # NestedTensor case: unpack, process, and repack.
             # torch.compile will optimize this loop.
+
             list_of_tensors = X.unbind()
             results = [self.evaluate(tensor, *args, **kwargs) for tensor in list_of_tensors]
-            return torch.nested.as_nested_tensor(results, layout=torch.jagged, device=X.device)
+            return torch.nested.as_nested_tensor(results, layout=X.layout, device=X.device, dtype=results[0].dtype)
+
+            ##batched_evaluate = torch.vmap(self.evaluate,in_dims=0)
+            ##result = batched_evaluate(X,*args,**kwargs)
+            ##return result
+
+            ## return X.map(lambda tensor: self.evaluat(tensor, *args, **kwargs))
+            ## return self.evaluate(X, *args, **kwargs)
 
         elif isinstance(X, list):
             # List of tensors case: process each one.
