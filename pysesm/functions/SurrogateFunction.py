@@ -101,9 +101,9 @@ class SurrogateFunction(ABC):
     # @torch.compile
     def __call__(
         self,
-        X: Union[torch.Tensor, List[torch.Tensor]],
+        X: Union[torch.Tensor, torch.nested.nested_tensor, List[torch.Tensor]],
         *args, **kwargs
-    ) -> Union[torch.Tensor, List[torch.Tensor]]:
+    ) -> Union[torch.Tensor, torch.nested.nested_tensor, List[torch.Tensor]]:
         """
         Evaluates the surrogate function on a dataset.
 
