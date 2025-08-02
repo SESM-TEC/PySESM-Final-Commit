@@ -3,7 +3,7 @@ from logging import Logger
 from abc import ABC, abstractmethod
 import torch
 from typing import List, Union
-from ..base_types import TensorBatch
+from pysesm.base_types import TensorBatch
 
 class SurrogateFunction(ABC):
     """Abstract base class for defining surrogate functions within the
@@ -124,9 +124,12 @@ class SurrogateFunction(ABC):
 
         Args:
             X: The input data. It can be:
-                - A standard `torch.Tensor` of shape (n_samples, n_features).
-                - A `torch.nested.NestedTensor` for batches of irregular size.
-                - A `list[torch.Tensor]` where each tensor is a batch.
+               - A `torch.Tensor` of shape (n_samples, n_features)
+                 representing a single batch.      
+               - A `torch.Tensor` of shape (batch_size, n_samples_per_batch, n_features)
+                 representing a regular batch.
+               - A `torch.nested.nested_tensor` for batches of irregular size.
+               - A `list[torch.Tensor]` where each tensor is a batch.
 
             *args: Additional positional arguments to pass to the
                    `evaluate` method.
@@ -136,11 +139,21 @@ class SurrogateFunction(ABC):
 
         Returns:
             The evaluated output, maintaining the input data structure
-            (Tensor, nested_tensor, or list of Tensors).
+            (Tensor, torch.nested.nested_tensor, or list of Tensors).
+
         """
-        if isinstance(X, torch.Tensor) and not self._is_nested(X) and X.dim() == 2:
-            # Base case: a single data tensor (n_samples, n_features).
-            return self.evaluate(X, *args, **kwargs)
+        if isinstance(X, torch.Tensor) and not self._is_nested(X):
+            if X.dim() == 2:
+                # Base case: a single data tensor (n_samples, n_features).
+                return self.evaluate(X, *args, **kwargs)
+            elif X.dim() == 3:  # 3D tensor (batch_size, n_samples_per_batch, n_features)
+                # Use vmap to apply evaluate to each 2D slice
+                return torch.vmap(self.evaluate)(X, *args, **kwargs)
+            else:
+                raise TypeError(
+                    f"Unsupported torch.Tensor input dimension for SurrogateFunction: {X.dim()}. "
+                    f"Expected 2D or 3D tensor. Got shape {X.shape}"
+                )
 
         elif self._is_nested(X):
             # NestedTensor case: unpack, process, and repack.

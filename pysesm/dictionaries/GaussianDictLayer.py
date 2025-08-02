@@ -1,12 +1,8 @@
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
 Gaussian Dictionary Layer
-
 Dictionary layer implementation using Gaussian basis functions.
-
 Authors: The SESM Team 
-
 License: 
 '''
 
@@ -14,10 +10,9 @@ from dataclasses import dataclass
 from typing import Optional, Callable, Iterator
 import torch
 import logging
-
 from .DictBaseLayer import DictBaseLayer, DictConfig
-from ..functions.GaussianFunction import GaussianFunction
-
+from pysesm.functions.GaussianFunction import GaussianFunction
+from pysesm.base_types import TensorBatch
 
 @dataclass
 class GaussianDictConfig(DictConfig):
@@ -76,7 +71,7 @@ class GaussianDictLayer(DictBaseLayer):
         return self.psi.initialize().to(self.device)
 
 
-    def _evaluate_dictionary(self, X: torch.Tensor, parameters: torch.Tensor, **kwargs) -> torch.Tensor:
+    def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:
         """
         Evaluates the Gaussian dictionary functions at given points X using the current parameters.
         Passes kwargs like rho_flag, mu_flag to the GaussianFunction's __call__.

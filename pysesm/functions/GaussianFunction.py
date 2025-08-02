@@ -16,7 +16,7 @@ License:
 import numpy as np
 import torch
 from typing import List, Union, TypeAlias
-
+from pysesm.base_types import TensorBatch
 from pysesm.functions.SurrogateFunction import SurrogateFunction
 from pysesm.utils.linalg import (
     to_triu_matrix,
@@ -170,8 +170,8 @@ class GaussianFunction(SurrogateFunction):
                  Theta: torch.nn.Parameter,
                  rho_flag=False, mu_flag=False) -> torch.Tensor:
         """
-        Evaluates a set of Gaussian functions on a single data tensor of dim=2
-        (N_samples, N_features)
+        Evaluates a set of Gaussian functions on a single batch of data points,
+        packed as a tensor of dim=2  (N_samples, N_features)
 
         Computes exp(-0.5 || A'*(x-µ) ||_2^2) for all data points
         and all functions.        

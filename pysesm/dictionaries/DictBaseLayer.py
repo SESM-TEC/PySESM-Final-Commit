@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, Callable, Iterator, Type
 import torch
 import logging
-
-from ..base_types import BaseConfig
+from pysesm.base_types import BaseConfig, TensorBatch
 
 
 @dataclass
@@ -41,7 +40,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         config: DictConfig,
         n_features: int,
         n_functions: int,
-        evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        evaluation_func: Callable[TensorBatch,TensorBatch],
         logger: logging.Logger,
         parameter_hook: Optional[Callable[[dict], None]] = None,
         device = None,
@@ -99,7 +98,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         pass
     
     @abstractmethod
-    def _evaluate_dictionary(self, X: torch.Tensor, parameters: torch.Tensor, **kwargs) -> torch.Tensor:
+    def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:
         """
         Evaluate the dictionary at given points with current parameters.
         
@@ -109,7 +108,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             **kwargs: Additional evaluation arguments (e.g., rho_flag, mu_flag for Gaussian)
             
         Returns:
-            torch.Tensor: Evaluated dictionary matrix
+            TensorBatch: Evaluated dictionary matrix
         """
         pass
     
@@ -226,7 +225,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         """
         self._train_with_strategy(X, y, h, log_losses)
     
-    def forward(self, X: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, X: TensorBatch, **kwargs) -> TensorBatch:
         """
         Evaluate dictionary at given points.
         
@@ -235,8 +234,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             **kwargs: Additional evaluation arguments
             
         Returns:
-            torch.Tensor: Evaluated dictionary
+            TensorBatch: Evaluated dictionary
         """
-        X = X.to(self.device)
         evaluated_dictionary = self._evaluate_dictionary(X, self.theta_params, **kwargs)
         return evaluated_dictionary
