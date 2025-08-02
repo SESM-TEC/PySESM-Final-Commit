@@ -1,12 +1,8 @@
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
 Dictionary Base Layer
-
 Abstract base class for all dictionary implementations.
-
 Authors: The SESM Team 
-
 License: 
 '''
 
@@ -149,7 +145,12 @@ class DictBaseLayer(torch.nn.Module, ABC):
             self.optimizer = torch.optim.SGD([self.theta_params], lr=self.config.alpha, weight_decay=0)            
         else:
             self.optimizer = self.config.optimizer_factory([self.theta_params], lr=self.config.alpha)
-    
+
+
+    @staticmethod
+    def _is_nested(X: torch.Tensor) -> bool:
+        return getattr(X, 'is_nested', False)
+            
     def _train_epoch(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
                     log_losses: bool, **eval_kwargs):
         """
@@ -167,6 +168,8 @@ class DictBaseLayer(torch.nn.Module, ABC):
         
         # Calculate prediction using the current dictionary and h
         # IMPORTANT: h should already be detached to prevent gradient conflicts
+        #            evaluation_func is expected to handle nested_tensors and
+        #            return a nested_tensor
         y_pred = self.evaluation_func(self.dictionary, h)
         
         loss = self.criterion(y_pred, y)

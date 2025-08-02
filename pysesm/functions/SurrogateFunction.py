@@ -3,63 +3,74 @@ from logging import Logger
 from abc import ABC, abstractmethod
 import torch
 from typing import List, Union
+from ..base_types import TensorBatch
 
 class SurrogateFunction(ABC):
-    """
-    Abstract base class for defining surrogate functions within the SESM (Sparse-Encoded Surrogate Model) architecture.
+    """Abstract base class for defining surrogate functions within the
+    SESM (Sparse-Encoded Surrogate Model) architecture.
 
-    A surrogate function is designed to approximate a target function by evaluating multiple input points (tensors `x`)
-    based on provided parameters.  
-    For example, a linear function implementation might evaluate a set of points using
-    a defined slope and intercept, producing outputs accordingly.
+    A surrogate function is designed to approximate a target function
+    by evaluating multiple input points (tensors `x`) based on
+    provided parameters.  For example, a linear function
+    implementation might evaluate a set of points using a defined
+    slope and intercept, producing outputs accordingly.
 
-    This class serves as a base for implementing such surrogate functions, supporting their integration into the SESM
-    architecture, where sparse encoding and linear combinations of dictionary functions are key components.
-    It establishes a contract for all surrogate functions, such as Gaussian,
-    Polynomial, etc. It provides a polymorphic evaluation interface (`__call__`) that
-    transparently handles different input data structures (dense tensors, NestedTensors
-    for irregular batches, or lists of tensors).
+    This class serves as a base for implementing such surrogate
+    functions, supporting their integration into the SESM
+    architecture, where sparse encoding and linear combinations of
+    dictionary functions are key components.  It establishes a
+    contract for all surrogate functions, such as Gaussian,
+    Polynomial, etc. It provides a polymorphic evaluation interface
+    (`__call__`) that transparently handles different input data
+    structures (dense tensors, nested_tensors for irregular batches, or
+    lists of tensors).
 
-    Inherited classes only need to implement the `evaluate` method, which contains the
-    mathematical logic for a single 2D data tensor.    
+    Inherited classes only need to implement the `evaluate` method,
+    which contains the mathematical logic for a single 2D data tensor.
 
     Attributes:
         n_features (int):
-            The size of each input tensor `x`, representing the number of features (or dimensions) the model
-            works with.
-            For instance, in a dataset with `n_features=3`, each input point `x` would have three values.
-
+            The size of each input tensor `x`, representing the number
+            of features (or dimensions) the model works with.  For
+            instance, in a dataset with `n_features=3`, each input
+            point `x` would have three values.
         n_functions (int):
-            The number of individual functions available in the internal dictionary.
-            These functions can be
-            combined linearly as part of the SESM framework to approximate complex surrogate behaviors.
-
+            The number of individual functions available in the
+            internal dictionary.  These functions can be combined
+            linearly as part of the SESM framework to approximate
+            complex surrogate behaviors.
         logger (logging.Logger):
-            A custom logger instance used to record runtime information during the execution of the surrogate
-            function.
-            This enables detailed tracking of key events, debugging, and monitoring during model use.
+            A custom logger instance used to record runtime
+            information during the execution of the surrogate
+            function.  This enables detailed tracking of key events,
+            debugging, and monitoring during model use.
+
     """
 
     @abstractmethod
     def __init__(self, n_features: int, n_functions: int, logger: Logger):
-        """
-        Function that initializes the approximate surrogate function with the given parameters
+        """Function that initializes the approximate surrogate
+        function with the given parameters
 
         Args:
             n_features (int):
-                The size of each input tensor `x`, representing the number of features (or dimensions) the model
-                works with.
-                For instance, in a dataset with `n_features=3`, each input point `x` would have three values.
+                The size of each input tensor `x`, representing the
+                number of features (or dimensions) the model works
+                with.  For instance, in a dataset with `n_features=3`,
+                each input point `x` would have three values.
 
-            n_functions (int):
-                The number of individual functions available in the internal dictionary.
-                These functions can be combined linearly as part of the SESM framework to approximate complex
-                surrogate behaviors.
+            n_functions (int):        
+                The number of individual functions available in the
+                internal dictionary.  These functions can be combined
+                linearly as part of the SESM framework to approximate
+                complex surrogate behaviors.
 
-            logger (logging.Logger):
-                A custom logger instance used to record runtime information during the execution of the surrogate
-                function.
-                This enables detailed tracking of key events, debugging, and monitoring during model use.
+            logger (logging.Logger):        
+                A custom logger instance used to record runtime
+                information during the execution of the surrogate
+                function.  This enables detailed tracking of key
+                events, debugging, and monitoring during model use.
+
         """
         self.n_features = n_features
         self.n_functions = n_functions
@@ -75,37 +86,37 @@ class SurrogateFunction(ABC):
 
     @abstractmethod
     def initialize(self) -> torch.nn.Parameter:
-        """
-        Abstract method for initializing the parameters of the surrogate function.
+        """Abstract method for initializing the parameters of the
+        surrogate function.
 
-        This method sets up and returns the parameters of the surrogate function that can be
-        fitted during training.
-        The parameters are initialized based on the configuration
-        defined during the instantiation of the surrogate function.
+        This method sets up and returns the parameters of the
+        surrogate function that can be fitted during training.  The
+        parameters are initialized based on the configuration defined
+        during the instantiation of the surrogate function.
 
         Returns:
             torch.nn.Parameter:
-                A vector (or tensor) of parameters wrapped as `torch.nn.Parameter`, which can be
-                optimized during training.
+                A vector (or tensor) of parameters wrapped as
+                `torch.nn.Parameter`, which can be optimized during
+                training.
 
         Notes:
-            - Concrete implementations of this method should define specific attributes or
-              parameters required for the surrogate function (e.g., weights, biases, coefficients).
-            - The initialized parameters are designed to integrate seamlessly with PyTorch's
-              optimization framework.
+            - Concrete implementations of this method should define
+              specific attributes or parameters required for the
+              surrogate function (e.g., weights, biases,
+              coefficients).       
+            - The initialized parameters are designed to integrate
+              seamlessly with PyTorch's optimization framework.
         """
         pass
     
-    # The magic of torch.compile will optimize the inner loop when working
-    # with NestedTensors, fusing operations for high performance.
-    # @torch.compile
+    # @torch.compile      # Disabled because it seems to generate slower code.
     def __call__(
         self,
-        X: Union[torch.Tensor, torch.nested.nested_tensor, List[torch.Tensor]],
+        X: TensorBatch,
         *args, **kwargs
-    ) -> Union[torch.Tensor, torch.nested.nested_tensor, List[torch.Tensor]]:
-        """
-        Evaluates the surrogate function on a dataset.
+    ) -> TensorBatch:
+        """Evaluates the surrogate function on a dataset.
 
         This is the main, polymorphic entry point. It can handle different
         input data structures by delegating the evaluation logic for a single
@@ -116,12 +127,16 @@ class SurrogateFunction(ABC):
                 - A standard `torch.Tensor` of shape (n_samples, n_features).
                 - A `torch.nested.NestedTensor` for batches of irregular size.
                 - A `list[torch.Tensor]` where each tensor is a batch.
-            *args: Additional positional arguments to pass to the `evaluate` method.
-            **kwargs: Additional keyword arguments to pass to the `evaluate` method.
+
+            *args: Additional positional arguments to pass to the
+                   `evaluate` method.
+
+            **kwargs: Additional keyword arguments to pass to the
+                      `evaluate` method.
 
         Returns:
             The evaluated output, maintaining the input data structure
-            (Tensor, NestedTensor, or list of Tensors).
+            (Tensor, nested_tensor, or list of Tensors).
         """
         if isinstance(X, torch.Tensor) and not self._is_nested(X) and X.dim() == 2:
             # Base case: a single data tensor (n_samples, n_features).
@@ -134,13 +149,6 @@ class SurrogateFunction(ABC):
             list_of_tensors = X.unbind()
             results = [self.evaluate(tensor, *args, **kwargs) for tensor in list_of_tensors]
             return torch.nested.as_nested_tensor(results, layout=X.layout, device=X.device, dtype=results[0].dtype)
-
-            ##batched_evaluate = torch.vmap(self.evaluate,in_dims=0)
-            ##result = batched_evaluate(X,*args,**kwargs)
-            ##return result
-
-            ## return X.map(lambda tensor: self.evaluat(tensor, *args, **kwargs))
-            ## return self.evaluate(X, *args, **kwargs)
 
         elif isinstance(X, list):
             # List of tensors case: process each one.
@@ -160,12 +168,16 @@ class SurrogateFunction(ABC):
 
     @abstractmethod
     def evaluate(self, X: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        """
-        Abstract method to evaluate the function on a single 2D data tensor.
+        """Abstract method to evaluate the function on a single 2D data tensor.
 
-        Child classes MUST implement this method. It defines the specific evaluation
-        logic (e.g., Gaussian, Polynomial) for an input tensor of shape
-        (n_samples, n_features) and must return a tensor of shape (n_samples, n_functions).
+        Child classes MUST implement this method. It defines the
+        specific evaluation logic (e.g., Gaussian, Polynomial) for an
+        input tensor of shape (n_samples, n_features) and must return
+        a tensor of shape (n_samples, n_functions).
+
+        Note that __call__ is the general method able to process
+        several data batches, while this method processes a single
+        batch.
 
         Args:
             X (torch.Tensor): The input tensor of shape (n_samples, n_features).
@@ -174,5 +186,6 @@ class SurrogateFunction(ABC):
 
         Returns:
             torch.Tensor: The output tensor of shape (n_samples, n_functions).
+
         """
         pass

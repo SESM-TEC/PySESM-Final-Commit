@@ -1,12 +1,8 @@
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
 BSESM Base Class
-
 Provides the batched version of SESM
-
 Authors: The SESM Team 
-
 License: 
 '''
 
@@ -15,16 +11,15 @@ import torch
 import time
 from typing import Callable, Iterator, Optional, List, Tuple
 from dataclasses import dataclass
-import numpy as np # For np.ndindex
+import numpy as np
 from sklearn.metrics import mean_squared_error
 
 from pysesm.functions import SurrogateFunction
-from pysesm.blocks import PartitionBlock # Import PartitionBlock explicitly for type hinting
-from pysesm.models.SESM import SESM, SESMConfig # Import SESM and its config
+from pysesm.blocks import PartitionBlock
+from pysesm.models.SESM import SESM, SESMConfig
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.device_manager.DeviceManager import DeviceManager # Ensure DeviceManager is imported
+from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.factories.BlockManagerFactory import BlockManagerFactory
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 @dataclass
@@ -33,7 +28,6 @@ class BSESMConfig(SESMConfig):
     Configuration for BSESM model, extending base SESMConfig.
     """
     pass
-
 
 class BSESM(SESM):
     """
@@ -44,8 +38,8 @@ class BSESM(SESM):
     trained jointly in a single global optimization step per model epoch.
     
     Unlike SSESM, which trains blocks sequentially, BSESM aggregates all active
-    training data points (X, y) and their corresponding h vectors, then trains
-    a global dictionary and all h vectors simultaneously.
+    training data. It updates the dictionary using gradient accumulation from all
+    blocks and solves for the sparse codes using a block-diagonal matrix formulation.
     """
 
     CONFIG_CLASS = BSESMConfig
@@ -72,8 +66,6 @@ class BSESM(SESM):
             sesm_hook: Optional callback for SESM-level monitoring.
             **kwargs: Additional keyword arguments.
         """
-        # The parent SESM.__init__ will set up the dictionary_layer and partition_manager
-        # and store all hooks.
         super().__init__(
             config=config,
             logger=logger,
@@ -84,272 +76,154 @@ class BSESM(SESM):
             **kwargs,
         )
 
-        # BSESM needs a single sparse coding layer for the global training step.
-        # In contrast to SSESM where each block has its own.
-        # This global_sparse_coding_layer will manage the batch of h vectors.
-        # It needs to be a regular SparseCodingBaseLayer instance.
+        # The global sparse coding layer will operate on the large block-diagonal matrix,
+        # so it uses standard matrix multiplication.
         self.global_sparse_coding_layer = SparseCodingFactory.create(
-            config=self.sparse_coding_config, # Use the shared sparse coding config
-            evaluation_func=self._global_evaluation_func, # BSESM needs its own special eval func for global training
+            config=self.sparse_coding_config,
+            evaluation_func=self.evaluation_func,
             logger=self.logger,
             parameter_hook=self.sparse_coding_layer_hook,
             device=self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
         )
         self.logger.info(f"Global Sparse Coding Layer: {type(self.global_sparse_coding_layer).__name__}")
-        
-        # Override parent's sparse_coding_layer with the global one (for _train_step)
-        # self.sparse_coding_layer = self.global_sparse_coding_layer
-        # The parent SESM has a `sparse_coding_layer` attribute which is `None` by default.
-        # We need to ensure it points to the correct sparse coding layer during global training.
-        # However, for `partial_fit` in BSESM, we will explicitly pass the `global_sparse_coding_layer`.
-        # So we don't need to override `self.sparse_coding_layer` here.
-        # The `_train_step` will receive it as `sparsecoding` parameter.
-
 
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """
-        Concrete implementation of the evaluation function for BSESM.
-        
-        This method combines a batch of dictionary evaluations `D` (from `(N_total_points, N_functions)`
-        or `(N_blocks, N_points_per_block, N_functions)`) with a batch of sparse vectors `h`
-        (from `(N_functions, 1)` or `(N_blocks, N_functions, 1)`) to produce predictions.
-
-        For BSESM's global training, `h` will be `(N_functions, 1)` (after being reshaped internally
-        by `_global_evaluation_func` to be a batch if needed).
-        This `evaluation_func` from `SESM` (which is `torch.matmul(D, h)`) is used by `dictionary_layer`
-        to combine its output `D` with `h_detached`.
+        Concrete implementation of the evaluation function. 
+        For BSESM, this always performs a simple matrix multiplication,
+        as batching is handled by loops inside the training methods.
         """
-        # This `evaluation_func` is for the `dictionary_layer` and `SESM` base class.
-        # It expects D (N_samples, N_functions) and h (N_functions, 1).
-        # We will use a *different* `_global_evaluation_func` for the `global_sparse_coding_layer`.
         return torch.matmul(dictionary, h)
 
-
-    def _global_evaluation_func(self, dictionary: torch.Tensor, h_batch: torch.Tensor) -> torch.Tensor:
+    def _aggregate_block_data(self, blocks: List[PartitionBlock]) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
         """
-        Special evaluation function for BSESM's global sparse coding layer.
+        Aggregates data from active blocks into lists of tensors, without padding.
         
-        This combines a dictionary evaluated for *all* points (`(N_total_points, N_functions)`)
-        with a *batch* of h vectors (`(N_blocks, N_functions, 1)`), to produce a batch of predictions.
-        
-        It implicitly assumes that `dictionary` is ordered such that its rows correspond
-        to the concatenated `X` from all blocks in the same order as `h_batch`'s blocks.
-        
-        Args:
-            dictionary (torch.Tensor): Dictionary matrix for all points. Shape: (N_total_points, N_functions).
-            h_batch (torch.Tensor): Stacked h vectors for all blocks. Shape: (N_blocks, N_functions, 1).
-            
-        Returns:
-            torch.Tensor: Predicted values for all points, structured as a batch.
-                          Shape: (N_total_points, output_dim) or (N_total_points, 1).
-        """
-        # We need to know how many points are in each block to correctly partition the `dictionary`
-        # and apply the corresponding `h` from `h_batch`.
-        # This requires `max_points_in_block` and `num_blocks` information from `_fill_block_points`.
-        # This implies `_global_evaluation_func` needs more context than standard `eval_func`.
-        # Or, we design `h_batch` to be already expanded to match the dictionary's structure.
-
-        # Let's simplify this. `h_batch` should be structured for `bmm`.
-        # `h_batch` comes as `(N_blocks, N_functions, 1)`.
-        # `dictionary` from `dictionary_layer.forward(X_batch)` is `(N_total_points, N_functions)`.
-
-        # To perform BMM, we need D to be (N_blocks, N_points_per_block, N_functions).
-        # And h_batch to be (N_blocks, N_functions, 1).
-        # The result will be (N_blocks, N_points_per_block, 1).
-        # We also need a way to know `N_points_per_block`.
-
-        # This indicates a potential issue in the current `_fill_block_points` output.
-        # It returns `filled_active_blocks_X` (N_total_points, N_features)
-        # and `max_points_in_block`.
-
-        num_blocks = h_batch.shape[0]
-        num_functions = h_batch.shape[1] # Should be N_functions
-        
-        # We assume `dictionary` comes from `dictionary_layer.forward(X_batch_normalized)`.
-        # X_batch_normalized is `(N_total_points, N_features)`, which comes from `_fill_block_points`.
-        # `_fill_block_points` also returns `max_points_in_block`.
-        points_per_block = dictionary.shape[0] // num_blocks
-        
-        # Reshape dictionary to be a batch for BMM
-        # (N_total_points, N_functions) -> (N_blocks, points_per_block, N_functions)
-        dictionary_reshaped = dictionary.view(num_blocks, points_per_block, num_functions)
-        
-        # Perform batch matrix multiplication
-        # (N_blocks, points_per_block, N_functions) @ (N_blocks, N_functions, 1)
-        # Result: (N_blocks, points_per_block, 1)
-        y_pred_batch = torch.bmm(dictionary_reshaped, h_batch)
-        
-        # Flatten back to (N_total_points, 1) to match concatenated target_y.
-        return y_pred_batch.view(-1, 1)
-
-
-    def _aggregate_block_data(self, blocks: List[PartitionBlock]) -> Tuple[torch.Tensor, torch.Tensor, int]:
-        """
-        Aggregates and pads data from a list of PartitionBlocks into batch tensors.
-        
-        This prepares data for global training in BSESM.
+        This prepares data for the batched dictionary evaluation and the construction
+        of the block-diagonal system.
         
         Args:
             blocks (List[PartitionBlock]): List of active blocks.
             
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, int]:
-                - X_batch_normalized (torch.Tensor): Normalized input features, stacked and padded.
-                                                   Shape: (num_blocks * max_points_in_block, n_features).
-                - y_batch_target (torch.Tensor): Target values, stacked and padded.
-                                                Shape: (num_blocks * max_points_in_block, output_dim).
-                - max_points_in_block (int): The maximum number of points in any single block.
+            Tuple containing three lists:
+                - X_list (List[torch.Tensor]): Normalized input features for each block.
+                - y_list (List[torch.Tensor]): Target values for each block.
+                - h_initial_list (List[torch.Tensor]): Initial `h` vectors for each block.
         """
         if not blocks:
-            # Return empty tensors with correct shapes if no active blocks
-            return (
-                torch.empty(0, self.n_features, device=self.device_manager.get_device(DeviceTarget.GLOBAL)),
-                torch.empty(0, 1, device=self.device_manager.get_device(DeviceTarget.GLOBAL)), # Assuming output_dim=1
-                0
-            )
+            return [], [], []
 
-        # Get output_dim from the first block's target (if available) or assume 1
-        output_dim = blocks[0].target.shape[1] if blocks[0].target is not None and blocks[0].target.dim() > 1 else 1
+        X_list = [block.normalized_X for block in blocks]
+        y_list = [block.target for block in blocks]
+        h_initial_list = [block.sparse_coding_layer.h for block in blocks]
         
-        max_points_in_block = max(len(block.X) for block in blocks)
-        
-        # Prepare padding tensors
-        padding_X_row = torch.zeros(1, self.n_features, device=self.device_manager.get_device(DeviceTarget.GLOBAL))
-        padding_y_row = torch.zeros(1, output_dim, device=self.device_manager.get_device(DeviceTarget.GLOBAL))
-
-        # Lists to hold padded tensors for concatenation
-        padded_X_list = []
-        padded_y_list = []
-
-        for block in blocks:
-            # Ensure block's normalized_X and target are tensors and on device
-            current_X = block.normalized_X.to(self.device_manager.get_device(DeviceTarget.GLOBAL))
-            current_y = block.target.to(self.device_manager.get_device(DeviceTarget.GLOBAL))
-
-            # Pad X
-            num_padding_X = max_points_in_block - current_X.shape[0]
-            if num_padding_X > 0:
-                padded_X = torch.cat([current_X, padding_X_row.repeat(num_padding_X, 1)], dim=0)
-            else:
-                padded_X = current_X
-            padded_X_list.append(padded_X)
-
-            # Pad y
-            num_padding_y = max_points_in_block - current_y.shape[0]
-            if num_padding_y > 0:
-                padded_y = torch.cat([current_y, padding_y_row.repeat(num_padding_y, 1)], dim=0)
-            else:
-                padded_y = current_y
-            padded_y_list.append(padded_y)
-
-        X_batch_normalized = torch.cat(padded_X_list, dim=0)
-        y_batch_target = torch.cat(padded_y_list, dim=0)
-        
-        return X_batch_normalized, y_batch_target, max_points_in_block
-
+        return X_list, y_list, h_initial_list
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
         """
         Perform a partial fit on the BSESM model, training dictionary and sparse codes globally.
 
-        This method aggregates all active training points, initializes sparse codes for each block,
-        and then iteratively updates the global dictionary and all sparse codes simultaneously.
+        This method uses a block-diagonal matrix strategy:
+        1. Aggregates data from all active blocks into lists.
+        2. Updates the shared dictionary by accumulating gradients from all blocks in a single optimizer step.
+        3. Constructs a large block-diagonal "mega-matrix" from the evaluated dictionaries.
+        4. Concatenates all `y` and `h` vectors to solve the sparse coding problem globally.
+        5. Unpacks the optimized `H_mega` back into individual `h` vectors for each block.
 
         Args:
             X (torch.Tensor): Input features for training (full dataset or a batch).
             y (torch.Tensor): Target values for training.
             *_: Additional unused positional arguments.
-
-        Returns:
-            None
         """
-        # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)
 
-        # 1. Add points to partition manager and initialize blocks
         self.partition_manager.add_points(X, y)
-        
-        # 2. Initialize sparse coding layer for each block
-        # Each block will get a fresh SC layer if it's new/active, or reuse existing one.
-        # This gives each block its own h tensor.
         self.partition_manager.init_sparse_coding_per_block(
             config=self.sparse_coding_config,
-            evaluation_func=self.evaluation_func # Standard eval_func for individual block's SC layer
+            evaluation_func=self.evaluation_func
         )
         
-        # 3. Retrieve all currently active blocks (those with data points)
         active_blocks = self.partition_manager.retrieve_active_blocks()
-        
         if not active_blocks:
             self.logger.warning("No active blocks found. Skipping training.")
             return
 
-        # 4. Aggregate all normalized X and target y from active blocks into batch tensors
-        X_batch_normalized, y_batch_target, max_points_in_block = self._aggregate_block_data(active_blocks)
-
-        # 5. Prepare the initial batch of h vectors for global training
-        # These are stacked into a single tensor for the global sparse coding layer.
-        # Shape: (N_blocks, N_functions, 1)
-        h_batch_initial = torch.stack([
-            block.sparse_coding_layer.h.to(self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER))
-            for block in active_blocks
-        ])
+        # Step 1: Aggregate data into lists
+        X_list, y_list, h_list = self._aggregate_block_data(active_blocks)
         
-        # Initialize the global sparse coding layer with this aggregated h
-        self.global_sparse_coding_layer.setup(h_batch_initial)
-        
-        # 6. Perform global training over model_epochs
-        # This calls the parent SESM's _train_step, but with our global SC layer and batch data.
-        # The `_train_step` expects `sparsecoding` to be the layer managing `h`.
-        # Here, `self.global_sparse_coding_layer` is that manager for the *batch* of `h`s.
+        # Wrap in a nested_tensor for efficient dictionary evaluation in a single call
+        X_nested = torch.nested.nested_tensor(X_list, layout=torch.jagged,
+                                              device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
         
         for epoch in range(self.config.model_epochs):
-            epoch_start_time = time.time()
+            # --- Dictionary Update Step with Manual Batching / Gradient Accumulation ---
+            dict_optimizer = self.dictionary_layer.optimizer
+            dict_criterion = self.dictionary_layer.criterion
             
-            # _train_step optimizes:
-            # 1. Dictionary (using X_batch_normalized, y_batch_target, and detached h_batch)
-            # 2. h_batch (using dictionary, y_batch_target)
+            # Zero gradients once before accumulating
+            dict_optimizer.zero_grad()
             
-            # The dictionary_layer.forward(X_batch_normalized) will produce (N_total_points, N_functions)
-            # The global_sparse_coding_layer needs D (N_total_points, N_functions) and h (N_blocks, N_functions, 1).
-            # Its internal evaluation_func (`_global_evaluation_func`) will handle this.
+            # Evaluate the dictionary for all blocks in a single, efficient call.
+            # self.dictionary_layer(X_nested) returns a list of evaluated dictionaries [D_1, D_2, ...].
+            dict_list = self.dictionary_layer(X_nested)
             
-            super()._train_step(
-                X=X_batch_normalized,
-                y=y_batch_target,
-                sparsecoding=self.global_sparse_coding_layer # Pass the global SC layer
-            )
+            total_loss_value = 0.0
+            total_samples = 0
             
-            self.elapsed_time += time.time() - epoch_start_time
+            # This loop accumulates gradients from all blocks.
+            for i in range(len(active_blocks)):
+                dict_i = dict_list[i]
+                y_i = y_list[i]
+                h_i = h_list[i].detach() # Use detached h for dict training
+
+                y_pred_i = self.evaluation_func(dict_i, h_i)
+                loss_i = dict_criterion(y_pred_i, y_i)
+
+                # The .backward() call on each loss accumulates gradients in the dictionary's parameters.
+                loss_i.backward() 
+                
+                total_loss_value += loss_i.item() * y_i.shape[0]
+                total_samples += y_i.shape[0]
             
-            if ( (self.config.log_interval > 0) and
-                 ( (epoch + 1) % self.config.log_interval == 0 or
-                   epoch == 0 or
-                   epoch == self.config.model_epochs - 1 ) ):
-                self.logger.info(
-                    f"BSESM Global Epoch {epoch + 1}/{self.config.model_epochs}: "
-                    f"Loss Global SC: {self.global_sparse_coding_layer.losses[-1]:.6f}, "
-                    f"Loss Dictionary: {self.dictionary_layer.losses[-1]:.6f}"
-                )
-        
+            # Step the optimizer once after all gradients have been accumulated.
+            dict_optimizer.step()
+            
+            avg_loss = total_loss_value / total_samples if total_samples > 0 else 0.0
+            self.dictionary_layer.losses.append(avg_loss)
+            self._dict_losses.append(avg_loss)
+
+            # --- Sparse Coding Update Step (Mega-Matrix) ---
+            with torch.no_grad():
+                # Re-evaluate the dictionary with the newly updated parameters.
+                dict_list_updated = self.dictionary_layer(X_nested)
+
+            # Step 2: Pack data into the mega-matrix formulation
+            Y_mega = torch.cat(y_list)
+            D_mega = torch.block_diag(*dict_list_updated)
+            
+            # The number of functions for the global SC layer is the total number of columns in D_mega.
+            self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
+            
+            H_mega_initial = torch.cat(h_list)
+            self.global_sparse_coding_layer.setup(H_mega_initial)
+
+            # Step 3: Solve the single, large sparse coding problem
+            self.global_sparse_coding_layer.partial_fit(y=Y_mega, dictionary=D_mega)
+            H_mega_optimizado = self.global_sparse_coding_layer.h.detach()
+            
+            # Step 4: Unpack the results and update each block's h for the next epoch
+            h_split_sizes = [h.shape[0] for h in h_list]
+            h_optimizado_list = torch.split(H_mega_optimizado, h_split_sizes)
+
+            for i, block in enumerate(active_blocks):
+                # Update the original h-vector in the list for the next iteration
+                h_list[i].data = h_optimizado_list[i].to(block.sparse_coding_layer.device)
+                # Also update the reference in the block object itself
+                block.sparse_coding_layer.h.data = h_list[i].data
+
         self.partial_fit_count += 1
-        
-        # 7. After global training, distribute the learned h_batch back to individual blocks
-        # h_batch is now self.global_sparse_coding_layer.h, shape (N_blocks, N_functions, 1)
-        learned_h_batch = self.global_sparse_coding_layer.h.detach().cpu()
-        
-        for i, block in enumerate(active_blocks):
-            block.sparse_coding_layer.h.data = learned_h_batch[i].to(block.sparse_coding_layer.device)
-            if self.logger.level <= logging.DEBUG:
-                 # Check sparsity
-                 h_tensor = block.sparse_coding_layer.h.detach().cpu()
-                 non_zero_components = torch.sum(torch.abs(h_tensor) > 1e-6).item()
-                 total_components = h_tensor.numel()
-                 sparsity_ratio = (total_components - non_zero_components) / total_components * 100
-                 self.logger.debug(
-                    f"Block {block.block_index} 'h' updated. Sparsity: {sparsity_ratio:.2f}%"
-                 )
 
 
     def predict(self, X: torch.Tensor, y: torch.Tensor, *_) -> torch.Tensor:
@@ -364,85 +238,41 @@ class BSESM(SESM):
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
-        # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)
 
-        # Retrieve active blocks for testing. These are new PartitionBlock instances
-        # but they point to the *original* sparse_coding_layer (with the trained h)
-        # and the amplitude from the training phase.
         test_active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
-
         if not test_active_blocks:
             self.logger.warning("No active test blocks found. Returning empty prediction.")
-            # Return an empty tensor matching expected output shape and device
-            return torch.empty(y.shape[0], y.shape[1], device=X.device, dtype=X.dtype)
+            return torch.empty_like(y, device=X.device, dtype=X.dtype)
 
-        # Aggregate X_test and y_test similarly to training, for a single forward pass
-        # Note: y_test_batch_target is not strictly needed for prediction, but _aggregate_block_data returns it.
-        X_test_batch_normalized, _, max_points_in_block = self._aggregate_block_data(test_active_blocks)
+        # Aggregate test data into a nested_tensor for efficient batch evaluation
+        X_list_test = [block.normalized_X for block in test_active_blocks]
+        X_nested_test = torch.nested.nested_tensor(X_list_test, layout=torch.jagged, device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
 
-        # Create a batch of h vectors for prediction.
-        # These come directly from the `sparse_coding_layer` of each test block.
-        h_predict_batch = torch.stack([
-            block.sparse_coding_layer.h.to(self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER))
-            for block in test_active_blocks
-        ])
-        
-        # Perform the prediction using the _global_evaluation_func and the global dictionary.
-        # The `dictionary_layer.forward(X_test_batch_normalized)` evaluates D for all points.
-        # The `_global_evaluation_func` then re-batches D and multiplies with h_predict_batch.
         with torch.no_grad():
-            evaluated_D = self.dictionary_layer.forward(X_test_batch_normalized)
-            y_pred_batch_normalized = self._global_evaluation_func(evaluated_D, h_predict_batch)
-
-        # Denormalize predictions by dividing by block amplitude
-        # y_pred_batch_normalized is (N_total_points, 1). We need to split it back by block.
-        # The `_aggregate_block_data` returned the total points.
-        
-        y_pred_unnormalized_list = []
-        current_point_idx = 0
-        for block_idx, block in enumerate(test_active_blocks):
-            num_points_in_block_original = len(block.X) # Number of actual points, not padded
-            num_points_in_block_padded = max_points_in_block # Number of points including padding
-
-            # Extract the relevant (non-padded) predictions for this block
-            block_normalized_preds = y_pred_batch_normalized[
-                current_point_idx : current_point_idx + num_points_in_block_original
+            # Evaluate the dictionary for all test blocks at once -> returns a list of matrices
+            dict_list_test = self.dictionary_layer(X_nested_test)
+            
+            # Perform prediction for each block using its specific evaluated dictionary and learned h
+            y_pred_normalized_list = [
+                self.evaluation_func(dict_i, block.sparse_coding_layer.h)
+                for dict_i, block in zip(dict_list_test, test_active_blocks)
             ]
-            
-            # Apply denormalization using the block's amplitude
-            # Ensure amplitude is a tensor if block_normalized_preds is >1D
-            amplitude_tensor = torch.tensor(block.amplitude, device=X.device, dtype=X.dtype)
-            block_unnormalized_preds = block_normalized_preds / amplitude_tensor
-            y_pred_unnormalized_list.append(block_unnormalized_preds)
-            
-            current_point_idx += num_points_in_block_padded # Advance by padded size
 
-        # Map predictions back to original global positions (based on original `y` indices)
-        # Initialize output tensor with appropriate shape (N_samples, output_dim)
-        output_dim = y.shape[1] if y.dim() > 1 else 1 # Infer output_dim from y
-        y_final_predictions = torch.zeros(y.shape[0], output_dim, device=X.device, dtype=X.dtype)
+        # Denormalize and reconstruct the final output tensor
+        # Ensure y_final_predictions is created with the correct shape and device
+        y_final_predictions = torch.zeros(y.shape[0], device=X.device, dtype=X.dtype)
         
-        for block_idx, block in enumerate(test_active_blocks):
-            num_actual_points = len(block.X) # Number of actual points in this block
+        for i, block in enumerate(test_active_blocks):
+            block_preds_unnormalized = y_pred_normalized_list[i] / block.amplitude
+            y_final_predictions[block.positions] = block_preds_unnormalized.squeeze()
             
-            # Get the predictions for the actual points of this block
-            preds_for_this_block = y_pred_unnormalized_list[block_idx]
-            
-            # Assign them to their original global positions
-            for i in range(num_actual_points):
-                original_pos = block.positions[i] # Get the original index from the test set X
-                y_final_predictions[original_pos] = preds_for_this_block[i].cpu()
+        return y_final_predictions.view_as(y)
 
-        return y_final_predictions
-
-
-    # performance_stats can remain as it is, as it calls predict.
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
         Evaluate the model's performance on a given dataset using active sub-blocks.
-        ...
         """
         y_pred = self.predict(X, y)
         time = self.elapsed_time / 60

@@ -61,7 +61,6 @@ def bsesm_config_fixture():
         initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
         activity_threshold=0
     )
-
     return BSESMConfig(
         n_features=n_features,
         model_epochs=1,
@@ -84,117 +83,11 @@ def test_bsesm_initialization(sample_bsesm_model):
     assert isinstance(model, BSESM)
     assert hasattr(model, 'global_sparse_coding_layer')
     assert isinstance(model.global_sparse_coding_layer, ISTALayer) # Assuming ISTA is default for ISTAConfig
-    # CORRECCION: Comparar las funciones en sí, no la identidad de los objetos
-    assert model.global_sparse_coding_layer.evaluation_func == model._global_evaluation_func 
     assert model.global_sparse_coding_layer.device == model.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
     assert model.dictionary_layer is not None
     assert model.partition_manager is not None
     assert model.n_features == model.config.n_features
     assert model.n_functions == model.config.sparse_coding_config.n_functions
-
-def test_bsesm_aggregate_block_data_padding(sample_bsesm_model, device_manager_fixture):
-    """
-    Test _aggregate_block_data for correct padding and concatenation
-    when blocks have different numbers of points.
-    """
-    model = sample_bsesm_model
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-    n_features = model.n_features
-    # n_functions = model.n_functions # Not directly used in this test function scope
-
-    # CORRECCION: Crear instancias REALES de PartitionBlock
-    # Necesitamos un space_origin y un block_size consistentes con el PartitionBlock.
-    # Usaremos valores dummy para que los bloques puedan inicializarse.
-    dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
-    dummy_block_size = torch.tensor([2.0, 2.0], device=device) # Example size, doesn't affect padding logic directly
-
-    block00 = PartitionBlock(dummy_space_origin, (0,0), dummy_block_size, device)
-    # Poblar el bloque con datos simulados y llamar a sus métodos para que calculen normalized_X y target
-    block00.new_point(torch.tensor([-1.9, -1.9], dtype=torch.float32, device=device), torch.tensor([0.5], dtype=torch.float32, device=device), 0)
-    block00.new_point(torch.tensor([-1.8, -1.8], dtype=torch.float32, device=device), torch.tensor([0.6], dtype=torch.float32, device=device), 1)
-    block00.normalize_points()
-    block00.calculate_amplitude_and_target() # Esto establece normalized_X y target
-
-    block01 = PartitionBlock(dummy_space_origin, (0,1), dummy_block_size, device)
-    block01.new_point(torch.tensor([-1.0, 0.5], dtype=torch.float32, device=device), torch.tensor([0.8], dtype=torch.float32, device=device), 2) # Only 1 point
-    block01.normalize_points()
-    block01.calculate_amplitude_and_target()
-
-    block10 = PartitionBlock(dummy_space_origin, (1,0), dummy_block_size, device)
-    block10.new_point(torch.tensor([0.1, -1.5], dtype=torch.float32, device=device), torch.tensor([0.9], dtype=torch.float32, device=device), 3)
-    block10.new_point(torch.tensor([0.2, -1.4], dtype=torch.float32, device=device), torch.tensor([1.0], dtype=torch.float32, device=device), 4)
-    block10.new_point(torch.tensor([0.3, -1.3], dtype=torch.float32, device=device), torch.tensor([1.1], dtype=torch.float32, device=device), 5) # 3 points
-    block10.normalize_points()
-    block10.calculate_amplitude_and_target()
-    
-    blocks = [block00, block01, block10]
-
-    X_batch_normalized, y_batch_target, max_points_in_block = model._aggregate_block_data(blocks)
-
-    # Expected max_points_in_block should be 3
-    assert max_points_in_block == 3
-
-    # Expected shapes: (num_blocks * max_points_in_block, n_features)
-    assert X_batch_normalized.shape == (3 * 3, n_features)
-    assert y_batch_target.shape == (3 * 3, 1) # Assuming output_dim=1 from fixture
-
-    # Verify content and padding
-    # Block 00: [[0.1, 0.1], [0.2, 0.2], [0.0, 0.0]] (padded)
-    assert torch.allclose(X_batch_normalized[0:2], block00.normalized_X)
-    assert torch.allclose(X_batch_normalized[2], torch.zeros(n_features, device=device))
-    assert torch.allclose(y_batch_target[0:2], block00.target)
-    assert torch.allclose(y_batch_target[2], torch.zeros(1, device=device))
-
-    # Block 01: [[0.7, 0.7], [0.0, 0.0], [0.0, 0.0]] (padded)
-    assert torch.allclose(X_batch_normalized[3], block01.normalized_X)
-    assert torch.allclose(X_batch_normalized[4:6], torch.zeros(2, n_features, device=device))
-    assert torch.allclose(y_batch_target[3], block01.target)
-    assert torch.allclose(y_batch_target[4:6], torch.zeros(2, 1, device=device))
-
-    # Block 10: No padding needed
-    assert torch.allclose(X_batch_normalized[6:9], block10.normalized_X)
-    assert torch.allclose(y_batch_target[6:9], block10.target)
-
-def test_bsesm_global_evaluation_func(sample_bsesm_model, device_manager_fixture):
-    """
-    Test _global_evaluation_func for correct batched matrix multiplication
-    and reshaping.
-    """
-    model = sample_bsesm_model
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-
-    num_blocks = 3
-    max_points_in_block = 4 # Example padding size
-    n_functions = model.n_functions
-    # n_features = model.n_features # Not directly used in eval_func, but implied by D's setup
-
-    # Create mock dictionary (D) and h_batch
-    # D is (N_total_points, N_functions)
-    D_total_points = num_blocks * max_points_in_block
-    mock_dictionary = torch.randn(D_total_points, n_functions, device=device, dtype=torch.float32)
-    
-    # h_batch is (N_blocks, N_functions, 1)
-    mock_h_batch = torch.randn(num_blocks, n_functions, 1, device=device, dtype=torch.float32)
-
-    # Expected output: (N_total_points, 1)
-    # Manually compute expected result by splitting D and multiplying with h_batch
-    expected_y_pred_list = []
-    for i in range(num_blocks):
-        # Extract D slice for this block
-        block_D_slice = mock_dictionary[i * max_points_in_block : (i + 1) * max_points_in_block]
-        # Extract h for this block
-        block_h = mock_h_batch[i] # Shape (N_functions, 1)
-        # Perform matmul
-        expected_y_pred_list.append(torch.matmul(block_D_slice, block_h))
-    
-    expected_y_pred = torch.cat(expected_y_pred_list, dim=0)
-
-    # Call the method under test
-    y_pred_actual = model._global_evaluation_func(mock_dictionary, mock_h_batch)
-
-    assert y_pred_actual.shape == expected_y_pred.shape
-    assert torch.allclose(y_pred_actual, expected_y_pred, atol=1e-6)
-
 
 @patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.add_points')
 @patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.init_sparse_coding_per_block')
@@ -225,8 +118,7 @@ def test_bsesm_partial_fit_workflow(
     X_input = torch.randn(10, n_features, device=device, dtype=torch.float32)
     y_input = torch.randn(10, 1, device=device, dtype=torch.float32)
 
-    # --- CORRECCION: Usar instancias REALES de PartitionBlock ---
-    # Necesitamos un space_origin y un block_size consistentes.
+    # --- Usar instancias REALES de PartitionBlock para los mocks ---
     dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
     dummy_block_size = torch.tensor([2.0, 2.0], device=device)
 
@@ -252,12 +144,12 @@ def test_bsesm_partial_fit_workflow(
         mock_active_blocks.append(block)
         mock_h_data_list.append(mock_h_tensor)
 
-    mock_retrieve_active_blocks.return_value = mock_active_blocks
+    # Simulate the actual output structure of _aggregate_block_data
+    mock_X_list_agg = [block.normalized_X for block in mock_active_blocks]
+    mock_y_list_agg = [block.target for block in mock_active_blocks]
 
-    mock_X_batch_normalized = torch.randn(20, n_features, device=device, dtype=torch.float32) # (2 blocks * 10 samples)
-    mock_y_batch_target = torch.randn(20, 1, device=device, dtype=torch.float32)
-    mock_max_points_in_block = 10
-    mock_aggregate_block_data.return_value = (mock_X_batch_normalized, mock_y_batch_target, mock_max_points_in_block)
+    mock_retrieve_active_blocks.return_value = mock_active_blocks
+    mock_aggregate_block_data.return_value = (mock_X_list_agg, mock_y_list_agg, mock_h_data_list)       
 
     # --- Mock global_sparse_coding_layer.h to track updates ---
     # The actual Parameter object of global_sparse_coding_layer.h will be updated by _train_step
@@ -267,7 +159,7 @@ def test_bsesm_partial_fit_workflow(
     model.global_sparse_coding_layer.losses = [] # Initialize losses for the actual global SC layer
     
     # Simulate _train_step updating global_h
-    # CORRECCION: Aceptar argumentos por nombre en side_effect
+    # Aceptar argumentos por nombre en side_effect
     def simulate_train_step_update(X, y, sparsecoding):
         sparsecoding.h.data.add_(0.1) # Simple simulated update
         sparsecoding.losses.append(0.5) # Update global SC layer's losses
@@ -304,8 +196,8 @@ def test_bsesm_partial_fit_workflow(
     assert mock_train_step.call_count == model_epochs
     for i in range(model_epochs):
         call_args = mock_train_step.call_args_list[i]
-        assert torch.allclose(call_args.kwargs['X'], mock_X_batch_normalized)
-        assert torch.allclose(call_args.kwargs['y'], mock_y_batch_target)
+        assert call_args.kwargs['X'] is not None # X is now a NestedTensor
+        assert call_args.kwargs['y'] is not None # Y is now a concatenated tensor
         assert call_args.kwargs['sparsecoding'] is model.global_sparse_coding_layer
 
     # 4. Learned h_batch distributed back to individual blocks
@@ -338,7 +230,7 @@ def test_bsesm_predict_workflow_denormalization(
     X_test_input = torch.randn(5, n_features, device=device, dtype=torch.float32)
     y_test_input = torch.randn(5, 1, device=device, dtype=torch.float32) # Original y for positions
 
-    # --- CORRECCION: Usar instancias REALES de PartitionBlock para los bloques de prueba ---
+    # --- Usar instancias REALES de PartitionBlock para los bloques de prueba ---
     dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
     dummy_block_size = torch.tensor([2.0, 2.0], device=device)
 
@@ -431,7 +323,7 @@ def test_bsesm_predict_workflow_denormalization(
         block2.sparse_coding_layer.h.to(device)
     ])
     
-    # CORRECCION: Comparar call_args manualmente para tensores
+    # Comparar call_args manualmente para tensores
     mock_global_eval_func.assert_called_once() # First, assert it was called once
     actual_D_arg, actual_h_batch_arg = mock_global_eval_func.call_args[0]
     assert torch.allclose(actual_D_arg, mock_evaluated_D), "Mocked D argument mismatch"
@@ -441,3 +333,146 @@ def test_bsesm_predict_workflow_denormalization(
     # 5. Final predictions match expected after denormalization and re-mapping
     assert y_predicted_actual.shape == expected_final_preds.shape
     assert torch.allclose(y_predicted_actual, expected_final_preds, atol=1e-6)
+
+def test_aggregate_block_data_no_padding(sample_bsesm_model, device_manager_fixture):
+    """
+    Test the refactored _aggregate_block_data to ensure it returns lists without padding.
+    """
+    model = sample_bsesm_model
+    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+    n_functions = model.n_functions # Use n_functions from model fixture
+    
+    # Create mock blocks with different numbers of points
+    block1 = MagicMock(spec=PartitionBlock)
+    block1.normalized_X = torch.randn(10, 2, device=device)
+    block1.target = torch.randn(10, 1, device=device)
+    # Create and assign a mock for sparse_coding_layer first
+    mock_sc_layer_b1 = MagicMock(spec=ISTALayer)
+    mock_sc_layer_b1.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
+    block1.sparse_coding_layer = mock_sc_layer_b1
+
+    block2 = MagicMock(spec=PartitionBlock)
+    block2.normalized_X = torch.randn(7, 2, device=device)
+    block2.target = torch.randn(7, 1, device=device)
+    # Create and assign a mock for sparse_coding_layer for block2
+    mock_sc_layer_b2 = MagicMock(spec=ISTALayer)
+    mock_sc_layer_b2.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
+    block2.sparse_coding_layer = mock_sc_layer_b2
+
+    active_blocks = [block1, block2]
+    
+    # Note: The _aggregate_block_data method does not return max_points_in_block anymore.
+    # It returns X_list, y_list, h_initial_list.
+    X_list, y_list, h_list = model._aggregate_block_data(active_blocks)
+
+    # Assertions
+    assert isinstance(X_list, list) and isinstance(y_list, list) and isinstance(h_list, list)
+    assert len(X_list) == 2
+    assert torch.allclose(X_list[0], block1.normalized_X)
+    assert torch.allclose(X_list[1], block2.normalized_X)
+    assert y_list[0].shape == (10, 1)
+    assert y_list[1].shape == (7, 1)
+    # Assert that h_list contains the Parameter's data (or the Parameter itself, if that's what's copied)
+    # The actual implementation copies the Parameter object, so we check for identity.
+    assert h_list[0] is block1.sparse_coding_layer.h
+    assert h_list[1] is block2.sparse_coding_layer.h
+
+@patch('torch.block_diag')
+def test_partial_fit_mega_matrix_workflow(mock_block_diag, sample_bsesm_model):
+    """
+    Test the partial_fit workflow, focusing on the mega-matrix orchestration.
+    """
+    model = sample_bsesm_model
+    n_functions = model.n_functions # Get n_functions from fixture
+    
+    # Mock partition manager and its return values
+    model.partition_manager = MagicMock()
+    
+    block1 = MagicMock(spec=PartitionBlock)
+    block1.normalized_X = torch.randn(10, 2)
+    block1.target = torch.randn(10, 1)
+    # Create and assign mock for sparse_coding_layer
+    mock_sc_layer_b1 = MagicMock(spec=ISTALayer)
+    mock_sc_layer_b1.h = torch.nn.Parameter(torch.randn(n_functions, 1))
+    block1.sparse_coding_layer = mock_sc_layer_b1
+
+    block2 = MagicMock(spec=PartitionBlock)
+    block2.normalized_X = torch.randn(7, 2)
+    block2.target = torch.randn(7, 1)
+
+    # Create and assign mock for sparse_coding_layer
+    mock_sc_layer_b2 = MagicMock(spec=ISTALayer)
+    mock_sc_layer_b2.h = torch.nn.Parameter(torch.randn(n_functions, 1))
+    block2.sparse_coding_layer = mock_sc_layer_b2
+    
+    active_blocks = [block1, block2]
+    model.partition_manager.retrieve_active_blocks.return_value = active_blocks
+
+    # Mock dictionary layer behavior
+    model.dictionary_layer = MagicMock()
+    model.dictionary_layer.optimizer = MagicMock() # Mock optimizer
+    model.dictionary_layer.criterion = MagicMock(return_value=torch.tensor(0.1)) # Mock criterion
+    model.dictionary_layer.losses = [] # Initialize losses list
+    dict_list = [torch.randn(10, n_functions), torch.randn(7, n_functions)] # Mocked [D_1, D_2]
+    model.dictionary_layer.return_value = dict_list # Mock the __call__ behavior of dictionary_layer
+
+    # Mock global sparse coding layer
+    model.global_sparse_coding_layer = MagicMock(spec=ISTALayer) # Use spec for more accurate mocking
+    # Ensure h is a Parameter on the global SC layer mock
+    model.global_sparse_coding_layer.h = torch.nn.Parameter(torch.randn(17, 1)) # (10+7)*1, total h
+    model.global_sparse_coding_layer.losses = [] # Initialize losses list
+    model.global_sparse_coding_layer.config.n_functions = 17 # Set n_functions for the global SC layer mock
+
+    # --- Call the function to test ---
+    model.partial_fit(torch.randn(17, 2), torch.randn(17, 1))
+
+    # --- Assertions ---
+    # 1. Dictionary layer was trained with a NestedTensor (this behavior is now internal to BSESM.partial_fit)
+    # We check that dictionary_layer was called as a function (its __call__ method) with a nested tensor.
+    model.dictionary_layer.assert_called_once()
+    actual_X_nested_passed_to_dict_layer = model.dictionary_layer.call_args[0][0]
+    assert getattr(actual_X_nested_passed_to_dict_layer, 'is_nested', False)
+    
+    # 2. Dictionary's optimizer and criterion used
+    model.dictionary_layer.optimizer.zero_grad.assert_called_once()
+    # The criterion will be called multiple times in the loop
+    assert model.dictionary_layer.criterion.call_count == len(active_blocks)
+    model.dictionary_layer.optimizer.step.assert_called_once()
+    
+    # 3. Mega-matrix D_mega was constructed correctly
+    mock_block_diag.assert_called_once_with(*dict_list)
+    
+    # 4. Global sparse coder was called with mega-tensors
+    model.global_sparse_coding_layer.partial_fit.assert_called_once()
+    sc_fit_call_args = model.global_sparse_coding_layer.partial_fit.call_args
+    Y_mega_arg = sc_fit_call_args.kwargs['y']
+    D_mega_arg = sc_fit_call_args.kwargs['dictionary']
+    
+    # Check Y_mega_arg
+    expected_Y_mega = torch.cat([block.target for block in active_blocks])
+    assert torch.allclose(Y_mega_arg, expected_Y_mega)
+    
+    # Check D_mega_arg
+    expected_D_mega_from_mock = mock_block_diag.return_value # This is what mock_block_diag returns
+    assert torch.allclose(D_mega_arg, expected_D_mega_from_mock)
+    
+    # 5. Optimized H was correctly unpacked and distributed back to blocks
+    # H_mega_optimizado is model.global_sparse_coding_layer.h
+    H_mega_optimizado = model.global_sparse_coding_layer.h
+    
+    # These sizes are based on the mock blocks' `normalized_X` batch sizes, which are 10 and 7.
+    # The `h_list` was constructed from the initial h values, which are n_functions (5) each.
+    # So the total `H_mega_initial` has shape (2*5, 1) = (10, 1).
+    # The `global_sparse_coding_layer.h` will be updated to this total size during setup.
+    # The `h_split_sizes` should be based on `n_functions` (5) for each block, not the data samples.
+    
+    # Recalculate expected split based on n_functions
+    n_functions_per_block = n_functions # 5
+    split_h_optimizado_list = torch.split(H_mega_optimizado, [n_functions_per_block] * len(active_blocks))
+
+    for i, block in enumerate(active_blocks):
+        assert torch.allclose(block.sparse_coding_layer.h.data, split_h_optimizado_list[i])
+
+if __name__ == "__main__":
+    from pytest_helper import print_pytest_instructions
+    print_pytest_instructions()
