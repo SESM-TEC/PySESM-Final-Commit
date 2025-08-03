@@ -10,7 +10,7 @@ License:
 
 from .PartitionBlock import PartitionBlock
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
-from ..base_types import BaseConfig
+from pysesm.base_types import BaseConfig, TensorBatch
 
 from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
 from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
@@ -181,7 +181,7 @@ class BlockManager(ABC):
     @abstractmethod
     def init_sparse_coding_per_block(self,
                                      config: SparseCodingConfig,
-                                     evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
+                                     evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch]):
         pass
 
 

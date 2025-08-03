@@ -10,6 +10,7 @@ from pysesm.functions.GaussianFunction import GaussianFunction # Still used for 
 from pysesm.sparse_coding.ISTALayer import ISTAConfig # For parameter_hook
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager # For DeviceTargetEnum
+from pysesm.base_types import TensorBatch
 
 # For debuggin and understanding >>>
 import matplotlib.pyplot as plt
@@ -52,7 +53,28 @@ def common_device():
 
 @pytest.fixture(scope="module")
 def common_evaluation_func():
-    return lambda d, h: torch.matmul(d, h) # Standard 2D matrix multiplication
+    def _eval_func(dictionary: TensorBatch, h: TensorBatch) -> TensorBatch:
+        # Ensure h is always (..., n_functions, 1) for matmul with (..., n_samples, n_functions)
+        # If h is (n_functions,), matmul makes it (n_samples,). Need to unsqueeze.
+        def ensure_h_2d_column(h_single: torch.Tensor) -> torch.Tensor:
+            if h_single.dim() == 1:
+                return h_single.unsqueeze(-1)
+            return h_single
+
+        # Adapt matmul for different TensorBatch types
+        if isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2:
+            return torch.matmul(dictionary, ensure_h_2d_column(h))
+        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3:
+            return torch.vmap(lambda d, h_b: torch.matmul(d, ensure_h_2d_column(h_b)))(dictionary, h)
+        elif getattr(dictionary, "is_nested", False) and getattr(h, "is_nested", False):
+            results = [torch.matmul(d_s, ensure_h_2d_column(h_s)) for d_s, h_s in zip(dictionary.unbind(), h.unbind())]
+            return torch.nested.as_nested_tensor(results, layout=dictionary.layout, device=dictionary.device, dtype=results[0].dtype)
+        elif isinstance(dictionary, list) and isinstance(h, list):
+            results = [torch.matmul(d_s, ensure_h_2d_column(h_s)) for d_s, h_s in zip(dictionary, h)]
+            return results
+        else:
+            raise TypeError(f"Unsupported TensorBatch types for evaluation_func: D={type(dictionary)}, h={type(h)}")
+    return _eval_func
 
 @pytest.fixture(scope="module")
 def common_device_manager(common_logger):
@@ -297,6 +319,162 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
                                err_msg="Learned precision matrix (G) not proportional to true G.")
 
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
+
+
+# --- New Test Cases for TensorBatch and Gradients ---
+
+def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
+                                                  common_evaluation_func,
+                                                  common_device_manager):
+    """
+    Test training GaussianDictLayer with a 3D Tensor input (batch, N, F),
+    verifying loss decrease and selective gradient zeroing.
+    """
+    n_features = 2
+    n_functions = 3
+    batch_size = 5
+    n_samples_per_batch = 20
+    epochs_to_run = 100
+
+    # Create dummy 3D input data (batch, n_samples, n_features)
+    X_batch = torch.randn(batch_size, n_samples_per_batch, n_features,
+                          device=common_device, requires_grad=False)
+    # Create dummy 3D target data (batch, n_samples, 1)
+    y_batch = torch.randn(batch_size, n_samples_per_batch, 1,
+                          device=common_device, requires_grad=False)
+    # Create dummy 3D sparse code (batch, n_functions, 1)
+    h_batch = torch.randn(batch_size, n_functions, 1,
+                          device=common_device, requires_grad=False)
+
+    dict_config = GaussianDictConfig(
+        epochs=epochs_to_run,
+        alpha=0.1,
+        mu_epochs=epochs_to_run // 2, # Train mu for half epochs
+        rho_epochs=epochs_to_run // 2, # Train rho for other half
+        split_mu_rho=True,
+        eig_range=[0.1, 1.0],
+        mu_range=[-1.0, 1.0]
+    )
+
+    dict_layer = GaussianDictLayer(
+        config=dict_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=common_evaluation_func,
+        logger=common_logger,
+        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+    )
+
+    initial_loss = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
+                                           mu_flag=True,rho_flag=True)
+
+    dict_layer.partial_fit(X_batch, y_batch, h_batch)
+
+    final_loss = dict_layer.losses[-1]
+
+    assert final_loss < initial_loss, "Loss should decrease during training."
+    assert len(dict_layer.losses) == epochs_to_run, \
+        "Loss history length should match total epochs."
+
+    # Test selective gradient zeroing by checking initial gradients
+    # Run one epoch where only mu is trained, then check rho grads
+    dict_layer.optimizer.zero_grad()
+    loss_mu_only = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
+                                           mu_flag=True, rho_flag=False)
+    
+    mu_grads_mu_only = dict_layer.theta_params.grad[-n_features:, :]
+    rho_grads_mu_only = dict_layer.theta_params.grad[:-n_features, :]
+    
+    assert not torch.all(mu_grads_mu_only == 0), "Mu grads should be non-zero"
+    assert torch.all(rho_grads_mu_only == 0), "Rho grads should be zero (mu_flag=True)"
+
+    # Run one epoch where only rho is trained, then check mu grads
+    dict_layer.optimizer.zero_grad()
+    loss_rho_only = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
+                                            mu_flag=False, rho_flag=True)
+    
+    mu_grads_rho_only = dict_layer.theta_params.grad[-n_features:, :]
+    rho_grads_rho_only = dict_layer.theta_params.grad[:-n_features, :]
+    
+    assert torch.all(mu_grads_rho_only == 0), "Mu grads should be zero (rho_flag=True)"
+    assert not torch.all(rho_grads_rho_only == 0), "Rho grads should be non-zero"
+
+
+def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_device,
+                                                       common_evaluation_func,
+                                                       common_device_manager):
+    """
+    Test training GaussianDictLayer with a nested_tensor input,
+    verifying loss decrease and selective gradient zeroing.
+    """
+    n_features = 2
+    n_functions = 3
+    num_batches = 3
+    samples_per_batch = [10, 5, 12]
+    epochs_to_run = 100
+
+    # Create lists of 2D tensors for nested_tensor input
+    X_list = [torch.randn(ns, n_features, device=common_device, requires_grad=False)
+              for ns in samples_per_batch]
+    y_list = [torch.randn(ns, 1, device=common_device, requires_grad=False)
+              for ns in samples_per_batch]
+    h_list = [torch.randn(n_functions, 1, device=common_device, requires_grad=False)
+              for _ in samples_per_batch] # h is per-function for each block
+
+    X_nested = torch.nested.nested_tensor(X_list, layout=torch.jagged)
+    y_nested = torch.nested.nested_tensor(y_list, layout=torch.jagged)
+    h_nested = torch.nested.nested_tensor(h_list, layout=torch.jagged)
+
+    dict_config = GaussianDictConfig(
+        epochs=epochs_to_run,
+        alpha=0.1,
+        mu_epochs=epochs_to_run // 2,
+        rho_epochs=epochs_to_run // 2,
+        split_mu_rho=True,
+        eig_range=[0.1, 1.0],
+        mu_range=[-1.0, 1.0]
+    )
+
+    dict_layer = GaussianDictLayer(
+        config=dict_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=common_evaluation_func,
+        logger=common_logger,
+        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+    )
+
+    initial_loss = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
+                                           mu_flag=True,rho_flag=True)
+
+    dict_layer.partial_fit(X_nested, y_nested, h_nested)
+
+    final_loss = dict_layer.losses[-1]
+
+    assert final_loss < initial_loss, "Loss should decrease during training."
+    assert len(dict_layer.losses) == epochs_to_run, \
+        "Loss history length should match total epochs."
+
+    # Test selective gradient zeroing with nested tensor input
+    dict_layer.optimizer.zero_grad()
+    loss_mu_only = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
+                                           mu_flag=True, rho_flag=False)
+    
+    mu_grads_mu_only = dict_layer.theta_params.grad[-n_features:, :]
+    rho_grads_mu_only = dict_layer.theta_params.grad[:-n_features, :]
+    
+    assert not torch.all(mu_grads_mu_only == 0), "Mu grads should be non-zero"
+    assert torch.all(rho_grads_mu_only == 0), "Rho grads should be zero (mu_flag=True)"
+
+    dict_layer.optimizer.zero_grad()
+    loss_rho_only = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
+                                            mu_flag=False, rho_flag=True)
+    
+    mu_grads_rho_only = dict_layer.theta_params.grad[-n_features:, :]
+    rho_grads_rho_only = dict_layer.theta_params.grad[:-n_features, :]
+    
+    assert torch.all(mu_grads_rho_only == 0), "Mu grads should be zero (rho_flag=True)"
+    assert not torch.all(rho_grads_rho_only == 0), "Rho grads should be non-zero"
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions

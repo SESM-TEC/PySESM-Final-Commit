@@ -9,14 +9,16 @@ License:
 '''
 
 
-from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
-from ..factories.SparseCodingFactory import SparseCodingFactory
-from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
-from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
+from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
+from pysesm.factories.SparseCodingFactory import SparseCodingFactory
+from pysesm.enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
+from pysesm.device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 # Update BlockManager import:
 from .BlockManager import BlockManager, BlockManagerConfig # Import both class and config
 from .PartitionBlock import PartitionBlock
+
+from pysesm.base_types import TensorBatch
 
 from dataclasses import dataclass # Ensure dataclass is imported
 from typing import Union, Callable, Iterator, Dict, Optional, List # Import List for type hints
@@ -307,7 +309,7 @@ class UniformPartitionManager(BlockManager):
                 
     def init_sparse_coding_per_block(self,
                                      config: SparseCodingConfig,
-                                     evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]):
+                                     evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch]):
 
         """
         Initializes a sparse coding layer for each block.

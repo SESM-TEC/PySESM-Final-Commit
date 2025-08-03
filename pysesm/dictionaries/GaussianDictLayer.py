@@ -35,7 +35,7 @@ class GaussianDictLayer(DictBaseLayer):
         config: GaussianDictConfig,
         n_features: int,
         n_functions: int,
-        evaluation_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
         parameter_hook: Optional[Callable[[dict], None]] = None,
         device = None,
@@ -80,8 +80,8 @@ class GaussianDictLayer(DictBaseLayer):
         return self.psi(X, parameters, **kwargs)
 
 
-    def _train_with_strategy(self, X: torch.Tensor, y: torch.Tensor, h: torch.Tensor, 
-                           log_losses: bool = True): 
+    def _train_with_strategy(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
+                             log_losses: bool = True): 
         """
         Implements the training strategy for Gaussian dictionary parameters (mu and rho).
         Uses a split training strategy based on `split_mu_rho` config.
@@ -90,16 +90,19 @@ class GaussianDictLayer(DictBaseLayer):
             # Training mu (mean) parameters
             if self.config.mu_epochs > 0:
                 for epoch in range(self.config.mu_epochs):
-                    loss = self._train_epoch(X, y, h, log_losses, mu_flag=True, rho_flag=False)
+                    loss = self._train_epoch(X=X, y=y, h=h, 
+                                             log_losses=log_losses, mu_flag=True, rho_flag=False)
 
             # Training rho (covariance) parameters
             if self.config.rho_epochs > 0:
                 for epoch in range(self.config.rho_epochs):
-                    loss = self._train_epoch(X, y, h, log_losses, mu_flag=False, rho_flag=True)
+                    loss = self._train_epoch(X=X, y=y, h=h, 
+                                             log_losses=log_losses, mu_flag=False, rho_flag=True)
         else:
             # Joint training of all parameters
             for epoch in range(self.config.epochs):
-                loss = self._train_epoch(X, y, h, log_losses, mu_flag=True, rho_flag=True)
+                loss = self._train_epoch(X=X, y=y, h=h, 
+                                         log_losses=log_losses, mu_flag=True, rho_flag=True)
 
     # --- Override _add_hook_info to provide mu/rho specific info ---
     def _add_hook_info(self, hook_info: dict, **eval_kwargs):

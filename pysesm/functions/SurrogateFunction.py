@@ -79,7 +79,7 @@ class SurrogateFunction(ABC):
     @staticmethod
     def _is_nested(X: torch.Tensor) -> bool:
         """
-        Private helper to robustly check if a tensor is a NestedTensor.
+        Private helper to robustly check if a tensor is a nested_tensor.
         This encapsulates the check in a single place.
         """
         return getattr(X,"is_nested",False)
@@ -148,7 +148,7 @@ class SurrogateFunction(ABC):
                 return self.evaluate(X, *args, **kwargs)
             elif X.dim() == 3:  # 3D tensor (batch_size, n_samples_per_batch, n_features)
                 # Use vmap to apply evaluate to each 2D slice
-                return torch.vmap(self.evaluate)(X, *args, **kwargs)
+                return torch.vmap(self.evaluate, in_dims=(0, None))(X, *args, **kwargs)
             else:
                 raise TypeError(
                     f"Unsupported torch.Tensor input dimension for SurrogateFunction: {X.dim()}. "
