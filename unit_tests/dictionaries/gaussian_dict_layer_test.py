@@ -53,28 +53,46 @@ def common_device():
 
 @pytest.fixture(scope="module")
 def common_evaluation_func():
-    def _eval_func(dictionary: TensorBatch, h: TensorBatch) -> TensorBatch:
-        # Ensure h is always (..., n_functions, 1) for matmul with (..., n_samples, n_functions)
-        # If h is (n_functions,), matmul makes it (n_samples,). Need to unsqueeze.
-        def ensure_h_2d_column(h_single: torch.Tensor) -> torch.Tensor:
-            if h_single.dim() == 1:
-                return h_single.unsqueeze(-1)
-            return h_single
+    # Helper to ensure 'h' is a column vector (N_functions, 1) if it's 1D,
+    # or (..., N_functions, 1) if it's already batched.
+    def _ensure_h_column_vector(h_input: torch.Tensor) -> torch.Tensor:
+        if h_input.dim() == 1:
+            return h_input.unsqueeze(-1)
+        return h_input
 
+    # Helper to ensure the output of matmul is always (..., N_samples, 1)
+    # if the logical output dimension is 1.
+    def _perform_matmul_and_shape_output(d: torch.Tensor,
+                                          h_val: torch.Tensor) -> torch.Tensor:
+        res = torch.matmul(d, _ensure_h_column_vector(h_val))
+        if res.dim() == 1:  # If matmul results in (N_samples,)
+            return res.unsqueeze(-1)  # Make it (N_samples, 1)
+        return res
+
+    # This is the actual callable function that the fixture will return.
+    # It's named _eval_func_impl to avoid confusion with the fixture name itself.
+    def _eval_func_impl(dictionary: TensorBatch, h: TensorBatch) -> TensorBatch:
         # Adapt matmul for different TensorBatch types
-        if isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2:
-            return torch.matmul(dictionary, ensure_h_2d_column(h))
-        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3:
-            return torch.vmap(lambda d, h_b: torch.matmul(d, ensure_h_2d_column(h_b)))(dictionary, h)
-        elif getattr(dictionary, "is_nested", False) and getattr(h, "is_nested", False):
-            results = [torch.matmul(d_s, ensure_h_2d_column(h_s)) for d_s, h_s in zip(dictionary.unbind(), h.unbind())]
-            return torch.nested.as_nested_tensor(results, layout=dictionary.layout, device=dictionary.device, dtype=results[0].dtype)
-        elif isinstance(dictionary, list) and isinstance(h, list):
-            results = [torch.matmul(d_s, ensure_h_2d_column(h_s)) for d_s, h_s in zip(dictionary, h)]
+        if (getattr(dictionary, "is_nested", False)
+              and getattr(h, "is_nested", False)):  # NestedTensor
+            results = [_perform_matmul_and_shape_output(d_s, h_s)
+                       for d_s, h_s in zip(dictionary.unbind(), h.unbind())]
+            return torch.nested.as_nested_tensor(results,
+                                                  layout=dictionary.layout,
+                                                  device=dictionary.device,
+                                                  dtype=results[0].dtype)
+        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2:  # Single 2D tensor
+            return _perform_matmul_and_shape_output(dictionary, h)
+        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3:  # 3D tensor
+            return torch.vmap(_perform_matmul_and_shape_output)(dictionary, h)
+        elif isinstance(dictionary, list) and isinstance(h, list):  # List of tensors
+            results = [_perform_matmul_and_shape_output(d_s, h_s)
+                       for d_s, h_s in zip(dictionary, h)]
             return results
         else:
-            raise TypeError(f"Unsupported TensorBatch types for evaluation_func: D={type(dictionary)}, h={type(h)}")
-    return _eval_func
+            raise TypeError("Unsupported TensorBatch types for evaluation_func: "
+                            f"D={type(dictionary)}, h={type(h)}")
+    return _eval_func_impl  # Return the actual callable function.
 
 @pytest.fixture(scope="module")
 def common_device_manager(common_logger):
@@ -400,16 +418,17 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
     assert not torch.all(rho_grads_rho_only == 0), "Rho grads should be non-zero"
 
 
+@pytest.mark.filterwarnings("ignore:There is a performance drop.*:UserWarning")
+@pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
 def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_device,
-                                                       common_evaluation_func,
-                                                       common_device_manager):
+                                                      common_evaluation_func,
+                                                      common_device_manager):
     """
     Test training GaussianDictLayer with a nested_tensor input,
     verifying loss decrease and selective gradient zeroing.
     """
     n_features = 2
     n_functions = 3
-    num_batches = 3
     samples_per_batch = [10, 5, 12]
     epochs_to_run = 100
 

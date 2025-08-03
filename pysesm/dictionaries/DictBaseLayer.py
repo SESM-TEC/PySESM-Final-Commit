@@ -233,6 +233,12 @@ class DictBaseLayer(torch.nn.Module, ABC):
                 f"calculation: y_pred={type(y_pred)}, y={type(y)}"
             )
         
+        # Assert that the flattened tensors have compatible shapes
+        # (e.g., (N, C) == (N, C)). This catches broadcasting issues.
+        assert y_pred_flat.shape == y_flat.shape, \
+            f"Shape mismatch after flattening for loss calculation: " \
+            f"y_pred_flat.shape={y_pred_flat.shape}, y_flat.shape={y_flat.shape}"
+
         # Now, with y_pred_flat and y_flat consistently 2D tensors,
         # pass them to the criterion. The criterion's 'reduction'
         # (e.g., 'mean' or 'sum') will handle the final aggregation.
