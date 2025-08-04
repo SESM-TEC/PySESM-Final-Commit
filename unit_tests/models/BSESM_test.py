@@ -422,24 +422,41 @@ def test_bsesm_predict_workflow(
     y_test_input = torch.randn(5, 1, device=device, dtype=torch.float32) # Original y for positions
 
     # --- Prepare mock PartitionBlock instances for testing ---
-    # These blocks will be "returned" by mock_retrieve_test_active_blocks
-    # Setup properties relevant for prediction: normalized_X, amplitude, sparse_coding_layer.h, positions
+    # Using real PartitionBlock instances and assigning mock properties for SC layer.
+    # Setup properties relevant for prediction: normalized_X, amplitude, sparse_coding_layer.h, positions, and device.
+     
+    # Define dummy spatial parameters for PartitionBlock initialization
+    dummy_space_origin = torch.tensor([-2.0, -2.0], device=device, dtype=torch.float32)
+    dummy_block_size = torch.tensor([2.0, 2.0], device=device, dtype=torch.float32) # Assuming 2x2 blocks within a 4x4 space
     
     # Block 1: 2 samples, amplitude 0.5, positions 0, 2
-    block1 = MagicMock(spec=PartitionBlock)
+    block1 = PartitionBlock(
+        space_origin=dummy_space_origin,
+        block_index=(0,0),
+        block_size=dummy_block_size,
+        device=device
+    )
     block1.normalized_X = torch.randn(2, n_features, device=device, dtype=torch.float32)
     block1.amplitude = 0.5
     block1.positions = [0, 2]
-    # Ensure block.sparse_coding_layer.h is a torch.nn.Parameter for real behavior
+
+    # We still mock sparse_coding_layer.h as its value is what's "learned" and needs to be set.
     block1.sparse_coding_layer = MagicMock(spec=ISTALayer)
     block1.sparse_coding_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
     block1.sparse_coding_layer.device = device # Important for device placement checks
 
+
     # Block 2: 3 samples, amplitude 1.0, positions 1, 3, 4
-    block2 = MagicMock(spec=PartitionBlock)
+    block2 = PartitionBlock(
+        space_origin=dummy_space_origin,
+        block_index=(1,1), # Use a different block index for distinction
+        block_size=dummy_block_size,
+        device=device
+    )
     block2.normalized_X = torch.randn(3, n_features, device=device, dtype=torch.float32)
     block2.amplitude = 1.0
     block2.positions = [1, 3, 4]
+    # We still mock sparse_coding_layer.h
     block2.sparse_coding_layer = MagicMock(spec=ISTALayer)
     block2.sparse_coding_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
     block2.sparse_coding_layer.device = device
