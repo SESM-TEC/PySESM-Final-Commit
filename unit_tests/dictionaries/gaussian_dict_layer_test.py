@@ -340,7 +340,6 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
 
 
 # --- New Test Cases for TensorBatch and Gradients ---
-
 def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
                                                   common_evaluation_func,
                                                   common_device_manager):

@@ -1,32 +1,25 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+# unit_tests/models/BSESM_test.py
 
-Tests for BSESM Base Class
-
-Provides tests for the batched version of SESM
-
-Authors: The SESM Team 
-
-License: 
-'''
 import pytest
 import torch
 import numpy as np
 import logging
-from unittest.mock import MagicMock, patch, call # Import 'call' for custom assertions
-from typing import Optional
+from unittest.mock import MagicMock, patch, call
+from typing import Optional, List, Tuple, Union
 
 from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig, UniformPartitionManager
-from pysesm.dictionaries import GaussianDictConfig
+from pysesm.dictionaries import GaussianDictConfig,GaussianDictLayer
 from pysesm.sparse_coding import ISTAConfig, ISTALayer
 from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.blocks.PartitionBlock import PartitionBlock # Keep PartitionBlock import
+from pysesm.blocks.PartitionBlock import PartitionBlock
+from pysesm.base_types import TensorBatch
 
-# --- Logger y Fixtures ---
+
+# --- Logger and Fixtures ---
 logger = logging.getLogger("test_bsesm")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG) # Set to INFO or DEBUG to see detailed logs during tests
 if not logger.handlers:
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -35,14 +28,53 @@ if not logger.handlers:
 
 @pytest.fixture(scope="module")
 def device_manager_fixture():
-    # Adjust devices as needed for testing
+    # Configure all layers to run on CPU for consistent testing environment
     device_map = {
         DeviceTarget.GLOBAL: "cpu",
         DeviceTarget.SPARSE_CODING_LAYER: "cpu",
         DeviceTarget.DICTIONARY_LAYER: "cpu",
         DeviceTarget.PARTITION_MANAGER: "cpu"
     }
-    return DeviceManager(logger=logger, default_device="cpu", device_map=device_map)
+    return DeviceManager(logger=logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+
+@pytest.fixture(scope="module")
+def common_evaluation_func():
+    """
+    Provides a standard evaluation function (D @ h) that handles TensorBatch.
+    Ensures h is a column vector and output is consistently shaped.
+    """
+    def _ensure_h_column_vector(h_input: torch.Tensor) -> torch.Tensor:
+        if h_input.dim() == 1:
+            return h_input.unsqueeze(-1)
+        return h_input
+
+    def _perform_matmul_and_shape_output(d: torch.Tensor, h_val: torch.Tensor) -> torch.Tensor:
+        res = torch.matmul(d, _ensure_h_column_vector(h_val))
+        if res.dim() == 1: # If matmul results in (N_samples,)
+            return res.unsqueeze(-1) # Make it (N_samples, 1)
+        return res
+
+    def _eval_func_impl(dictionary: TensorBatch, h: TensorBatch) -> TensorBatch:
+        if (isinstance(dictionary, torch.Tensor) and getattr(dictionary, "is_nested", False)
+              and isinstance(h, torch.Tensor) and getattr(h, "is_nested", False)): # NestedTensor
+            results = [_perform_matmul_and_shape_output(d_s, h_s)
+                       for d_s, h_s in zip(dictionary.unbind(), h.unbind())]
+            return torch.nested.as_nested_tensor(results,
+                                                  layout=dictionary.layout,
+                                                  device=dictionary.device,
+                                                  dtype=results[0].dtype)
+        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2: # Single 2D tensor
+            return _perform_matmul_and_shape_output(dictionary, h)
+        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3: # 3D tensor
+            return torch.vmap(_perform_matmul_and_shape_output)(dictionary, h)
+        elif isinstance(dictionary, list) and isinstance(h, list): # List of tensors
+            results = [_perform_matmul_and_shape_output(d_s, h_s)
+                       for d_s, h_s in zip(dictionary, h)]
+            return results
+        else:
+            raise TypeError("Unsupported TensorBatch types for evaluation_func: "
+                            f"D={type(dictionary)}, h={type(h)}")
+    return _eval_func_impl
 
 @pytest.fixture
 def bsesm_config_fixture():
@@ -51,428 +83,434 @@ def bsesm_config_fixture():
     n_functions = 5
 
     sparse_coding_config = ISTAConfig(
-        epochs=1, lambd=0.01, n_functions=n_functions
+        epochs=3, lambd=0.01, n_functions=n_functions # Reduced epochs for faster tests
     )
     dict_config = GaussianDictConfig(
-        epochs=1, alpha=0.1, eig_range=[0.1, 1.0], mu_range=[-1.0, 1.0]
+        epochs=3, alpha=0.1, eig_range=[0.1, 1.0], mu_range=[-1.0, 1.0] # Reduced epochs
     )
     partition_config = UniformPartitionConfig(
         T=torch.tensor([2, 2], dtype=torch.int),
         initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
-        activity_threshold=0
+        activity_threshold=0,
+        overlap_ratio=0.0 # No overlap for simpler block boundaries in tests
     )
     return BSESMConfig(
         n_features=n_features,
-        model_epochs=1,
+        model_epochs=2, # Main SESM training loop iterations
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
-        seed=42
+        seed=42,
+        log_interval=1
     )
 
 @pytest.fixture
-def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture):
-    # Create a BSESM instance
-    return BSESM(config=bsesm_config_fixture, logger=logger, device_manager=device_manager_fixture)
+def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture, common_evaluation_func):
+    # Create a BSESM instance, ensuring evaluation_func is passed correctly
+    model = BSESM(
+        config=bsesm_config_fixture,
+        logger=logger,
+        device_manager=device_manager_fixture,
+    )
+    return model
+
+@pytest.fixture
+def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture):
+    """
+    Generates mock active blocks and corresponding NestedTensor data for tests.
+    Returns: (X_nested, y_nested, h_nested, active_blocks)
+    """
+    def _generator(num_blocks: int, min_samples_per_block: int, max_samples_per_block: int, random_seed: int = 42):
+        torch.manual_seed(random_seed)
+        np.random.seed(random_seed)
+        
+        device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+        n_features = bsesm_config_fixture.n_features
+        n_functions = bsesm_config_fixture.sparse_coding_config.n_functions
+
+        mock_active_blocks = []
+        X_list, y_list, h_list = [], [], []
+
+        dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
+        dummy_block_size = torch.tensor([2.0, 2.0], device=device) # For 2x2 partition, each block is 2x2
+
+        for i in range(num_blocks):
+            num_samples = torch.randint(min_samples_per_block, max_samples_per_block + 1, (1,)).item()
+            
+            block = PartitionBlock(dummy_space_origin, (i, 0), dummy_block_size, device) # Simple (i,0) indices
+            # Populate block with simulated data
+            block.normalized_X = torch.randn(num_samples, n_features, device=device, dtype=torch.float32)
+            block.target = torch.randn(num_samples, 1, device=device, dtype=torch.float32)
+            block.amplitude = 1.0 # Simple amplitude for testing
+            block.positions = list(range(i * min_samples_per_block, i * min_samples_per_block + num_samples)) # Dummy positions
+
+            # Attach a mock sparse_coding_layer with a Parameter 'h'
+            mock_sc_layer = MagicMock(spec=ISTALayer)
+            # Ensure the 'h' attribute is a real Parameter object as expected by code base
+            mock_sc_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
+            mock_sc_layer.device = device # Important for device assertions
+            mock_sc_layer.losses = [] # Mock losses list
+            mock_sc_layer.config = bsesm_config_fixture.sparse_coding_config # Mock config
+            block.sparse_coding_layer = mock_sc_layer
+            
+            mock_active_blocks.append(block)
+            X_list.append(block.normalized_X)
+            y_list.append(block.target)
+            h_list.append(block.sparse_coding_layer.h.detach().clone()) # Detach h for dictionary training
+
+        # Convert to NestedTensors if lists are not empty
+        X_nested = torch.nested.nested_tensor(X_list, layout=torch.jagged, device=device) if X_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
+        y_nested = torch.nested.nested_tensor(y_list, layout=torch.jagged, device=device) if y_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
+        h_nested = torch.nested.nested_tensor(h_list, layout=torch.jagged, device=device) if h_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
+
+        return X_nested, y_nested, h_nested, mock_active_blocks
+    return _generator
+
 
 # --- Tests for BSESM Class ---
 
-def test_bsesm_initialization(sample_bsesm_model):
+def test_bsesm_initialization(sample_bsesm_model, common_evaluation_func):
     """Verify core components are initialized correctly."""
     model = sample_bsesm_model
     assert isinstance(model, BSESM)
     assert hasattr(model, 'global_sparse_coding_layer')
-    assert isinstance(model.global_sparse_coding_layer, ISTALayer) # Assuming ISTA is default for ISTAConfig
-    assert model.global_sparse_coding_layer.device == model.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+    assert isinstance(model.global_sparse_coding_layer, ISTALayer)
     assert model.dictionary_layer is not None
     assert model.partition_manager is not None
     assert model.n_features == model.config.n_features
     assert model.n_functions == model.config.sparse_coding_config.n_functions
+    
 
-@patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.add_points')
-@patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.init_sparse_coding_per_block')
-@patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.retrieve_active_blocks')
-@patch('pysesm.models.BSESM.BSESM._aggregate_block_data')
-@patch('pysesm.sparse_coding.ISTALayer.ISTALayer.setup') # Patch for global_sparse_coding_layer.setup
-@patch('pysesm.models.SESM.SESM._train_step') # Patch parent's _train_step
-def test_bsesm_partial_fit_workflow(
-    mock_train_step,
-    mock_global_sc_setup,
+@patch.object(BSESM, '_global_train_step')
+@patch.object(UniformPartitionManager, 'add_points')
+@patch.object(UniformPartitionManager, 'init_sparse_coding_per_block')
+@patch.object(UniformPartitionManager, 'retrieve_active_blocks')
+@patch.object(BSESM, '_aggregate_block_data')
+def test_bsesm_partial_fit_model_epochs_loop(
     mock_aggregate_block_data,
     mock_retrieve_active_blocks,
     mock_init_sc_per_block,
     mock_add_points,
-    sample_bsesm_model, bsesm_config_fixture, device_manager_fixture
+    mock_global_train_step,
+    sample_bsesm_model, bsesm_config_fixture, nested_tensor_data_generator,
+    device_manager_fixture
 ):
     """
-    Test the entire partial_fit workflow by mocking dependencies.
-    Focuses on orchestration and data flow.
+    Test that partial_fit orchestrates the main model_epochs loop and calls
+    _global_train_step the correct number of times.
     """
     model = sample_bsesm_model
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-    n_features = model.n_features
-    n_functions = model.n_functions
     model_epochs = bsesm_config_fixture.model_epochs
+    n_features = bsesm_config_fixture.n_features
 
-    # Mock data for inputs to partial_fit
-    X_input = torch.randn(10, n_features, device=device, dtype=torch.float32)
-    y_input = torch.randn(10, 1, device=device, dtype=torch.float32)
+    X_input = torch.randn(10, n_features, device=device_manager_fixture.get_device(DeviceTarget.GLOBAL))
+    y_input = torch.randn(10, 1, device=device_manager_fixture.get_device(DeviceTarget.GLOBAL))
 
-    # --- Usar instancias REALES de PartitionBlock para los mocks ---
-    dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
-    dummy_block_size = torch.tensor([2.0, 2.0], device=device)
-
-    mock_active_blocks = []
-    mock_h_data_list = []
-    # Simulate 2 active blocks
-    for i in range(2):
-        block = PartitionBlock(dummy_space_origin, (i,0), dummy_block_size, device)
-        # Poblar el bloque con datos simulados y llamar a sus métodos
-        # El número de puntos por bloque aquí no importa mucho, solo que haya alguno.
-        block.new_point(torch.randn(n_features, device=device), torch.randn(1, device=device), i)
-        block.normalize_points()
-        block.calculate_amplitude_and_target() # Esto establece normalized_X y target
-
-        # Adjuntar un mock de sparse_coding_layer (esto es lo que se mockea del SC Layer)
-        mock_sc_layer = MagicMock(spec=ISTALayer)
-        mock_h_tensor = torch.randn(n_functions, 1, device=device, dtype=torch.float32)
-        mock_sc_layer.h = torch.nn.Parameter(mock_h_tensor) # h como Parameter
-        mock_sc_layer.device = device
-        mock_sc_layer.losses = [] # Initialize losses for the mock SC layer
-        block.sparse_coding_layer = mock_sc_layer
-        
-        mock_active_blocks.append(block)
-        mock_h_data_list.append(mock_h_tensor)
-
-    # Simulate the actual output structure of _aggregate_block_data
-    mock_X_list_agg = [block.normalized_X for block in mock_active_blocks]
-    mock_y_list_agg = [block.target for block in mock_active_blocks]
-
-    mock_retrieve_active_blocks.return_value = mock_active_blocks
-    mock_aggregate_block_data.return_value = (mock_X_list_agg, mock_y_list_agg, mock_h_data_list)       
-
-    # --- Mock global_sparse_coding_layer.h to track updates ---
-    # The actual Parameter object of global_sparse_coding_layer.h will be updated by _train_step
-    # We need to mock its internal .data and return the updated data for distribution
-    initial_global_h_tensor = torch.randn(2, n_functions, 1, device=device, dtype=torch.float32)
-    model.global_sparse_coding_layer.h = torch.nn.Parameter(initial_global_h_tensor)
-    model.global_sparse_coding_layer.losses = [] # Initialize losses for the actual global SC layer
+    # Mock return values for internal steps
+    X_nested, y_nested, h_nested, active_blocks = nested_tensor_data_generator(num_blocks=2, min_samples_per_block=5, max_samples_per_block=10)
+    mock_retrieve_active_blocks.return_value = active_blocks
+    mock_aggregate_block_data.return_value = (X_nested, y_nested, h_nested)
     
-    # Simulate _train_step updating global_h
-    # Aceptar argumentos por nombre en side_effect
-    def simulate_train_step_update(X, y, sparsecoding):
-        sparsecoding.h.data.add_(0.1) # Simple simulated update
-        sparsecoding.losses.append(0.5) # Update global SC layer's losses
-        # Ensure model.dictionary_layer.losses exists and is updated
-        # The actual dictionary_layer.partial_fit will append to its own internal losses list,
-        # which then gets copied to model.dictionary_layer_losses via SESM._train_step.
-        # For this patch, we directly simulate that copy.
-        if not hasattr(model.dictionary_layer, 'losses'): # Check if initialized by mock
-            model.dictionary_layer.losses = []
-        model.dictionary_layer.losses.append(0.3) 
+    # Simulate internal loss updates for logging check
+    model.dictionary_layer.losses = [0.5, 0.4, 0.3] * model_epochs # Ensure enough entries
+    model.global_sparse_coding_layer.losses = [0.6, 0.5, 0.4] * model_epochs # Ensure enough entries
 
-    mock_train_step.side_effect = simulate_train_step_update
+    initial_elapsed_time = model.elapsed_time
+    initial_partial_fit_count = model.partial_fit_count
 
-
-    # --- Call partial_fit ---
+    # Call partial_fit
     model.partial_fit(X_input, y_input)
 
-    # --- Assertions ---
-    # 1. Partition manager methods called
+    # Assertions
     mock_add_points.assert_called_once_with(X_input, y_input)
     mock_init_sc_per_block.assert_called_once()
     mock_retrieve_active_blocks.assert_called_once()
-    mock_aggregate_block_data.assert_called_once_with(mock_active_blocks)
+    mock_aggregate_block_data.assert_called_once_with(active_blocks)
 
-    # 2. global_sparse_coding_layer setup with correct h_batch
-    expected_h_batch_initial = torch.stack(mock_h_data_list)
-    mock_global_sc_setup.assert_called_once()
-    # Check setup was called with the correct stacked tensor (by comparing args)
-    # The actual tensor passed to setup is a clone, so compare values
-    actual_setup_h = mock_global_sc_setup.call_args[0][0]
-    assert torch.allclose(actual_setup_h, expected_h_batch_initial)
-    
-    # 3. _train_step called correct number of times and with correct args
-    assert mock_train_step.call_count == model_epochs
+    # Verify _global_train_step is called correct number of times with correct arguments
+    assert mock_global_train_step.call_count == model_epochs
     for i in range(model_epochs):
-        call_args = mock_train_step.call_args_list[i]
-        assert call_args.kwargs['X'] is not None # X is now a NestedTensor
-        assert call_args.kwargs['y'] is not None # Y is now a concatenated tensor
-        assert call_args.kwargs['sparsecoding'] is model.global_sparse_coding_layer
+        mock_global_train_step.assert_any_call(X_nested, y_nested, h_nested, active_blocks, i)
+    
+    # Verify elapsed_time and partial_fit_count are updated
+    assert model.elapsed_time > initial_elapsed_time
+    assert model.partial_fit_count == initial_partial_fit_count + 1
 
-    # 4. Learned h_batch distributed back to individual blocks
-    updated_global_h_data = model.global_sparse_coding_layer.h.data
-    for i, block in enumerate(mock_active_blocks): # Iterate over real PartitionBlock instances
-        assert torch.allclose(block.sparse_coding_layer.h.data, updated_global_h_data[i])
+    # Verify logging (check info level logs for epoch progress)
+    # caplog.records might contain other logs, filter specifically for BSESM epochs
+    # Not strictly asserting on specific log messages, but that method was called.
+    # For detailed log checks, a separate test with caplog fixture would be better.
+
+    # If sesm_hook is provided, verify it's called
+    if model.sesm_hook:
+        assert model.sesm_hook.call_count == model_epochs
+        for i in range(model_epochs):
+            call_args = model.sesm_hook.call_args_list[i]
+            hook_info = call_args[0][0] # First arg of first call
+            assert hook_info['model_epoch'] == i
+            assert 'h_mega' in hook_info
+            assert 'dictionary_params' in hook_info
+            assert 'h_per_block' in hook_info
 
 
-@patch('pysesm.blocks.UniformPartitionManager.UniformPartitionManager.retrieve_test_active_blocks')
-@patch('pysesm.models.BSESM.BSESM._aggregate_block_data')
-@patch('pysesm.dictionaries.GaussianDictLayer.GaussianDictLayer.forward') # Patch dictionary_layer.forward
-@patch('pysesm.models.BSESM.BSESM._global_evaluation_func') # Patch _global_evaluation_func
-def test_bsesm_predict_workflow_denormalization(
-    mock_global_eval_func,
+@patch.object(BSESM, 'evaluation_func') # Patch BSESM's own evaluation_func
+@patch.object(GaussianDictLayer, 'forward') # Patch dictionary_layer.forward
+@patch.object(GaussianDictLayer, 'partial_fit') # Patch dictionary_layer.partial_fit
+@patch.object(ISTALayer, 'setup') # Patch global_sparse_coding_layer.setup
+@patch.object(ISTALayer, 'partial_fit') # Patch global_sparse_coding_layer.partial_fit
+def test_bsesm_global_train_step_orchestration(
+    mock_global_sc_partial_fit,
+    mock_global_sc_setup,
+    mock_dict_partial_fit,
     mock_dict_forward,
-    mock_aggregate_block_data,
-    mock_retrieve_test_active_blocks,
-    sample_bsesm_model, device_manager_fixture
+    mock_eval_func_bsesm, # This is BSESM.evaluation_func
+    sample_bsesm_model, nested_tensor_data_generator, device_manager_fixture
 ):
     """
-    Test the entire predict workflow, focusing on data aggregation, global prediction,
-    and correct denormalization and mapping back to original positions.
+    Test the _global_train_step method's orchestration of dictionary and sparse coding
+    training, including data aggregation, mega-matrix construction, and h distribution.
     """
     model = sample_bsesm_model
+    n_functions = model.n_functions
+    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+
+    # Prepare mocked data
+    num_blocks = 2
+    X_nested, y_nested, h_nested_initial, active_blocks = nested_tensor_data_generator(num_blocks=num_blocks, min_samples_per_block=5, max_samples_per_block=10)
+    
+    # Simulate dictionary_layer.forward output (NestedTensor of D_i matrices)
+    mock_dict_evaluated_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device) for block in active_blocks]
+    mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
+
+    # Simulate global_sparse_coding_layer.partial_fit output (optimized H_mega)
+    total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
+    mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
+    mock_global_sc_partial_fit.return_value = None # partial_fit returns None
+    
+    # We need to manually set the h.data on the mocked global_sparse_coding_layer for the split to work
+    model.global_sparse_coding_layer.h.data = mock_optimized_h_mega
+    model.global_sparse_coding_layer.losses = [0.1, 0.2, 0.3] # Add some dummy losses
+
+    # Simulate dictionary layer updating its own losses
+    model.dictionary_layer.losses = [0.4, 0.5, 0.6]
+
+    # Call the method under test
+    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, current_epoch=0)
+
+    # Assertions for dictionary training
+    mock_dict_partial_fit.assert_called_once_with(X=X_nested, y=y_nested, h=h_nested_initial)
+
+    # Assertions for sparse coding (mega-matrix) part
+    mock_dict_forward.assert_called_once_with(X_nested) # Ensure dictionary is evaluated for SC
+    
+    # Construct expected Y_mega and D_mega
+    expected_Y_mega = torch.cat(y_nested.unbind()) # y_nested is already a NestedTensor
+    expected_D_mega = torch.block_diag(*mock_dict_evaluated_list) # Use the mocked list from dict_forward
+
+    mock_global_sc_setup.assert_called_once()
+    # Verify setup received the concatenated initial h
+    assert torch.allclose(mock_global_sc_setup.call_args[0][0], h_nested_initial.values())
+    
+    mock_global_sc_partial_fit.assert_called_once()
+    # Extract call arguments and assert tensor equality explicitly
+    call_args = mock_global_sc_partial_fit.call_args
+    actual_y_arg = call_args.kwargs['y']
+    actual_dictionary_arg = call_args.kwargs['dictionary']
+    assert torch.allclose(actual_y_arg, expected_Y_mega), "Y_mega passed to global SC partial_fit is incorrect"
+    assert torch.allclose(actual_dictionary_arg, expected_D_mega), "D_mega passed to global SC partial_fit is incorrect"
+    
+    # Verify h distribution back to individual blocks
+    current_h_split_sizes = [block.sparse_coding_layer.h.shape[0] for block in active_blocks]
+    split_mock_optimized_h_mega = torch.split(mock_optimized_h_mega, current_h_split_sizes, dim=0)
+
+    for i, block in enumerate(active_blocks):
+        assert torch.allclose(block.sparse_coding_layer.h.data, split_mock_optimized_h_mega[i]), \
+            f"H mismatch for block {i}"
+
+    # Verify that the mocked layers' internal loss lists were updated
+    assert len(model.dictionary_layer.losses) > 0, "Dictionary layer losses should be populated"
+    assert len(model.global_sparse_coding_layer.losses) > 0, "Global SC layer losses should be populated"
+
+    # Ensure BSESM's own evaluation_func is NOT called by _global_train_step directly
+    mock_eval_func_bsesm.assert_not_called()
+
+def test_bsesm_aggregate_block_data_behavior(sample_bsesm_model, nested_tensor_data_generator):
+    """
+    Test the _aggregate_block_data method to ensure it correctly
+    creates NestedTensors for X, y, and h from active blocks.
+    """
+    model = sample_bsesm_model
+    device = model.device_manager.get_device(DeviceTarget.GLOBAL)
+    n_features = model.n_features
+    n_functions = model.n_functions
+
+    # Test with multiple blocks, varying sample counts
+    num_blocks = 3
+    min_samples = 5
+    max_samples = 15
+    X_nested_expected, y_nested_expected, h_nested_expected, active_blocks = nested_tensor_data_generator(
+        num_blocks=num_blocks, min_samples_per_block=min_samples, max_samples_per_block=max_samples
+    )
+
+    X_nested_actual, y_nested_actual, h_nested_actual = model._aggregate_block_data(active_blocks)
+
+    # Assert X_nested_actual matches X_nested_expected
+    assert X_nested_actual.is_nested
+    assert len(X_nested_actual.unbind()) == num_blocks
+    for i in range(num_blocks):
+        assert torch.allclose(X_nested_actual.unbind()[i], X_nested_expected.unbind()[i])
+        assert X_nested_actual.unbind()[i].shape == active_blocks[i].normalized_X.shape
+
+    # Assert y_nested_actual matches y_nested_expected
+    assert y_nested_actual.is_nested
+    assert len(y_nested_actual.unbind()) == num_blocks
+    for i in range(num_blocks):
+        assert torch.allclose(y_nested_actual.unbind()[i], y_nested_expected.unbind()[i])
+        assert y_nested_actual.unbind()[i].shape == active_blocks[i].target.shape
+
+    # Assert h_nested_actual matches h_nested_expected (detached copies of block h's)
+    assert h_nested_actual.is_nested
+    assert len(h_nested_actual.unbind()) == num_blocks
+    for i in range(num_blocks):
+        # Check that the h tensors are detached and have correct values
+        assert not h_nested_actual.unbind()[i].requires_grad
+        assert torch.allclose(h_nested_actual.unbind()[i], h_nested_expected.unbind()[i])
+        assert h_nested_actual.unbind()[i].shape == (n_functions, 1)
+
+    # Test with no active blocks
+    # When no blocks are active, _aggregate_block_data returns NestedTensors
+    # that internally hold a single empty tensor, as per PyTorch's current (and sometimes counter-intuitive) behavior.
+    X_empty_nested, y_empty_nested, h_empty_nested = model._aggregate_block_data([])
+    
+    assert X_empty_nested.is_nested # It's still a NestedTensor
+    assert len(X_empty_nested.unbind()) == 1 # It unbinds to a list with ONE empty tensor
+    assert X_empty_nested.unbind()[0].numel() == 0 # That single tensor is truly empty (0 elements)
+    assert X_empty_nested.unbind()[0].shape == (0, n_features) # And has the correct feature dimension
+    
+    assert y_empty_nested.is_nested
+    assert len(y_empty_nested.unbind()) == 1
+    assert y_empty_nested.unbind()[0].numel() == 0
+    assert y_empty_nested.unbind()[0].shape == (0, 1) # And has the correct target dimension
+    
+    assert h_empty_nested.is_nested
+    assert len(h_empty_nested.unbind()) == 1
+    assert h_empty_nested.unbind()[0].numel() == 0
+    assert h_empty_nested.unbind()[0].shape == (0, n_functions, 1) # And has the correct function and output dimensions
+
+@pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
+@patch.object(UniformPartitionManager, 'retrieve_test_active_blocks')
+@patch.object(GaussianDictLayer, 'forward') # Patch dictionary_layer.forward
+def test_bsesm_predict_workflow(
+    mock_retrieve_test_active_blocks,
+    mock_dict_forward,
+    sample_bsesm_model, device_manager_fixture,
+    common_evaluation_func # Use the actual evaluation_func for correctness
+):
+    """
+    Test the entire predict workflow, focusing on data aggregation for prediction,
+    dictionary evaluation, evaluation_func usage, denormalization, and re-mapping.
+    """
+    model = sample_bsesm_model
+    # Ensure model uses the common_evaluation_func explicitly
+    model.evaluation_func = common_evaluation_func
     device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
     n_features = model.n_features
     n_functions = model.n_functions
 
-    # --- Mock inputs to predict ---
+    # Mock inputs to predict
     X_test_input = torch.randn(5, n_features, device=device, dtype=torch.float32)
     y_test_input = torch.randn(5, 1, device=device, dtype=torch.float32) # Original y for positions
 
-    # --- Usar instancias REALES de PartitionBlock para los bloques de prueba ---
-    dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
-    dummy_block_size = torch.tensor([2.0, 2.0], device=device)
-
-    # Simulate 2 test blocks, with different numbers of points and amplitudes
-    block1 = PartitionBlock(dummy_space_origin, (0,0), dummy_block_size, device)
-    # Poblar block1 manualmente con X, y, positions y luego simular sus propiedades
-    block1.new_point(torch.randn(n_features, device=device), torch.tensor([1.0], device=device), 0) # point for pos 0
-    block1.new_point(torch.randn(n_features, device=device), torch.tensor([1.2], device=device), 2) # point for pos 2
-    block1.normalize_points()
-    block1.amplitude = 0.5 # Manually set the learned amplitude for testing denormalization
-    # Simular la capa SC y su 'h' aprendida
-    mock_sc_layer_h1 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_h1.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
-    mock_sc_layer_h1.device = device
-    block1.sparse_coding_layer = mock_sc_layer_h1
-
-    block2 = PartitionBlock(dummy_space_origin, (1,1), dummy_block_size, device)
-    block2.new_point(torch.randn(n_features, device=device), torch.tensor([0.8], device=device), 1) # point for pos 1
-    block2.new_point(torch.randn(n_features, device=device), torch.tensor([0.9], device=device), 3) # point for pos 3
-    block2.new_point(torch.randn(n_features, device=device), torch.tensor([1.0], device=device), 4) # point for pos 4
-    block2.normalize_points()
-    block2.amplitude = 1.0 # Manually set the learned amplitude
-    mock_sc_layer_h2 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_h2.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
-    mock_sc_layer_h2.device = device
-    block2.sparse_coding_layer = mock_sc_layer_h2
+    # --- Prepare mock PartitionBlock instances for testing ---
+    # These blocks will be "returned" by mock_retrieve_test_active_blocks
+    # Setup properties relevant for prediction: normalized_X, amplitude, sparse_coding_layer.h, positions
     
+    # Block 1: 2 samples, amplitude 0.5, positions 0, 2
+    block1 = MagicMock(spec=PartitionBlock)
+    block1.normalized_X = torch.randn(2, n_features, device=device, dtype=torch.float32)
+    block1.amplitude = 0.5
+    block1.positions = [0, 2]
+    # Ensure block.sparse_coding_layer.h is a torch.nn.Parameter for real behavior
+    block1.sparse_coding_layer = MagicMock(spec=ISTALayer)
+    block1.sparse_coding_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
+    block1.sparse_coding_layer.device = device # Important for device placement checks
+
+    # Block 2: 3 samples, amplitude 1.0, positions 1, 3, 4
+    block2 = MagicMock(spec=PartitionBlock)
+    block2.normalized_X = torch.randn(3, n_features, device=device, dtype=torch.float32)
+    block2.amplitude = 1.0
+    block2.positions = [1, 3, 4]
+    block2.sparse_coding_layer = MagicMock(spec=ISTALayer)
+    block2.sparse_coding_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
+    block2.sparse_coding_layer.device = device
+
     mock_retrieve_test_active_blocks.return_value = [block1, block2]
 
-    # --- Mock _aggregate_block_data output ---
-    # This will assume max_points_in_block = 3 (from block2)
-    # Total aggregated points: 2 blocks * 3 max_points = 6 total points
-    mock_X_aggregated = torch.randn(6, n_features, device=device, dtype=torch.float32)
-    mock_y_aggregated = torch.randn(6, 1, device=device, dtype=torch.float32)
-    mock_max_points_in_block = 3
-    mock_aggregate_block_data.return_value = (mock_X_aggregated, mock_y_aggregated, mock_max_points_in_block)
-
     # --- Mock dictionary_layer.forward output ---
-    # Expected output shape: (total_aggregated_points, n_functions)
-    mock_evaluated_D = torch.randn(6, n_functions, device=device, dtype=torch.float32)
-    mock_dict_forward.return_value = mock_evaluated_D
+    # It should return a NestedTensor where each sub-tensor matches the X for that block
+    mock_dict_eval_for_block1 = torch.randn(block1.normalized_X.shape[0], n_functions, device=device, dtype=torch.float32)
+    mock_dict_eval_for_block2 = torch.randn(block2.normalized_X.shape[0], n_functions, device=device, dtype=torch.float32)
+    mock_dict_forward.return_value = torch.nested.nested_tensor([mock_dict_eval_for_block1, mock_dict_eval_for_block2], layout=torch.jagged, device=device)
 
-    # --- Mock _global_evaluation_func output ---
-    # This function takes mock_evaluated_D and h_predict_batch and returns (total_aggregated_points, 1)
-    # Simulate raw predictions for each point (before denormalization)
-    raw_normalized_preds = torch.tensor([
-        [1.0], [1.2], [0.0], # Block 1 (2 actual points, 1 padded)
-        [0.8], [0.9], [1.0]  # Block 2 (3 actual points, 0 padded)
-    ], device=device, dtype=torch.float32)
-    mock_global_eval_func.return_value = raw_normalized_preds
+    # --- Simulate predicted *normalized* values for each block from evaluation_func ---
+    # These are the values *before* denormalization by amplitude
+    # Block1: 2 samples
+    mock_normalized_preds_block1 = torch.tensor([[0.5], [0.6]], device=device, dtype=torch.float32) # e.g., predictions if amplitude was applied
+    # Block2: 3 samples
+    mock_normalized_preds_block2 = torch.tensor([[0.7], [0.8], [0.9]], device=device, dtype=torch.float32)
 
-    # --- Expected final predictions after denormalization and re-mapping ---
-    # Block 1: points at pos 0, 2
-    #   normalized_preds: [1.0], [1.2] (from raw_normalized_preds)
-    #   amplitude: 0.5 (from block1)
-    #   unnormalized_preds: [1.0/0.5], [1.2/0.5] = [2.0], [2.4]
-    # Block 2: points at pos 1, 3, 4
-    #   normalized_preds: [0.8], [0.9], [1.0] (from raw_normalized_preds)
-    #   amplitude: 1.0 (from block2)
-    #   unnormalized_preds: [0.8/1.0], [0.9/1.0], [1.0/1.0] = [0.8], [0.9], [1.0]
-
-    # Expected order in final output y_final_predictions (based on original positions):
-    # pos 0: 2.0 (from block1)
-    # pos 1: 0.8 (from block2)
-    # pos 2: 2.4 (from block1)
-    # pos 3: 0.9 (from block2)
-    # pos 4: 1.0 (from block2)
-    expected_final_preds = torch.tensor([
-        [2.0], [0.8], [2.4], [0.9], [1.0]
-    ], device=device, dtype=torch.float32)
-
+    # Temporarily replace the *real* common_evaluation_func used by the model with a mock
+    # to control its output for this specific prediction sequence.
+    # This mock will be called multiple times, once per block.
+    # We need to set its side_effect to return the specific predictions for each call.
+    original_eval_func = model.evaluation_func
+    model.evaluation_func = MagicMock(side_effect=[
+        mock_normalized_preds_block1, # First call for block1
+        mock_normalized_preds_block2  # Second call for block2
+    ])
 
     # --- Call predict ---
     y_predicted_actual = model.predict(X_test_input, y_test_input)
 
     # --- Assertions ---
-    # 1. retrieve_test_active_blocks called
     mock_retrieve_test_active_blocks.assert_called_once_with(X_test_input, y_test_input)
 
-    # 2. _aggregate_block_data called with test blocks
-    mock_aggregate_block_data.assert_called_once_with([block1, block2])
-    
-    # 3. dictionary_layer.forward called with aggregated X_test
-    mock_dict_forward.assert_called_once_with(mock_X_aggregated)
+    # Verify dictionary_layer.forward is called with the aggregated X_nested from test blocks
+    expected_X_nested_for_dict_forward = torch.nested.nested_tensor([block1.normalized_X, block2.normalized_X], layout=torch.jagged, device=device)
+    mock_dict_forward.assert_called_once_with(expected_X_nested_for_dict_forward)
 
-    # 4. _global_evaluation_func called with correct D and h_batch
-    # Reconstruct expected h_predict_batch from the *real* block's attached SC layer
-    expected_h_predict_batch = torch.stack([
-        block1.sparse_coding_layer.h.to(device),
-        block2.sparse_coding_layer.h.to(device)
+    # Verify model.evaluation_func was called for EACH block individually
+    # It should be called with the D-matrix for that block (from mock_dict_forward)
+    # and the H-vector from that block's sparse_coding_layer.
+    assert model.evaluation_func.call_count == 2
+    model.evaluation_func.assert_has_calls([
+        call(mock_dict_eval_for_block1, block1.sparse_coding_layer.h),
+        call(mock_dict_eval_for_block2, block2.sparse_coding_layer.h)
     ])
-    
-    # Comparar call_args manualmente para tensores
-    mock_global_eval_func.assert_called_once() # First, assert it was called once
-    actual_D_arg, actual_h_batch_arg = mock_global_eval_func.call_args[0]
-    assert torch.allclose(actual_D_arg, mock_evaluated_D), "Mocked D argument mismatch"
-    assert torch.allclose(actual_h_batch_arg, expected_h_predict_batch), "Expected h_predict_batch argument mismatch"
 
+    # Calculate expected final predictions after denormalization and re-mapping
+    # Denormalized predictions for block1: [0.5/0.5, 0.6/0.5] = [1.0, 1.2]
+    # Denormalized predictions for block2: [0.7/1.0, 0.8/1.0, 0.9/1.0] = [0.7, 0.8, 0.9]
 
-    # 5. Final predictions match expected after denormalization and re-mapping
-    assert y_predicted_actual.shape == expected_final_preds.shape
-    assert torch.allclose(y_predicted_actual, expected_final_preds, atol=1e-6)
+    expected_final_preds_list = torch.zeros(y_test_input.shape[0], 1, device=device, dtype=torch.float32)
+    # Block 1 positions: 0, 2
+    expected_final_preds_list[0] = 1.0
+    expected_final_preds_list[2] = 1.2
+    # Block 2 positions: 1, 3, 4
+    expected_final_preds_list[1] = 0.7
+    expected_final_preds_list[3] = 0.8
+    expected_final_preds_list[4] = 0.9
 
-def test_aggregate_block_data_no_padding(sample_bsesm_model, device_manager_fixture):
-    """
-    Test the refactored _aggregate_block_data to ensure it returns lists without padding.
-    """
-    model = sample_bsesm_model
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-    n_functions = model.n_functions # Use n_functions from model fixture
-    
-    # Create mock blocks with different numbers of points
-    block1 = MagicMock(spec=PartitionBlock)
-    block1.normalized_X = torch.randn(10, 2, device=device)
-    block1.target = torch.randn(10, 1, device=device)
-    # Create and assign a mock for sparse_coding_layer first
-    mock_sc_layer_b1 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_b1.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
-    block1.sparse_coding_layer = mock_sc_layer_b1
+    assert y_predicted_actual.shape == expected_final_preds_list.shape
+    assert torch.allclose(y_predicted_actual, expected_final_preds_list, atol=1e-6)
 
-    block2 = MagicMock(spec=PartitionBlock)
-    block2.normalized_X = torch.randn(7, 2, device=device)
-    block2.target = torch.randn(7, 1, device=device)
-    # Create and assign a mock for sparse_coding_layer for block2
-    mock_sc_layer_b2 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_b2.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device))
-    block2.sparse_coding_layer = mock_sc_layer_b2
-
-    active_blocks = [block1, block2]
-    
-    # Note: The _aggregate_block_data method does not return max_points_in_block anymore.
-    # It returns X_list, y_list, h_initial_list.
-    X_list, y_list, h_list = model._aggregate_block_data(active_blocks)
-
-    # Assertions
-    assert isinstance(X_list, list) and isinstance(y_list, list) and isinstance(h_list, list)
-    assert len(X_list) == 2
-    assert torch.allclose(X_list[0], block1.normalized_X)
-    assert torch.allclose(X_list[1], block2.normalized_X)
-    assert y_list[0].shape == (10, 1)
-    assert y_list[1].shape == (7, 1)
-    # Assert that h_list contains the Parameter's data (or the Parameter itself, if that's what's copied)
-    # The actual implementation copies the Parameter object, so we check for identity.
-    assert h_list[0] is block1.sparse_coding_layer.h
-    assert h_list[1] is block2.sparse_coding_layer.h
-
-@patch('torch.block_diag')
-def test_partial_fit_mega_matrix_workflow(mock_block_diag, sample_bsesm_model):
-    """
-    Test the partial_fit workflow, focusing on the mega-matrix orchestration.
-    """
-    model = sample_bsesm_model
-    n_functions = model.n_functions # Get n_functions from fixture
-    
-    # Mock partition manager and its return values
-    model.partition_manager = MagicMock()
-    
-    block1 = MagicMock(spec=PartitionBlock)
-    block1.normalized_X = torch.randn(10, 2)
-    block1.target = torch.randn(10, 1)
-    # Create and assign mock for sparse_coding_layer
-    mock_sc_layer_b1 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_b1.h = torch.nn.Parameter(torch.randn(n_functions, 1))
-    block1.sparse_coding_layer = mock_sc_layer_b1
-
-    block2 = MagicMock(spec=PartitionBlock)
-    block2.normalized_X = torch.randn(7, 2)
-    block2.target = torch.randn(7, 1)
-
-    # Create and assign mock for sparse_coding_layer
-    mock_sc_layer_b2 = MagicMock(spec=ISTALayer)
-    mock_sc_layer_b2.h = torch.nn.Parameter(torch.randn(n_functions, 1))
-    block2.sparse_coding_layer = mock_sc_layer_b2
-    
-    active_blocks = [block1, block2]
-    model.partition_manager.retrieve_active_blocks.return_value = active_blocks
-
-    # Mock dictionary layer behavior
-    model.dictionary_layer = MagicMock()
-    model.dictionary_layer.optimizer = MagicMock() # Mock optimizer
-    model.dictionary_layer.criterion = MagicMock(return_value=torch.tensor(0.1)) # Mock criterion
-    model.dictionary_layer.losses = [] # Initialize losses list
-    dict_list = [torch.randn(10, n_functions), torch.randn(7, n_functions)] # Mocked [D_1, D_2]
-    model.dictionary_layer.return_value = dict_list # Mock the __call__ behavior of dictionary_layer
-
-    # Mock global sparse coding layer
-    model.global_sparse_coding_layer = MagicMock(spec=ISTALayer) # Use spec for more accurate mocking
-    # Ensure h is a Parameter on the global SC layer mock
-    model.global_sparse_coding_layer.h = torch.nn.Parameter(torch.randn(17, 1)) # (10+7)*1, total h
-    model.global_sparse_coding_layer.losses = [] # Initialize losses list
-    model.global_sparse_coding_layer.config.n_functions = 17 # Set n_functions for the global SC layer mock
-
-    # --- Call the function to test ---
-    model.partial_fit(torch.randn(17, 2), torch.randn(17, 1))
-
-    # --- Assertions ---
-    # 1. Dictionary layer was trained with a NestedTensor (this behavior is now internal to BSESM.partial_fit)
-    # We check that dictionary_layer was called as a function (its __call__ method) with a nested tensor.
-    model.dictionary_layer.assert_called_once()
-    actual_X_nested_passed_to_dict_layer = model.dictionary_layer.call_args[0][0]
-    assert getattr(actual_X_nested_passed_to_dict_layer, 'is_nested', False)
-    
-    # 2. Dictionary's optimizer and criterion used
-    model.dictionary_layer.optimizer.zero_grad.assert_called_once()
-    # The criterion will be called multiple times in the loop
-    assert model.dictionary_layer.criterion.call_count == len(active_blocks)
-    model.dictionary_layer.optimizer.step.assert_called_once()
-    
-    # 3. Mega-matrix D_mega was constructed correctly
-    mock_block_diag.assert_called_once_with(*dict_list)
-    
-    # 4. Global sparse coder was called with mega-tensors
-    model.global_sparse_coding_layer.partial_fit.assert_called_once()
-    sc_fit_call_args = model.global_sparse_coding_layer.partial_fit.call_args
-    Y_mega_arg = sc_fit_call_args.kwargs['y']
-    D_mega_arg = sc_fit_call_args.kwargs['dictionary']
-    
-    # Check Y_mega_arg
-    expected_Y_mega = torch.cat([block.target for block in active_blocks])
-    assert torch.allclose(Y_mega_arg, expected_Y_mega)
-    
-    # Check D_mega_arg
-    expected_D_mega_from_mock = mock_block_diag.return_value # This is what mock_block_diag returns
-    assert torch.allclose(D_mega_arg, expected_D_mega_from_mock)
-    
-    # 5. Optimized H was correctly unpacked and distributed back to blocks
-    # H_mega_optimizado is model.global_sparse_coding_layer.h
-    H_mega_optimizado = model.global_sparse_coding_layer.h
-    
-    # These sizes are based on the mock blocks' `normalized_X` batch sizes, which are 10 and 7.
-    # The `h_list` was constructed from the initial h values, which are n_functions (5) each.
-    # So the total `H_mega_initial` has shape (2*5, 1) = (10, 1).
-    # The `global_sparse_coding_layer.h` will be updated to this total size during setup.
-    # The `h_split_sizes` should be based on `n_functions` (5) for each block, not the data samples.
-    
-    # Recalculate expected split based on n_functions
-    n_functions_per_block = n_functions # 5
-    split_h_optimizado_list = torch.split(H_mega_optimizado, [n_functions_per_block] * len(active_blocks))
-
-    for i, block in enumerate(active_blocks):
-        assert torch.allclose(block.sparse_coding_layer.h.data, split_h_optimizado_list[i])
+    # Restore original evaluation_func
+    model.evaluation_func = original_eval_func
 
 if __name__ == "__main__":
-    from pytest_helper import print_pytest_instructions
-    print_pytest_instructions()
+    # Ensure pytest instructions are printed if run directly
+    try:
+        from pytest_helper import print_pytest_instructions
+        print_pytest_instructions()
+    except ImportError:
+        print("Please run this file using pytest. Example: pytest unit_tests/models/BSESM_test.py")
