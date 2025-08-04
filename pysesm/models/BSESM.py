@@ -348,6 +348,7 @@ class BSESM(SESM):
 
         test_active_blocks = self.partition_manager.retrieve_test_active_blocks(
             X, y)
+        
         if len(test_active_blocks) == 0:
             self.logger.warning("No active test blocks found. "
                                 "Returning empty prediction.")
