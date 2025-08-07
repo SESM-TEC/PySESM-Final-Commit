@@ -134,15 +134,17 @@ class BSESM(SESM):
         if not blocks:
             # Return empty nested tensors. This handles cases where no
             # active blocks are found.
+            # PyTorch's nested_tensor constructor for empty lists actually creates
+            # a nested_tensor that contains a single zero-sized tensor.
+            # So, .unbind() on it will return a list with one empty tensor.
+            # This is the expected behavior for now, to avoid RuntimeError.
+            device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
             empty_tensor_list = [torch.empty(0, self.n_features,
-                                             device=self.device_manager.get_device(
-                                                 DeviceTarget.DICTIONARY_LAYER))]
+                                             device=device)]
             empty_y_list = [torch.empty(0, 1,
-                                        device=self.device_manager.get_device(
-                                            DeviceTarget.DICTIONARY_LAYER))]
+                                        device=device)]
             empty_h_list = [torch.empty(0, self.n_functions, 1,
-                                        device=self.device_manager.get_device(
-                                            DeviceTarget.DICTIONARY_LAYER))]
+                                        device=device)]
             return (torch.nested.nested_tensor(empty_tensor_list),
                     torch.nested.nested_tensor(empty_y_list),
                     torch.nested.nested_tensor(empty_h_list))

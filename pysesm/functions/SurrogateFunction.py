@@ -161,7 +161,13 @@ class SurrogateFunction(ABC):
 
             list_of_tensors = X.unbind()
             results = [self.evaluate(tensor, *args, **kwargs) for tensor in list_of_tensors]
-            return torch.nested.as_nested_tensor(results, layout=X.layout, device=X.device, dtype=results[0].dtype)
+
+            if results: # Only construct if there are results
+                return torch.nested.as_nested_tensor(results, layout=X.layout, device=X.device, dtype=results[0].dtype)
+            else:
+                # If results is empty (e.g., X was NestedTensor with empty tensors),
+                # return a corresponding empty NestedTensor.
+                return torch.nested.as_nested_tensor([], layout=X.layout, device=X.device)
 
         elif isinstance(X, list):
             # List of tensors case: process each one.
