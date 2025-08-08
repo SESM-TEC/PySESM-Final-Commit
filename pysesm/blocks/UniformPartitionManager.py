@@ -8,25 +8,24 @@ Authors: The SESM Team
 License: 
 '''
 
+from dataclasses import dataclass # Ensure dataclass is imported
+from typing import Union, Callable, Optional
+import logging
+
+import numpy as np
+import torch
+
+from pysesm.base_types import TensorBatch
 
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
 from pysesm.device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 # Update BlockManager import:
 from .BlockManager import BlockManager, BlockManagerConfig # Import both class and config
 from .PartitionBlock import PartitionBlock
 
-from pysesm.base_types import TensorBatch
-
-from dataclasses import dataclass # Ensure dataclass is imported
-from typing import Union, Callable, Iterator, Dict, Optional, List # Import List for type hints
-import logging
-import numpy as np
-import torch
-
-
+# Default number of blocks per dimension if not specified
 DEFAULT_BLOCKS_PER_DIM = 4
 
 @dataclass
@@ -111,7 +110,7 @@ class UniformPartitionManager(BlockManager):
         the block with the highest index is chosen.
 
         Args:
-            X (torch.Tensor): A point in the input space.
+            x (torch.Tensor): A point in the input space.
 
         Returns:
             PartitionBlock or None: The block containing the point, or None if not found.
@@ -128,16 +127,20 @@ class UniformPartitionManager(BlockManager):
         index = tuple(normalized.cpu().numpy())
         return self.blocks[index]
         
-    def _is_point_in_block(self,x: torch.Tensor,block:PartitionBlock) -> bool:
+    def _is_point_in_block(self, x: torch.Tensor, block: PartitionBlock) -> bool:
         """
-        Checks if a given point's N-dimensional coordinates fall within this block's `block_scope`.
+        Checks if a given point's N-dimensional coordinates fall within this
+        block's `block_scope`.
 
         Args:
-            point_x (torch.Tensor): The N-dimensional input features of the point to check.
-                                    Expected shape: (n_features,).
+            x (torch.Tensor): The N-dimensional input features of the point to
+                              check.
+                              Expected shape: (n_features,).
+            block (PartitionBlock): The block to check against.            
 
         Returns:
-            bool: True if the point is within the block's N-dimensional bounds, False otherwise.
+            bool: True if the point is within the block's N-dimensional bounds,
+            False otherwise.
         """
         x = x.to(self.device)
         # Check if all dimensions of point_x are >= lower bound AND <= upper bound
@@ -217,13 +220,16 @@ class UniformPartitionManager(BlockManager):
             self.logger.debug(f"[{self.__class__.__name__}] Blocks already exist. Skipping re-arrangement for new points outside bounds.")
             
 
-    def _map_points(self, X: torch.Tensor, y: torch.Tensor, expand_scope:bool = True):
+    def _map_points(self, X: torch.Tensor, y: torch.Tensor, expand_scope: bool = True):
         """
         Maps input points to their respective sub-blocks.
 
         Args:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
-            y (torch.Tensor): Target data corresponding to the input points.
+            X (torch.Tensor):    Input data of shape (n_samples, n_features). y
+            y (torch.Tensor):    Target data corresponding to the input points.
+            expand_scope (bool): If True, allows blocks to expand their scope to
+                                 include points outside their current bounds.
+
         """
         X = X.to(self.device)
         y = y.to(self.device)
@@ -234,11 +240,6 @@ class UniformPartitionManager(BlockManager):
         
         assigned_points_mask = torch.zeros(X.shape[0], dtype=torch.bool, device=self.device)
 
-        # y should be a torch.Tensor. Split it into a list of 1-row tensors for new_point.
-        # This handles (N_samples, output_dim) -> list of (1, output_dim)
-        # and (N_samples,) -> list of (1,) which PartitionBlock.new_point will squeeze to ().
-        y_list = list(y.split(1, dim=0))
-
         if expand_scope:
             overlap = self.overlap
         else:
@@ -248,8 +249,8 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             block = self.blocks[index]
 
-            lower_bound = block.block_scope[0]-self.overlap
-            upper_bound = block.block_scope[1]+self.overlap
+            lower_bound = block.block_scope[0]-overlap
+            upper_bound = block.block_scope[1]+overlap
             
             # Combine both checks to get points within the extended block
             points_in_extended_block_mask = ( (X >= lower_bound) * (X <= upper_bound) ).all(dim=1)
