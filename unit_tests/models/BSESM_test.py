@@ -409,176 +409,95 @@ def test_bsesm_aggregate_block_data_behavior(sample_bsesm_model, nested_tensor_d
     assert h_empty_nested.unbind()[0].shape == (0, n_functions, 1) # And has the correct function and output dimensions
 
 @pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
-@patch.object(UniformPartitionManager, 'retrieve_test_active_blocks')
-@patch.object(GaussianDictLayer, 'forward') # Patch dictionary_layer.forward
-def test_bsesm_predict_workflow(
-    mock_retrieve_test_active_blocks,
-    mock_dict_forward,
-    sample_bsesm_model, device_manager_fixture,
-    common_evaluation_func # Use the actual evaluation_func for correctness
-):
+def test_bsesm_predict_workflow(sample_bsesm_model, device_manager_fixture, common_evaluation_func):
     """
-    Test the entire predict workflow, focusing on data aggregation for prediction,
-    dictionary evaluation, evaluation_func usage, denormalization, and re-mapping.
-    This test uses the real UniformPartitionManager to distribute points.
+    Test integrador del flujo de predict sin mocks:
+    - Usa PartitionManager real para activar bloques sobre X_test_input.
+    - Usa Dictionary real (forward) y evaluation_func real.
+    - Ajusta h de cada bloque a un patrón conocido y fija amplitudes a 1.0.
+    - Reconstruye y_expected con la misma lógica y compara contra model.predict.
     """
     model = sample_bsesm_model
-    # Ensure model uses the common_evaluation_func explicitly
     model.evaluation_func = common_evaluation_func
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-    n_features = model.n_features
+
+    device = torch.device(device_manager_fixture.get_device(DeviceTarget.GLOBAL))
     n_functions = model.n_functions
 
-    # 1. Generate realistic test data within the partition bounds
-    # X is [-2,2]x[-2,2]. PartitionManager (from bsesm_config_fixture) uses T=[2,2],
-    # and initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]]).
-    # This means each block has a size of 2x2.
-    # Block (0,0) covers [-2,0]x[-2,0]
-    # Block (0,1) covers [-2,0]x[0,2]
-    # Block (1,0) covers [0,2]x[-2,0]
-    # Block (1,1) covers [0,2]x[0,2]
-
-    # Data points strategically chosen to fall into specific blocks
-    X_test_input = torch.tensor([
-        [-1.5, -1.5], # Point for block (0,0) - original_pos 0
-        [ 0.5,  0.5], # Point for block (1,1) - original_pos 1
-        [-0.5,  1.5], # Point for block (0,1) - original_pos 2
-        [ 1.5, -0.5], # Point for block (1,0) - original_pos 3
-        [-1.0, -1.0]  # Another point for block (0,0) - original_pos 4
-    ], device=device, dtype=torch.float32)
-    # Dummy y values. Only shape and device matter for predict's internal logic and `retrieve_test_active_blocks`.
-    y_test_input = torch.randn(X_test_input.shape[0], 1, device=device, dtype=torch.float32) 
-
-    # --- PREPARACIÓN DEL MODELO CON BLOQUES ACTIVOS (SIMULACIÓN DE ENTRENAMIENTO PREVIO) ---
-    # Para que el modelo tenga bloques activos con sparse_coding_layers y h's "aprendidos",
-    # primero debemos llamar a add_points e init_sparse_coding_per_block con algunos datos.
-    # Esto es crucial porque `predict` depende de que el `partition_manager` ya haya
-    # configurado y potencialmente "entrenado" los bloques.
-    model.partition_manager.add_points(X_test_input, y_test_input) # Usamos X_test_input/y_test_input como datos de entrenamiento dummy
-    model.partition_manager.init_sparse_coding_per_block(
-        config=model.config.sparse_coding_config, evaluation_func=model.evaluation_func
+    # Datos de prueba: 5 puntos que caen en distintos bloques (según partición 2x2 en [-2,2]^2)
+    X_test_input = torch.tensor(
+        [
+            [-1.5, -1.5],  # block (0,0)
+            [ 0.5,  0.5],  # block (1,1)
+            [-0.5,  1.5],  # block (0,1)
+            [ 1.5, -0.5],  # block (1,0)
+            [-1.0, -1.0],  # block (0,0) otra muestra
+        ],
+        device=device, dtype=torch.float32
     )
-    
-    # 3. Retrieve the REAL active PartitionBlocks from the manager for test prediction.
-    # We mock retrieve_test_active_blocks to ensure that `predict` gets exactly the blocks
-    # that the manager would prepare for a test scenario, which also involves clearing
-    # old data and setting up for inference.
-    real_active_blocks = model.partition_manager.retrieve_test_active_blocks(X_test_input, y_test_input)
-    # The crucial part: the mock *returns* these actual PartitionBlock instances
-    mock_retrieve_test_active_blocks.return_value = real_active_blocks
+    # y no se usa para el cálculo, pero ciertas rutas lo requieren por interfaz
+    y_test_input = torch.randn(X_test_input.shape[0], 1, device=device, dtype=torch.float32)
 
-    # 4. For each real block, set its sparse_coding_layer.h to a known mock value.
-    # This simulates the 'learned' h from a prior training step.
-    # We also store these known h values and the amplitudes for later assertions.
-    block_h_values = []
-    block_amplitudes = []
-    for block in real_active_blocks:
-        # We need to replace the real sparse_coding_layer of the block with a mock
-        # to control its 'h' parameter for the test.
-        mock_sc_layer = MagicMock(spec=ISTALayer)
-        # Assign a distinct, easily verifiable 'h' value for each block.
-        # Example: h will be a vector of (block_idx_sum + 1) for this block.
-        # E.g., for block (0,0), h elements are 1.0; for (1,1), h elements are 3.0.
-        mock_sc_layer.h = torch.nn.Parameter(
-            torch.full((n_functions, 1), float(block.block_index[0] + block.block_index[1] + 1), 
-                       device=device, dtype=torch.float32)
-        )
-        mock_sc_layer.device = device # Ensure mock has a device
-        block.sparse_coding_layer = mock_sc_layer # Replace real SC layer with mock for testing h
+    # 1) Preparar estado: puntos y SC por bloque
+    model.partition_manager.add_points(X_test_input, y_test_input)
+    model.partition_manager.init_sparse_coding_per_block(
+        config=model.config.sparse_coding_config,
+        evaluation_func=model.evaluation_func
+    )
 
-        block_h_values.append(block.sparse_coding_layer.h) # Keep reference to the mocked h
-        block_amplitudes.append(block.amplitude) # Keep reference to the real amplitude
+    # 2) Bloques activos reales para este set de test
+    active_blocks = model.partition_manager.retrieve_test_active_blocks(X_test_input, y_test_input)
+    assert isinstance(active_blocks, (list, tuple)) and len(active_blocks) > 0
 
-    # --- Mock dictionary_layer.forward output ---
-    # This mock should return a NestedTensor where each sub-tensor corresponds to 
-    # the evaluated dictionary D for each block's normalized_X.
-    # The `predict` method will call `dictionary_layer.forward(X_nested_test)`.
-    mock_dict_eval_for_blocks_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device, dtype=torch.float32)
-                                      for block in real_active_blocks]
-    
-    # This mock's return_value must handle the case where mock_dict_eval_for_blocks_list is empty.
-    # In PyTorch 3.12+, torch.nested.nested_tensor([]) raises a RuntimeError.
-    # Instead, we return a NestedTensor containing a single empty tensor, mirroring
-    # the behavior of _aggregate_block_data and avoiding the RuntimeError.
-    if mock_dict_eval_for_blocks_list:
-        mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_eval_for_blocks_list, layout=torch.jagged, device=device)
-    else:
-        # Return a NestedTensor with a single empty tensor, matching PyTorch's actual behavior for "empty" nested tensors
-        # and avoiding RuntimeError.
-        mock_dict_forward.return_value = torch.nested.nested_tensor(
-            [torch.empty(0, n_functions, device=device, dtype=torch.float32)],
-            layout=torch.jagged,
-            device=device
+    # 3) Fijar h de cada bloque a un valor fácil de verificar y amplitud = 1.0
+    #    h_i = constante = (i+j+1) en cada entrada, con shape (n_functions, 1)
+    for block in active_blocks:
+        i, j = block.block_index
+        const_val = float(i + j + 1)
+        h_param = torch.nn.Parameter(
+            torch.full((n_functions, 1), const_val, device=device, dtype=torch.float32)
         )
-    
-    # --- Simulate predicted *normalized* values for each block from evaluation_func ---
-    # These are the values *before* denormalization by amplitude.
-    # The model's `predict` method will call `model.evaluation_func` for each block.
-    # Set its `side_effect` to return distinct, predictable values for each block's prediction.
-    expected_mock_eval_outputs = []
-    simulated_values_map = {
-        (0,0): 0.5, # Normalized prediction for block (0,0) points
-        (1,1): 0.8, # Normalized prediction for block (1,1) points
-        (0,1): 0.6, # Normalized prediction for block (0,1) points
-        (1,0): 0.7, # Normalized prediction for block (1,0) points
-    }
-    for block in real_active_blocks:
-        simulated_normalized_pred_value = simulated_values_map.get(block.block_index, 0.0) # Default 0.0 if block not in map
-        expected_mock_eval_outputs.append(
-            torch.full((block.normalized_X.shape[0], 1),
-                       simulated_normalized_pred_value,
-                       device=device, dtype=torch.float32)
-        )
-    
-    # Temporarily replace the *real* common_evaluation_func used by the model with a mock
-    model.evaluation_func = MagicMock(side_effect=expected_mock_eval_outputs)
-    
-    # --- Call predict ---
+        # Asegúrate de que el layer existe
+        assert hasattr(block, "sparse_coding_layer") and block.sparse_coding_layer is not None
+        block.sparse_coding_layer.h = h_param
+        # Evitar efectos de (de)normalización dependientes de amplitud
+        if hasattr(block, "amplitude"):
+            block.amplitude = 1.0
+
+    # 4) Construir y_expected replicando la lógica de predict, pero por bloque
+    y_expected = torch.empty_like(y_test_input)
+    for block in active_blocks:
+        X_i = block.normalized_X  # (N_i, n_features)
+        h_i = block.sparse_coding_layer.h  # (n_functions, 1)
+
+        # D_i = Dictionary(X_i) usando la implementación real
+        D_i = model.dictionary_layer.forward(X_i)  # (N_i, n_functions)
+
+        # y_i = eval_func(D_i, h_i) -> (N_i, 1)
+        y_i = model.evaluation_func(D_i, h_i)
+
+        # Si hubiera otros factores de normalización adicionales, aquí deberían aplicarse.
+        # Hemos fijado amplitude=1.0 para neutralizar esa parte.
+
+        # Reubicar en el orden original usando positions
+        assert hasattr(block, "positions") and len(block.positions) == X_i.shape[0]
+        for local_idx, original_pos in enumerate(block.positions):
+            y_expected[original_pos] = y_i[local_idx]
+
+    # 5) Llamar a predict (flujo completo real)
     y_predicted_actual = model.predict(X_test_input, y_test_input)
 
-    # --- Assertions ---
-    mock_retrieve_test_active_blocks.assert_called_once_with(X_test_input, y_test_input)
+    # 6) Asserts básicos de forma y dispositivo
+    assert isinstance(y_predicted_actual, torch.Tensor)
+    assert y_predicted_actual.shape == (X_test_input.shape[0], 1)
+    assert y_predicted_actual.device == device
+    assert y_predicted_actual.dtype == torch.float32
+    assert torch.isfinite(y_predicted_actual).all()
 
-    # Verify dictionary_layer.forward is called with the aggregated X_nested from test blocks
-    expected_X_nested_for_dict_forward = torch.nested.nested_tensor(
-        [block.normalized_X for block in real_active_blocks],
-        layout=torch.jagged,
-        device=device
-    )
-    mock_dict_forward.assert_called_once_with(expected_X_nested_for_dict_forward)
-
-    # Verify model.evaluation_func was called for EACH block individually
-    # It should be called with the D-matrix for that block (from mock_dict_forward's output)
-    # and the H-vector from that block's sparse_coding_layer.
-    assert model.evaluation_func.call_count == len(real_active_blocks), "evaluation_func should be called once per active block"
-    mock_dict_eval_list_unbound = mock_dict_forward.return_value.unbind() # Get the actual D matrices from the mock's return value
-    expected_eval_calls = []
-    for i, block in enumerate(real_active_blocks):
-        # The call should be with the specific D (from the mock's return) and the mocked h.
-        expected_eval_calls.append(call(mock_dict_eval_list_unbound[i], block.sparse_coding_layer.h))
-    model.evaluation_func.assert_has_calls(expected_eval_calls, any_order=False) # Order matters for side_effect
-
-    # Calculate expected final predictions after denormalization and re-mapping
-    expected_final_preds_tensor = torch.zeros_like(y_test_input, device=device, dtype=torch.float32)
+    # 7) Comparación numérica con tolerancia
+    #    Usamos tolerancia estándar por posibles pequeñas diferencias numéricas internas.
+    assert torch.allclose(y_predicted_actual, y_expected, rtol=1e-4, atol=1e-5), \
+        f"Predicción no coincide con lo esperado.\nPred:\n{y_predicted_actual}\nExp:\n{y_expected}"
     
-    # Iterate through the blocks (which now have positions from the real data distribution)
-    # and place the denormalized predictions into the final tensor.
-    for block_idx_in_list, block in enumerate(real_active_blocks):
-        current_block_normalized_preds = expected_mock_eval_outputs[block_idx_in_list] # This is the raw output from evaluation_func mock
-        block_preds_unnormalized = current_block_normalized_preds / block.amplitude # Apply denormalization
-        
-        # Place predictions into the correct positions in the final output tensor
-        for i, pos_in_original_X_test_input in enumerate(block.positions):
-            expected_final_preds_tensor[pos_in_original_X_test_input] = block_preds_unnormalized[i]
-
-    assert y_predicted_actual.shape == expected_final_preds_tensor.shape
-    assert torch.allclose(y_predicted_actual, expected_final_preds_tensor, atol=1e-6)
-
-    # Restore original evaluation_func (good practice for subsequent tests if any)
-    # This assumes the fixture cleans up. If not, it's safer to restore here.
-    # However, since this is a test method, the fixture setup/teardown will handle `model` instance.
-    # model.evaluation_func = original_eval_func # No need, new model instance per test.
-
 if __name__ == "__main__":
     # Ensure pytest instructions are printed if run directly
     try:

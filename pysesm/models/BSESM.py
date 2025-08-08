@@ -145,9 +145,15 @@ class BSESM(SESM):
                                         device=device)]
             empty_h_list = [torch.empty(0, self.n_functions, 1,
                                         device=device)]
-            return (torch.nested.nested_tensor(empty_tensor_list),
-                    torch.nested.nested_tensor(empty_y_list),
-                    torch.nested.nested_tensor(empty_h_list))
+            return (torch.nested.nested_tensor(empty_tensor_list,
+                                               layout=torch.jagged,
+                                               device=device),
+                    torch.nested.nested_tensor(empty_y_list,
+                                               layout=torch.jagged,
+                                               device=device),
+                    torch.nested.nested_tensor(empty_h_list,
+                                               layout=torch.jagged,
+                                               device=device))
 
         X_list = [block.normalized_X for block in blocks]
         y_list = [block.target for block in blocks]
