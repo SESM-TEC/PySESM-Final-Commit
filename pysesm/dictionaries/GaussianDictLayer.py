@@ -6,10 +6,12 @@ Authors: The SESM Team
 License: 
 '''
 
+import logging
+
 from dataclasses import dataclass
 from typing import Optional, Callable, Iterator
 import torch
-import logging
+
 from .DictBaseLayer import DictBaseLayer, DictConfig
 from pysesm.functions.GaussianFunction import GaussianFunction
 from pysesm.base_types import TensorBatch

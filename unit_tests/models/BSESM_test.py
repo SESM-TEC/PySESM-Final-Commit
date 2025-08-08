@@ -1,11 +1,12 @@
 # unit_tests/models/BSESM_test.py
 
+import logging
+from unittest.mock import MagicMock, call, patch
+from typing import Optional, List, Tuple, Union
+
 import pytest
 import torch
 import numpy as np
-import logging
-from unittest.mock import MagicMock, call # Keep MagicMock and call for model.evaluation_func
-from typing import Optional, List, Tuple, Union
 
 from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig, UniformPartitionManager

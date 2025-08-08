@@ -494,7 +494,7 @@ class SESM(torch.nn.Module, ABC):
         Raises:
             ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        return _predict(X,self.sparse_coding_layer,custom_h)
+        return self._predict(X,self.sparse_coding_layer,custom_h)
 
     def _predict(
             self,

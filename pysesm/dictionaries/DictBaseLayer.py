@@ -96,7 +96,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         Returns:
             torch.nn.Parameter: The initialized parameters for this dictionary
         """
-        pass
+        ...
     
     @abstractmethod
     def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:
@@ -250,7 +250,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         """Detaches all tensors within a TensorBatch."""
         if isinstance(tensor_batch, torch.Tensor):
             return tensor_batch.detach()
-        elif torch.nested.is_nested(tensor_batch):
+        elif getattr(tensor_batch,"is_nested",False):
             # Creating a new nested_tensor from detached components
             detached_tensors = [t.detach() for t in tensor_batch.unbind()]
             return torch.nested.as_nested_tensor(detached_tensors,
