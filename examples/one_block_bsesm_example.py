@@ -10,26 +10,28 @@ License:
 
 import logging
 import torch
+
 import matplotlib.pyplot as plt
+
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
-from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
-from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
-from pysesm.sparse_coding import ADMMLayer, ADMMConfig
-from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
+#from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
+#from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme, StepSizeMethod
+from pysesm.sparse_coding import ADMMConfig
+from pysesm.dictionaries import GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
-from pysesm.utils.metric_loggers import *
+#from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
-from mpl_toolkits.mplot3d import Axes3D
+#from pysesm.device_manager.DeviceManager import DeviceManager
+
 
 
 
 class KLDivLossWrapper(torch.nn.Module):
-    def __init__(self, reduction='mean', log_input=False):
+    def __init__(self, reduction='mean'):
         super(KLDivLossWrapper, self).__init__()
         self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
         
@@ -134,46 +136,48 @@ device_map = {
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
-sparse_coding_config = ISTAConfig(
-    epochs=50,
-    alpha=0.10,
-    lambd=0.00001,
-    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    power_iterations=10,
-    n_functions=n_functions,
-    criterion=torch.nn.MSELoss()
-)
+# sparse_coding_config = ISTAConfig(
+#     epochs=400,
+#     alpha=0.020,
+#     lambd=0.00001,
+#     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+#     power_iterations=20,
+#     n_functions=n_functions,
+#     criterion=torch.nn.MSELoss()
+# )
 # sparse_coding_config = FISTAConfig(
+#     epochs=400,
 #     alpha = 0.020,
 #     lambd = 0.00001,
 #     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
 #     power_iterations = 10,
+#     early_stopping = False,
 #     n_functions = n_functions,
-#     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
-#     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+#     restart_strategy = RestartStrategy.NONE, # ADAPTIVE, # .NONE,
+#     momentum_scheme = MomentumScheme.ORIGINAL, # MONOTONIC, # .ORIGINAL,
 #     criterion = torch.nn.MSELoss(),
 # )
-# sparse_coding_config = ADMMConfig(
-#     epochs = 100,
-#     rho = 0.1,            # Penalty parameter
-#     alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
-#     lambda_scaling = 1.0, # Lambda scaling factor
-#     lambd = 0.00001,      # L1 regularization strength
-#     abs_tol = 1e-4,       # Absolute tolerance
-#     rel_tol = 1e-2,       # Relative tolerance
-#     n_functions = n_functions,
-#     criterion = torch.nn.MSELoss()
-# )
+sparse_coding_config = ADMMConfig(
+    epochs = 100,
+    rho = 0.1,            # Penalty parameter
+    alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
+    lambda_scaling = 1.0, # Lambda scaling factor
+    lambd = 0.00001,      # L1 regularization strength
+    abs_tol = 1e-4,       # Absolute tolerance
+    rel_tol = 1e-2,       # Relative tolerance
+    n_functions = n_functions,
+    criterion = torch.nn.MSELoss()
+)
 dict_config = GaussianDictConfig(
-    epochs = 4,
-    alpha = 0.01,
+    epochs = 100,
+    alpha = 0.1,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
     optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    mu_epochs = 10,
-    rho_epochs = 10,
-    split_mu_rho = True,
+    mu_epochs = 50,
+    rho_epochs = 50,
+    split_mu_rho = False,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
 )
@@ -195,7 +199,7 @@ ssesm_config = SSESMConfig(
 
 bsesm_config = BSESMConfig(
     n_features = n_features,
-    model_epochs = 20,
+    model_epochs = 400,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
@@ -245,20 +249,20 @@ def show_data(X, y, c, marker, label, ax=None):
     return ax
 
 
-def show_all_h(model: BSESM, logger: logging.Logger, threshold: float = 1e-6):
+def show_all_h(bsesm_model: BSESM, bsesm_logger: logging.Logger, threshold: float = 1e-6):
     """
     Imprime los vectores h de todos los bloques activos del modelo BSESM.
     
     Args:
-        model (BSESM): La instancia del modelo BSESM entrenado.
-        logger (logging.Logger): La instancia del logger para la salida.
+        bsesm_model (BSESM): La instancia del modelo BSESM entrenado.
+        bsesm_logger (logging.Logger): La instancia del logger para la salida.
         threshold (float): Umbral para considerar un componente de h como no nulo.
     """
-    logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
-    active_blocks = model.partition_manager.retrieve_active_blocks()
+    bsesm_logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
+    active_blocks = bsesm_model.partition_manager.retrieve_active_blocks()
     
     if not active_blocks:
-        logger.info("No se encontraron bloques activos en el modelo.")
+        bsesm_logger.info("No se encontraron bloques activos en el modelo.")
         return
 
     for block in active_blocks:
@@ -272,16 +276,16 @@ def show_all_h(model: BSESM, logger: logging.Logger, threshold: float = 1e-6):
             total_components = h_tensor.numel()
             sparsity_ratio = (total_components - non_zero_components) / total_components * 100
             
-            logger.info(f"  Bloque {block_index_str}:")
-            logger.info(f"    Amplitud: {block.amplitude}")
-            logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
-            logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
-            logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
-            logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
-            logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
+            bsesm_logger.info(f"  Bloque {block_index_str}:")
+            bsesm_logger.info(f"    Amplitud: {block.amplitude}")
+            bsesm_logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
+            bsesm_logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
+            bsesm_logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
+            bsesm_logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
+            bsesm_logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
         else:
-            logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
-    logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
+            bsesm_logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
+    bsesm_logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
 
 
 # DATA GENERATION
@@ -302,14 +306,14 @@ else:
 
 try:
     # TRAIN AND TEST THE ALL MODELS
-    logging.info("Training model {}".format(model.__class__.__name__))
+    logging.info("Training model %s", model.__class__.__name__)
     model_folder = f"{folder_name}_{model.__class__.__name__}"
     model.partial_fit(X_train, y_train)
     if which_sesm=="ssesm":
         show_all_h(model, logger)
     y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
-    logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
+    logging.info("Model: %s, MSE Value = %.6f, time = %.6f", model.__class__.__name__, mse_value, time)
 
     plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
