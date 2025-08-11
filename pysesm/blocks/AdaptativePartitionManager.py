@@ -8,24 +8,21 @@ adapts itself depending on the data it has.
 
 Author: Hender Valdivia
 '''
+
+from dataclasses import dataclass
+from typing import Union, Callable
+
 import logging
 import torch
 import numpy as np
 
-from pysesm.blocks.BlockManager import BlockManager
+from pysesm.blocks.BlockManager import BlockManager, BlockManagerConfig
 from pysesm.blocks.KDTree import KDTree
-from pysesm.blocks.Node import Node
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from copy import deepcopy
-from .BlockManager import BlockManagerConfig
+from pysesm.blocks.SESMData import SESMData
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.blocks.SESMData import SESMData
-
-from dataclasses import dataclass
-from typing import Union, Callable, Iterator, Type
-
 
 @dataclass
 class AdaptativePartitionConfig(BlockManagerConfig):
@@ -48,6 +45,9 @@ class AdaptativePartitionConfig(BlockManagerConfig):
     data_object=SESMData
     
 class AdaptativePartitionManager(BlockManager):
+
+    CONFIG_CLASS = AdaptativePartitionConfig 
+
     def __init__(
         self,
         config: AdaptativePartitionConfig,
@@ -66,20 +66,22 @@ class AdaptativePartitionManager(BlockManager):
                 If not provided, bounds are automatically derived from the data.
             threshold (float, optional): Threshold for determining block activity.
         """
+
+
         super().__init__(config=config, logger=logger, device_manager=device_manager)
         
         self.logger = logger
         self.maxNodeSize = config.maxNodeSize
         self.maxSplitsBeforeRestart = config.maxSplitsBeforeRestart
-        self.blocks = []
+        self.blocks: np.ndarray = np.empty(0, dtype=object)  
         self.sparse_coding_layer_hook = sparse_coding_layer_hook
-        self.X = None
-        self.y = None
-        self.total_blocks=0
-        self.splits=0
-        self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
-        self.kdtree=None
-        self.device_manager=device_manager
+        self.X: torch.Tensor = None
+        self.y: torch.Tensor = None
+        self.total_blocks: int = 0
+        self.splits: int = 0
+        self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
+        self.kdtree: KDTree = None
+        self.device_manager: device_manager = device_manager
         self.device="cpu"
         if self.device_manager is not None:
             self.device=device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
@@ -101,7 +103,7 @@ class AdaptativePartitionManager(BlockManager):
             self.logger.warning("Could not find a block for point %s", x)
             return None #Check type, should be PartitionBlock its node
 
-    def _update_block_arrangement(self, X: torch.Tensor, y:torch.Tensor) -> None:
+    def _update_block_arrangement(self, X: torch.Tensor, y: torch.Tensor = None) -> None:
         """
         Updates the kdtree and its blocks based on the input data.
 
@@ -113,7 +115,6 @@ class AdaptativePartitionManager(BlockManager):
         """
         X=X.to(self.device)
         y=y.to(self.device)
-        Xy=torch.cat((X,y),dim=1)   
 
         #Initialize the kdtree if it doesn't exist and configure it
         if self.kdtree is None: 
@@ -129,10 +130,10 @@ class AdaptativePartitionManager(BlockManager):
 
                 self.total_blocks+=1
                 self.blocks[index] = PartitionBlock(
-                space_origin=node.Data.bounds[0],  
-                block_index= index, 
-                block_size=block_size,
-                device=self.device
+                    space_origin=node.Data.bounds[0],  
+                    block_index= index, 
+                    block_size=block_size,
+                    device=self.device
                 )
 
                 node.Data.block=self.blocks[index] #Define node blocks
@@ -147,7 +148,10 @@ class AdaptativePartitionManager(BlockManager):
                 self.kdtree.add_point(row[:-1],row[-1:])
             
             treeNodes=self.kdtree.get_leaves()
-            if len(treeNodes)>self.total_blocks:    #If a node was split, update self.blocks
+            assert self.kdtree.split==(len(treeNodes)>self.total_blocks)
+            if self.kdtree.split:    #If a node was split, update self.blocks
+                self.kdtree.split=False
+                
                 self.splits=len(treeNodes)-self.total_blocks    #How many nodes were split
                 self.blocks = np.empty(len(treeNodes), dtype=object)  
                 
@@ -155,6 +159,7 @@ class AdaptativePartitionManager(BlockManager):
                     node=treeNodes[index[0]]
                     node.Data.block.block_index=index
                     self.blocks[index]=node.Data.block
+                    
                     if node.Data.overlap is None:
                         if self.config.overlap_ratio is None:
                             node.Data.overlap = torch.zeros_like(node.Data.block.block_size,device=self.device)
@@ -165,20 +170,26 @@ class AdaptativePartitionManager(BlockManager):
 
         #After many splits, recreate the kdtree to avoid any bias
         if self.splits > self.maxSplitsBeforeRestart:
-            treeNodes=self.kdtree.get_leaves()
-            X=torch.Tensor()
-            y=torch.Tensor()
-            
-            for node in treeNodes: 
-                X=torch.cat((X,node.Data.X),dim=0)
-                y=torch.cat((y,node.Data.y),dim=0)
+            self._restart_kdtree()
 
-            self.kdtree = None
-            self.splits = 0
-            self._update_block_arrangement(X, y)
+    def _restart_kdtree(self):
+        """
+        Restarts the kdtree.
+        """
+        treeNodes=self.kdtree.get_leaves()
+        X=torch.Tensor()
+        y=torch.Tensor()
+        
+        for node in treeNodes: 
+            X=torch.cat((X,node.Data.X),dim=0)
+            y=torch.cat((y,node.Data.y),dim=0)
+
+        self.kdtree = None
+        self.splits = 0
+        self._update_block_arrangement(X, y)
 
 
-    def _map_points(self, expand_scope: bool = False):
+    def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = True):
         """
         Maps kdtree leaf nodes data to their blocks.
         """

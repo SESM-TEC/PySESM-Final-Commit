@@ -7,6 +7,14 @@ Authors: The SESM Team
 
 License: 
 '''
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Union, Callable, Optional
+import logging
+
+import torch
+from torch import Tensor
+from numpy.typing import NDArray
 
 from .PartitionBlock import PartitionBlock
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
@@ -15,20 +23,10 @@ from ..base_types import BaseConfig
 from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
 from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Union, Callable, Iterator, Optional
-import torch
-from torch import Tensor
-import logging
-from numpy.typing import NDArray
-
-
-
 @dataclass
 class BlockManagerConfig(BaseConfig):
     """Base configuration for all block manager configurations"""
-    pass
+    
 
 class BlockManager(ABC):
     """
@@ -94,7 +92,6 @@ class BlockManager(ABC):
             The implementation of this method is specific to the subclass and may depend on the
             block partitioning logic used (e.g., uniform partitioning, KD-tree partitioning, etc.).
         """
-        pass
 
     @abstractmethod
     def _update_block_arrangement(self, X: Tensor) -> None:
@@ -120,7 +117,6 @@ class BlockManager(ABC):
             block partitioning logic used in the subclass. It may involve complex operations
             like adaptive partitioning or rebalancing based on the dataset distribution.
         """
-        pass
 
     @abstractmethod
     def _map_points(self, X: Tensor, y: Tensor):
@@ -172,7 +168,6 @@ class BlockManager(ABC):
             should be implemented in the subclass.
 
         """
-        pass
 
     @abstractmethod
     def add_points(self, X: Tensor, y: Tensor):

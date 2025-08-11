@@ -10,7 +10,6 @@ Author: Hender Valdivia
 
 from typing import Callable
 import torch
-from pysesm.blocks.SESMData import SESMData
 
 class Node():
     def __init__(self, Data: torch.Tensor, y: torch.Tensor, data_wrapper: Callable, parent=None):

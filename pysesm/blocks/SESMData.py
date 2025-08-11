@@ -13,12 +13,17 @@ class SESMData():
         self.X: torch.Tensor = X
         self.y: torch.Tensor = y
         self.split_point: torch.Tensor = None
-        self.block: PartitionBlock = None
+
         self.test_data: torch.Tensor = None
         self.test_y: torch.Tensor = None
         self.overlap: torch.Tensor = None
         self._updateBounds()
         self.dim : int = self.greatestVarDim()
+        self.block: PartitionBlock = PartitionBlock(
+                self.bounds[0],
+                (1,),
+                self.bounds[1]-self.bounds[0],
+                device=None)
 
     def greatestVarDim(self) -> int:
         """Returns the dimension with the greatest variance of the dataset, 
@@ -33,4 +38,10 @@ class SESMData():
         "Update the bounds to fit the internal data"
         upperBounds, _ = torch.max(self.X, dim=0)
         lowerBounds, _ = torch.min(self.X, dim=0)
-        self.bounds = torch.stack((lowerBounds, upperBounds),dim=0)   
+        self.bounds = torch.stack((lowerBounds, upperBounds),dim=0)  
+
+    def empty_data(self):
+        self.X = None
+        self.y = None
+        self.bounds = None
+        self.block=None

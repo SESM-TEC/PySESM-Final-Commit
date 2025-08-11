@@ -7,41 +7,38 @@ Provides a kd-tree data structure.
 
 Author: Hender Valdivia
 '''
-from typing import Callable
 
-from pysesm.blocks.Node import Node
-from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.blocks.SESMData import SESMData
+from typing import Callable
 import torch
+from pysesm.blocks.Node import Node
 
 class dummyData():
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
         self.X: torch.Tensor=X
         self.y: torch.Tensor=y
         self.split_point: float=None
-        self.block: PartitionBlock=None
         self.test_data: torch.Tensor=None
         self.test_y: torch.Tensor=None
         self.dim: int=0
-        self.overlap : torch.Tensor =None
-        self._updateBounds()
-    def _updateBounds(self):
-        "Update the bounds to fit the internal data"
-        upperBounds, _ = torch.max(self.X, dim=0)
-        lowerBounds, _ = torch.min(self.X, dim=0)
-        self.bounds = torch.stack((lowerBounds,upperBounds),dim=0)   
+
+    def empty_data(self):
+        self.X = None
 
 class KDTree():
     def __init__(self, data: torch.Tensor, y: torch.Tensor, maxNodeSize: int = 500, data_wrapper: Callable = dummyData,device=None):
         """
         data (Tensor): Tensor holding all data points
+        root (Node): Root node of the tree.
         maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
+        data_wrapper (Callable): The object used in the nodes to store the data.
+        split (bool): Flag to indicate whether any node has been split  points added after the initial KD-tree build.
         device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
         self.root: Node = Node(data.to(self.device), y, data_wrapper)
         self.maxNodeSize: int = maxNodeSize
-        self.data_wrapper=data_wrapper
+        self.data_wrapper : Callable = data_wrapper
+        self.split: bool = False
 
         self._splitDataInNodes(self.root)
         
@@ -56,7 +53,7 @@ class KDTree():
         # Calculate median only for the dimension we need
         node.Data.split_point = torch.median(node.Data.X[:,node.Data.dim]).item()
 
-        # Create combined data (necessary for interface)
+        # Create combined data (necessary for mask)
         data=torch.cat((node.Data.X, node.Data.y), dim=1)
 
         # Create mask of data over threshold only once and reuse its inverse
@@ -65,9 +62,7 @@ class KDTree():
         node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper)
         node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper)        
 
-        node.Data.X = None
-        node.Data.bounds = None
-        node.Data.block=None
+        node.Data.empty_data()
         
         self._splitDataInNodes(node.left)
         self._splitDataInNodes(node.right)
@@ -92,7 +87,7 @@ class KDTree():
     def add_point(self, x : torch.Tensor, y: torch.Tensor) -> None:
         """
         Adds a point to the KDTree in the corresponding node.
-        If the node exceeds maxNodeSize then split it and create the child blocks.
+        If the node exceeds maxNodeSize, the node is split.
 
         x: one-dimensional tensor
         """
@@ -106,23 +101,8 @@ class KDTree():
         node.Data.y=torch.cat((node.Data.y,y))
 
         if not (node.Data.X.size(0) <= self.maxNodeSize):
+            self.split=True
             self._splitDataInNodes(node)
-
-            left_bound=node.left.Data.bounds[1]-node.left.Data.bounds[0]
-            right_bound=node.right.Data.bounds[1]-node.right.Data.bounds[0]
-            node.left.Data.block=PartitionBlock(
-                node.left.Data.bounds[0],
-                (1,),
-                left_bound,
-                device=self.device)
-
-            node.right.Data.block=PartitionBlock(
-                node.right.Data.bounds[0],
-                (2,),
-                right_bound,
-                device=self.device)
-            assert node.right.Data.block is not None
-            assert node.left.Data.block is not None
     
     def get_leaves(self,  leaves : list = None, node = None) -> list:
         """
@@ -150,7 +130,7 @@ class KDTree():
 
     def _splitDataInNodes_test(self, node : Node):
         """
-        Splits test data without changing the structure of the kdtree
+        Splits test data without changing the structure of the kdtree.
 
         Args:
             node (Node): Starting node, usually the root node
