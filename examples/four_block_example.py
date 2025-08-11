@@ -17,6 +17,7 @@ from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStra
 from pysesm.sparse_coding import ADMMLayer, ADMMConfig
 from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
+from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils.generate_dataset import generate_gaussian_dataset, generate_one_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
@@ -122,7 +123,7 @@ class JensenShannonLossWrapper(torch.nn.Module):
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 30
+n_functions = 50
 n_features = 2
 
 # Device configuration
@@ -133,25 +134,25 @@ device_map = {
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
-# sparse_coding_config = ISTAConfig(
-#     epochs=50,
-#     alpha=0.10,
-#     lambd=0.00001,
-#     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-#     power_iterations=10,
-#     n_functions=n_functions,
-#     criterion=torch.nn.MSELoss()
-# )
-sparse_coding_config = FISTAConfig(
-    alpha = 0.020,
-    lambd = 0.00001,
-    step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    power_iterations = 10,
-    n_functions = n_functions,
-    restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
-    momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
-    criterion = torch.nn.MSELoss(),
+sparse_coding_config = ISTAConfig(
+    epochs=100,
+    alpha=0.10,
+    lambd=0.00001,
+    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    power_iterations=10,
+    n_functions=n_functions,
+    criterion=torch.nn.MSELoss()
 )
+# sparse_coding_config = FISTAConfig(
+#     alpha = 0.020,
+#     lambd = 0.00001,
+#     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+#     power_iterations = 10,
+#     n_functions = n_functions,
+#     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
+#     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
+#     criterion = torch.nn.MSELoss(),
+# )
 # sparse_coding_config = ADMMConfig(
 #     epochs = 100,
 #     rho = 0.1,            # Penalty parameter
@@ -182,6 +183,11 @@ partition_config = UniformPartitionConfig(
     activity_threshold=0,
     overlap_ratio=0.25
 )
+# partition_config = AdaptativePartitionConfig(
+#         maxNodeSize=251,
+#         maxSplitsBeforeRestart=5,
+#         overlap_ratio=0.1)
+
 
 ssesm_config = SSESMConfig(
     n_features = n_features,

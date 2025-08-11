@@ -1,14 +1,15 @@
-from pysesm.utils_dataset.design_matrices import *
-from pysesm.utils_dataset.gaussian_covariance_density import *
-from pysesm.utils_dataset.mesh_generation import *
-from typing import Callable, List, Tuple, Dict, Union, Optional
+from typing import Callable, List, Tuple, Dict
+
 import torch
+
+from pysesm.utils_dataset.design_matrices import create_design_matrix_test, create_design_matrix_train
+from pysesm.utils_dataset.mesh_generation import generate_mu, generate_mesh_samples, generate_random_samples
 
 def generate_gaussian_dataset(
     n_samples: int,
-    means: List[Tuple[float, float]] = [(1, 1), (1, -1), (-1, -1)],
-    variances: List[float] = [0.15, 0.5, 0.75],
-    weights: List[float] = [1.25, 0.5, 0.75],
+    means: List[Tuple[float, float]] = None,
+    variances: List[float] = None,
+    weights: List[float] = None,
     limits: Tuple[float, float] = (-2, 2),
     mesh_divisions: int = 50
 ) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
@@ -32,6 +33,14 @@ def generate_gaussian_dataset(
             - X_test (torch.Tensor): Test input features
             - y_test (torch.Tensor): Test target values
     """
+
+    if means is None:
+        means = [(1, 1), (1, -1), (-1, -1)]
+    if variances is None:
+        variances = [0.15, 0.5, 0.75]
+    if weights is None:
+        weights = [1.25, 0.5, 0.75]
+
     # Validate input lengths
     if not (len(means) == len(variances) == len(weights)):
         raise ValueError("means, variances and weights must have the same length")
@@ -65,7 +74,7 @@ def generate_gaussian_dataset(
 def generate_custom_function_dataset(
     n_samples: int,
     function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    function_params: Dict = {},
+    function_params: Dict = None,
     limits: Tuple[float, float] = (-2, 2),
     mesh_divisions: int = 50
 ) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
@@ -82,6 +91,9 @@ def generate_custom_function_dataset(
     Returns:
         tuple: Train and test datasets (dicts and tensors).
     """
+    if function_params is None:
+        function_params={}
+
     low_lim, high_lim = limits
 
     # Generate mesh grid
@@ -109,7 +121,7 @@ def generate_custom_nd_function_dataset(
     n_samples: int,
     n_dimensions: int,
     function: Callable[[torch.Tensor], torch.Tensor],
-    function_params: Dict = {},
+    function_params: Dict = None,
     limits: Tuple[float, float] = (-2.0, 2.0),
     mesh_divisions: int = 50
 ) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
@@ -127,6 +139,9 @@ def generate_custom_nd_function_dataset(
     Returns:
         tuple: Train and test datasets (dicts and tensors).
     """
+    if function_params is None:
+        function_params={}
+
     low_lim, high_lim = limits
 
     # Generate mesh grid for test data
@@ -164,7 +179,7 @@ def print_nd_dataset_info(dataset, name="Dataset"):
             print(f"  dtype: {value.dtype}")
             
             if len(value.shape) > 1:  # Para X (multidimensional)
-                print(f"  Rango por dimensión:")
+                print("  Rango por dimensión:")
                 for dim in range(value.shape[1]):
                     print(f"    Dim {dim}: [{value[:, dim].min():.4f}, {value[:, dim].max():.4f}]")
                 print(f"  Primeras 3 muestras:\n{value[:3]}")
