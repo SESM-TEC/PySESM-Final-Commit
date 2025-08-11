@@ -178,10 +178,10 @@ dict_config = GaussianDictConfig(
     mu_range = [-2.0, 2.0],
 )
 partition_config = UniformPartitionConfig(
-    T=3,
+    T=2,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     activity_threshold=0,
-    overlap_ratio=0.25
+    overlap_ratio=0.1
 )
 # partition_config = AdaptativePartitionConfig(
 #         maxNodeSize=251,
