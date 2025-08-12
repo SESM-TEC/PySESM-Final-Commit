@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
-#from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
+from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 #from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme, StepSizeMethod
-from pysesm.sparse_coding import ADMMConfig
+#from pysesm.sparse_coding import ADMMConfig
 from pysesm.dictionaries import GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
@@ -136,15 +136,15 @@ device_map = {
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
-# sparse_coding_config = ISTAConfig(
-#     epochs=400,
-#     alpha=0.020,
-#     lambd=0.00001,
-#     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-#     power_iterations=20,
-#     n_functions=n_functions,
-#     criterion=torch.nn.MSELoss()
-# )
+sparse_coding_config = ISTAConfig(
+    epochs=400,
+    alpha=0.050,
+    lambd=0.0001,
+    step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
+    power_iterations=20,
+    n_functions=n_functions,
+    criterion=torch.nn.MSELoss()
+)
 # sparse_coding_config = FISTAConfig(
 #     epochs=400,
 #     alpha = 0.020,
@@ -157,24 +157,25 @@ device_map = {
 #     momentum_scheme = MomentumScheme.ORIGINAL, # MONOTONIC, # .ORIGINAL,
 #     criterion = torch.nn.MSELoss(),
 # )
-sparse_coding_config = ADMMConfig(
-    epochs = 100,
-    rho = 0.1,            # Penalty parameter
-    alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
-    lambda_scaling = 1.0, # Lambda scaling factor
-    lambd = 0.00001,      # L1 regularization strength
-    abs_tol = 1e-4,       # Absolute tolerance
-    rel_tol = 1e-2,       # Relative tolerance
-    n_functions = n_functions,
-    criterion = torch.nn.MSELoss()
-)
+# sparse_coding_config = ADMMConfig(
+#     epochs = 100,
+#     rho = 0.1,            # Penalty parameter
+#     alpha = 1.5,          # Relaxation parameter (>1.0 for over-relaxation)
+#     lambda_scaling = 1.0, # Lambda scaling factor
+#     lambd = 0.00001,      # L1 regularization strength
+#     abs_tol = 1e-4,       # Absolute tolerance
+#     rel_tol = 1e-2,       # Relative tolerance
+#     n_functions = n_functions,
+#     criterion = torch.nn.MSELoss()
+# )
 dict_config = GaussianDictConfig(
-    epochs = 100,
-    alpha = 0.1,
+    epochs = 500,
+    alpha = 0.2,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
-    optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    #optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    optimizer_factory = lambda params, lr: torch.optim.Adam(params, lr=lr),
     mu_epochs = 50,
     rho_epochs = 50,
     split_mu_rho = False,
