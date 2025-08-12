@@ -153,3 +153,80 @@ class KDTree():
         self._splitDataInNodes_test(node.right)
         
         return
+
+
+    def _get_global_minimum(self) -> torch.Tensor:
+        """
+        Returns the global minimum values across all dimensions in the KDTree.
+        
+        This function traverses all leaf nodes and finds the minimum value
+        for each dimension across the entire dataset.
+        
+        Returns:
+            torch.Tensor: A tensor containing the minimum value for each dimension.
+                        Shape: (n_features,)
+        """
+        leaves = self.get_leaves()
+        
+        if not leaves:
+            raise ValueError("KDTree has no leaf nodes")
+        
+        # Initialize with the first leaf's lower bounds
+        first_leaf = leaves[0]
+        if first_leaf.Data.bounds is None:
+            raise ValueError("Leaf nodes have no bounds information")
+        
+        global_min = first_leaf.Data.bounds[0].clone()  # Lower bounds of first leaf
+        
+        # Compare with all other leaves' lower bounds
+        for leaf in leaves[1:]:
+            if leaf.Data.bounds is not None:
+                leaf_min = leaf.Data.bounds[0]  # Lower bounds of this leaf
+                global_min = torch.min(global_min, leaf_min)
+        
+        return global_min.to(self.device) if self.device else global_min
+
+    def _get_global_maximum(self) -> torch.Tensor:
+        """
+        Returns the global maximum values across all dimensions in the KDTree.
+        
+        This function traverses all leaf nodes and finds the maximum value
+        for each dimension across the entire dataset.
+        
+        Returns:
+            torch.Tensor: A tensor containing the maximum value for each dimension.
+                        Shape: (n_features,)
+        """
+        leaves = self.get_leaves()
+        
+        if not leaves:
+            raise ValueError("KDTree has no leaf nodes")
+        
+        # Initialize with the first leaf's upper bounds
+        first_leaf = leaves[0]
+        if first_leaf.Data.bounds is None:
+            raise ValueError("Leaf nodes have no bounds information")
+        
+        global_max = first_leaf.Data.bounds[1].clone()  # Upper bounds of first leaf
+        
+        # Compare with all other leaves' upper bounds
+        for leaf in leaves[1:]:
+            if leaf.Data.bounds is not None:
+                leaf_max = leaf.Data.bounds[1]  # Upper bounds of this leaf
+                global_max = torch.max(global_max, leaf_max)
+        
+        return global_max.to(self.device) if self.device else global_max
+
+    def get_global_bounds(self) -> torch.Tensor:
+        """
+        Returns the global bounds (min and max) across all dimensions in the KDTree.
+        
+        Returns:
+            torch.Tensor: A tensor of shape [2, n_features] where:
+                        - bounds[0] contains the minimum values for each dimension
+                        - bounds[1] contains the maximum values for each dimension
+        """
+        global_min = self._get_global_minimum()
+        global_max = self._get_global_maximum()
+        
+        return torch.stack((global_min, global_max), dim=0)

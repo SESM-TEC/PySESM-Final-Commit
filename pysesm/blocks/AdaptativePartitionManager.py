@@ -79,7 +79,8 @@ class AdaptativePartitionManager(BlockManager):
         self.y: torch.Tensor = None
         self.total_blocks: int = 0
         self.splits: int = 0
-        self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
+        self.initial_bounds = None
+       # self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
         self.kdtree: KDTree = None
         self.device_manager: device_manager = device_manager
         self.device="cpu"
@@ -116,7 +117,6 @@ class AdaptativePartitionManager(BlockManager):
         X=X.to(self.device)
         y=y.to(self.device)
 
-        #Initialize the kdtree if it doesn't exist and configure it
         if self.kdtree is None: 
             self.splits=0
             self.kdtree = KDTree(X,y, self.maxNodeSize,self.config.data_object, device=self.device)
@@ -127,7 +127,6 @@ class AdaptativePartitionManager(BlockManager):
             for index in np.ndindex(self.blocks.shape):
                 node=treeNodes[index[0]]
                 block_size=node.Data.bounds[1]-node.Data.bounds[0]
-
                 self.total_blocks+=1
                 self.blocks[index] = PartitionBlock(
                     space_origin=node.Data.bounds[0],  
@@ -135,7 +134,7 @@ class AdaptativePartitionManager(BlockManager):
                     block_size=block_size,
                     device=self.device
                 )
-
+                #self.blocks[index].block_scope[0]=node.
                 node.Data.block=self.blocks[index] #Define node blocks
                 if self.config.overlap_ratio is None:
                     node.Data.overlap = torch.zeros_like(node.Data.bounds,device=self.device)
@@ -234,6 +233,31 @@ class AdaptativePartitionManager(BlockManager):
                 # PartitionBlock.calculate_amplitude_and_target handles y processing,
                 # amplitude calculation, and ensuring self.target is 2D.
                 block.calculate_amplitude_and_target()
+
+    def _vectorized_normalization(self, x: np.ndarray = None):
+        """
+        Applies normalization while preserving aspect ratio for dimensions.
+        
+        Args:
+            x: Array of blocks containing X data to normalize
+        """
+        if x is None:
+            return
+        
+        for block in x:
+            X = torch.stack(block.X)  
+            min_values, _ = torch.min(X, dim=0)  # minimum per column
+            max_values, _ = torch.max(X, dim=0)  # maximum per column
+            
+            block.block_scope[0] = min_values
+            block.block_size = max_values - min_values
+        
+        vectorized_normalize = np.vectorize(lambda block: block.normalize_points())
+        vectorized_normalize(x)
+        
+        for block in x:
+            aspect_ratio = block.block_size / block.block_size.max()
+            block.normalized_X = block.normalized_X * aspect_ratio
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """

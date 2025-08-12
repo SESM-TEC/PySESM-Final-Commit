@@ -135,11 +135,11 @@ device_map = {
 }
 
 sparse_coding_config = ISTAConfig(
-    epochs=100,
-    alpha=0.10,
+    epochs=500,
+    alpha=0.01,
     lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    power_iterations=10,
+    power_iterations=15,
     n_functions=n_functions,
     criterion=torch.nn.MSELoss()
 )

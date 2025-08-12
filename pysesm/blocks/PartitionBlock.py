@@ -9,11 +9,9 @@ Authors: The SESM Team
 
 License: 
 '''
+from typing import Tuple, Optional # Keep Optional for explicit None types
 
-import copy
 import torch
-from typing import Tuple,Optional, Union # Keep Optional for explicit None types
-
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer
 
@@ -179,7 +177,6 @@ class PartitionBlock:
         sizes[sizes == 0] = 1.0 
 
         self.normalized_X = (tensor_X - min_vals) / sizes
-
 
     def _create_target_tensor(self) -> Optional[torch.Tensor]:
         """
