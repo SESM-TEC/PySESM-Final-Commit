@@ -10,9 +10,9 @@ Authors: The SESM Team
 License: 
 '''
 
-import copy
+from typing import Tuple, Optional
+
 import torch
-from typing import Tuple,Optional, Union # Keep Optional for explicit None types
 
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer

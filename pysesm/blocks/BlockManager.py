@@ -8,27 +8,34 @@ Authors: The SESM Team
 License: 
 '''
 
-from .PartitionBlock import PartitionBlock
-from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
-from pysesm.base_types import BaseConfig, TensorBatch
-
-from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
-from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Union, Callable, Iterator, Optional
-import torch
-from torch import Tensor
+from typing import Union, Callable, Optional
+
 import logging
+import torch
 from numpy.typing import NDArray
 
+
+from pysesm.base_types import BaseConfig, TensorBatch
+
+from .PartitionBlock import PartitionBlock
+from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
+
+from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
+from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 
 @dataclass
 class BlockManagerConfig(BaseConfig):
     """Base configuration for all block manager configurations"""
-    pass
+    # Inherited classes should define their specific attributes
+    # For example, you might have attributes like:
+    # - partitioning_strategy: str
+    # - block_size: int
+    # - max_blocks: int
+    # - etc.
 
 class BlockManager(ABC):
     """
@@ -74,7 +81,7 @@ class BlockManager(ABC):
         self.blocks = None #
 
     @abstractmethod
-    def _find_block(self, x: Tensor) -> Union[PartitionBlock, None]:
+    def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
         Abstract method to locate the block corresponding to the given point `x`.
 
@@ -82,7 +89,7 @@ class BlockManager(ABC):
         the current block configuration. If no matching block is found, the method returns `None`.
 
         Args:
-            x (Tensor):
+            x (torch.Tensor):
                 A tensor representing the point for which the corresponding block needs to be identified.
                 The dimensions and format of `x` must align with the block manager's configuration.
 
@@ -94,10 +101,9 @@ class BlockManager(ABC):
             The implementation of this method is specific to the subclass and may depend on the
             block partitioning logic used (e.g., uniform partitioning, KD-tree partitioning, etc.).
         """
-        pass
 
     @abstractmethod
-    def _update_block_arrangement(self, X: Tensor) -> None:
+    def _update_block_arrangement(self, X: torch.Tensor) -> None:
         """
         Abstract method to revise and update the current block configuration based on the given set of points `X`.
 
@@ -106,7 +112,7 @@ class BlockManager(ABC):
         (e.g., splitting, merging, or re-partitioning) is determined by the subclass implementation.
 
         Args:
-            X (Tensor):
+            X (torch.Tensor):
                 A tensor containing the set of points or observations that may require adjustments
                 to the block configuration. Each point should conform to the input feature space.
 
@@ -120,10 +126,9 @@ class BlockManager(ABC):
             block partitioning logic used in the subclass. It may involve complex operations
             like adaptive partitioning or rebalancing based on the dataset distribution.
         """
-        pass
 
     @abstractmethod
-    def _map_points(self, X: Tensor, y: Tensor):
+    def _map_points(self, X: torch.Tensor, y: torch.Tensor):
         """Abstract method that processes each data point `(x, y)` to
         assign it to the appropriate block.
 
@@ -139,7 +144,7 @@ class BlockManager(ABC):
         - Dynamically update the block arrangement to accommodate the point.
 
         Args:
-            X (Tensor):
+            X (torch.Tensor):
                 A tensor of shape `(n_samples, n_features)` containing
                 the input points to be mapped to blocks.  Each row
                 corresponds to one of the `n_samples` data points,
@@ -147,7 +152,7 @@ class BlockManager(ABC):
                 a dataset with 100 samples, each having 5 features,
                 would have a shape of `(100, 5)`.
 
-            y (Tensor):
+            y (torch.Tensor):
                 A tensor of shape `(n_samples,)` or `(n_samples,
                 output_dim)` containing the corresponding labels,
                 outputs, or additional data associated with each point
@@ -172,23 +177,45 @@ class BlockManager(ABC):
             should be implemented in the subclass.
 
         """
-        pass
 
     @abstractmethod
-    def add_points(self, X: Tensor, y: Tensor):
-        pass
+    def add_points(self, X: torch.Tensor, y: torch.Tensor):
+        """
+        Dispatch the given data points over the available blocks.
+
+        This must be implemented by subclasses to handle the proper distribution of the data
+        points across the blocks managed by the block manager.
+
+        """
 
     @abstractmethod
     def init_sparse_coding_per_block(self,
                                      config: SparseCodingConfig,
                                      evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch]):
-        pass
+        """
+        Initialize the sparse coding layer for each block.
+
+        This must be implemented by subclasses to set up the sparse coding.
+        """
 
 
     @abstractmethod
     def retrieve_active_blocks(self):
-        pass
+        """
+        Retrieve the currently active blocks, i.e. all blecks that have data
+        points assigned to them.
+
+        This method should return a list or array of `PartitionBlock` objects
+        that are currently active, meaning they contain data points assigned to
+        them. The specific implementation has to be provided by the subclass.
+        """
+        
 
     @abstractmethod
-    def retrieve_test_active_blocks(self, X: Tensor, y: Tensor):
-        pass
+    def retrieve_test_active_blocks(self, X: torch.Tensor, y: torch.Tensor):
+        """
+        Provided a tensor with test data, return a list of the PartitionBlock
+        objects with their data replaced by those points in the provided test
+        set assigend to the corresponding blocks.
+        """
+        
