@@ -10,8 +10,9 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
-from typing import Dict, Type, Optional, TypeVar, Generic, List
+from typing import TypeVar, Generic
 from ..base_types import BaseConfig
 
 # Define type variables for the generic factory
@@ -63,7 +64,7 @@ class GenericFactory(Generic[T_Product, T_Config]):
         self.config_name = config_name
     
     @classmethod
-    def register(cls, product_id: str, product_class: Type[T_Product] = None):
+    def register(cls, product_id: str, product_class: type[T_Product] = None):
         """
         Register a product implementation with the factory.
         
@@ -100,10 +101,10 @@ class GenericFactory(Generic[T_Product, T_Config]):
         if product_class is None:
             # Used as decorator
             return _register
-        else:
-            # Used as direct call
-            return _register(product_class)
-    
+        
+        # Used as direct call
+        return _register(product_class)
+
     @classmethod
     def create_from_id(cls, product_id: str, config: T_Config, **kwargs) -> T_Product:
         """
@@ -173,27 +174,27 @@ class GenericFactory(Generic[T_Product, T_Config]):
             if isinstance(first_arg, str): # is the first positional argument a string?
                 return cls.create_from_id(*args, **kwargs)
             # Check if it's a config object
-            elif isinstance(first_arg, BaseConfig):
+            if isinstance(first_arg, BaseConfig):
                 return cls.create_from_config(*args, **kwargs)
                 
         # Check kwargs
         if 'product_id' in kwargs:
             product_id = kwargs.pop('product_id')
             return cls.create_from_id(product_id, **kwargs)
-        elif 'config' in kwargs:
+        if 'config' in kwargs:
             return cls.create_from_config(**kwargs)
             
         raise ValueError("Could not determine creation method. Provide either product_id and config, or just config.")
     
     @classmethod
-    def get_available_products(cls) -> List[str]:
+    def get_available_products(cls) -> list[str]:
         """Return list of all registered product IDs."""
         if hasattr(cls, '_registered_by_id'):
             return list(cls._registered_by_id.keys())
         return []
     
     @classmethod
-    def get_available_config_types(cls) -> List[Type[T_Config]]:
+    def get_available_config_types(cls) -> list[type[T_Config]]:
         """Return list of all registered configuration types."""
         if hasattr(cls, '_registered_by_config'):
             return list(cls._registered_by_config.keys())
