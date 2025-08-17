@@ -2,7 +2,6 @@ from logging import Logger
 
 from abc import ABC, abstractmethod
 import torch
-from typing import List, Union
 from pysesm.base_types import TensorBatch
 
 class SurrogateFunction(ABC):
@@ -108,7 +107,7 @@ class SurrogateFunction(ABC):
             - The initialized parameters are designed to integrate
               seamlessly with PyTorch's optimization framework.
         """
-        pass
+        
     
     # @torch.compile      # Disabled because it seems to generate slower code.
     def __call__(
@@ -146,16 +145,16 @@ class SurrogateFunction(ABC):
             if X.dim() == 2:
                 # Base case: a single data tensor (n_samples, n_features).
                 return self.evaluate(X, *args, **kwargs)
-            elif X.dim() == 3:  # 3D tensor (batch_size, n_samples_per_batch, n_features)
+            if X.dim() == 3:  # 3D tensor (batch_size, n_samples_per_batch, n_features)
                 # Use vmap to apply evaluate to each 2D slice
                 return torch.vmap(self.evaluate, in_dims=(0, None))(X, *args, **kwargs)
-            else:
-                raise TypeError(
-                    f"Unsupported torch.Tensor input dimension for SurrogateFunction: {X.dim()}. "
-                    f"Expected 2D or 3D tensor. Got shape {X.shape}"
-                )
+            
+            raise TypeError(
+                f"Unsupported torch.Tensor input dimension for SurrogateFunction: {X.dim()}. "
+                f"Expected 2D or 3D tensor. Got shape {X.shape}"
+            )
 
-        elif self._is_nested(X):
+        if self._is_nested(X):
             # NestedTensor case: unpack, process, and repack.
             # torch.compile will optimize this loop.
 
@@ -164,26 +163,26 @@ class SurrogateFunction(ABC):
 
             if results: # Only construct if there are results
                 return torch.nested.as_nested_tensor(results, layout=X.layout, device=X.device, dtype=results[0].dtype)
-            else:
-                # If results is empty (e.g., X was NestedTensor with empty tensors),
-                # return a corresponding empty NestedTensor.
-                return torch.nested.as_nested_tensor([], layout=X.layout, device=X.device)
+            
+            # If results is empty (e.g., X was NestedTensor with empty tensors),
+            # return a corresponding empty NestedTensor.
+            return torch.nested.as_nested_tensor([], layout=X.layout, device=X.device)
 
-        elif isinstance(X, list):
+        if isinstance(X, list):
             # List of tensors case: process each one.
             # torch.compile can also optimize this pattern.
             return [self.evaluate(tensor, *args, **kwargs) for tensor in X]
 
-        else:
-            # Handle edge cases or unsupported types.
-            if self._is_nested(X) and X.dim() == 2:
-                 # A 2D tensor can sometimes be flagged as nested; treat it as a regular tensor.
-                 return self.evaluate(X, *args, **kwargs)
-            
-            raise TypeError(
-                f"Unsupported input type for SurrogateFunction: {type(X)} "
-                f"with dimensions {X.dim() if isinstance(X, torch.Tensor) else 'N/A'}"
-            )
+        # Handle edge cases or unsupported types.
+        if self._is_nested(X) and X.dim() == 2:
+                # A 2D tensor can sometimes be flagged as nested; treat it as a regular tensor.
+                return self.evaluate(X, *args, **kwargs)
+        
+        raise TypeError(
+            f"Unsupported input type for SurrogateFunction: {type(X)} "
+            f"with dimensions {X.dim() if isinstance(X, torch.Tensor) else 'N/A'}"
+        )
+
 
     @abstractmethod
     def evaluate(self, X: torch.Tensor, *args, **kwargs) -> torch.Tensor:
@@ -207,4 +206,4 @@ class SurrogateFunction(ABC):
             torch.Tensor: The output tensor of shape (n_samples, n_functions).
 
         """
-        pass
+        

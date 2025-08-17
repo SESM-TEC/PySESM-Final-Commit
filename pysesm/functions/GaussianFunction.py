@@ -12,18 +12,12 @@ Authors: The SESM Team
 License: 
 '''
 
-
-import numpy as np
-import torch
 from typing import List, Union, TypeAlias
-from pysesm.base_types import TensorBatch
+
+import torch
+
 from pysesm.functions.SurrogateFunction import SurrogateFunction
-from pysesm.utils.linalg import (
-    to_triu_matrix,
-    generate_random_vectors,
-    get_upper_triangle,
-    gram_schmidt,
-)
+
 
 # Define a descriptive type alias for the range structure
 RangeType: TypeAlias = Union[List[float], List[List[float]]]
@@ -77,7 +71,13 @@ class GaussianFunction(SurrogateFunction):
     eig_range: RangeType
     mu_range: RangeType
 
-    def __init__(self, n_features, n_functions, logger, mu_range=[-1, 1], eig_range=[0.1, 0.5]):
+    def __init__(self, 
+                 n_features, 
+                 n_functions, 
+                 logger, 
+                 mu_range =[-1, 1], 
+                 eig_range=[0.1, 0.5]):
+        
         super().__init__(n_features=n_features, 
                          n_functions=n_functions, 
                          logger=logger)
@@ -86,13 +86,13 @@ class GaussianFunction(SurrogateFunction):
         self.eig_range = self._fix_range(eig_range)
         
 
-    def _fix_range(self, range):
+    def _fix_range(self, val_range) -> torch.Tensor:
         # Expand the range one for each function
-        fixed = torch.tensor(range)
+        fixed = torch.tensor(val_range)
         if fixed.ndim == 1:
             if len(fixed) != 2:
                 raise ValueError(
-                    f"If providing a single range, it must be [from, to], got {range}"
+                    f"If providing a single range, it must be [from, to], got {val_range}"
                 )
             # Expand single range to all dimensions
             fixed = fixed.expand(self.n_features, 2)
@@ -122,7 +122,7 @@ class GaussianFunction(SurrogateFunction):
 
         # Generate random orthogonal matrices Q_all
         Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
-        Q_all, _ = torch.linalg.qr(Q_all)
+        Q_all, _ = torch.qr(Q_all)
 
         # Vectorized initialization of eigenvalues (D_all)
         eig_min_vals = self.eig_range[:, 0]
@@ -140,7 +140,7 @@ class GaussianFunction(SurrogateFunction):
         Sigma_inv_all = torch.bmm(Temp, Q_all.transpose(1, 2))
         
         # Batch Cholesky decomposition
-        L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2)
+        L_all = torch.cholesky(Sigma_inv_all).transpose(1, 2)
 
         # Extract upper triangular elements from all matrices at once
         n = L_all.shape[1]
@@ -160,13 +160,14 @@ class GaussianFunction(SurrogateFunction):
         with torch.no_grad():
             self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
             self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
-            eigvals = torch.linalg.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
+            eigvals = torch.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
             self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta
 
-
-    def evaluate(self, X: torch.Tensor, 
+    # pylint: disable=arguments-differ
+    def evaluate(self, 
+                 X: torch.Tensor, 
                  Theta: torch.nn.Parameter,
                  rho_flag=False, mu_flag=False) -> torch.Tensor:
         """
