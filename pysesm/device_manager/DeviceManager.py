@@ -1,12 +1,15 @@
-'''
+"""
 Device management for SESM/SSESM project
 Allows central configuration of compute devices (CPU/GPU) with flexible
 assignment for different components
-'''
+"""
+
+from __future__ import annotations
+
+import logging
 
 import torch
-import logging
-from typing import Dict, Optional, Union, Any
+
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 class DeviceManager:
@@ -19,15 +22,15 @@ class DeviceManager:
     
     def __init__(self, 
                  logger: logging.Logger,
-                 default_device: Optional[str] = None,  # Ahora es opcional
-                 device_map: Optional[Dict[Union[DeviceTarget, str], str]] = None):
+                 default_device: str | None = None,  # Ahora es opcional
+                 device_map: dict[DeviceTarget | str, str] | None = None):
         """
         Initialize the device manager with device assignments.
         
         Args:
-            default_device (str, optional): Default device to use when no specific assignment exists.
+            default_device (str | None): Default device to use when no specific assignment exists.
                                             Si no se proporciona, se usa "cpu".
-            device_map (Dict, optional): Mapping from DeviceTarget to device string.
+            device_map (dict[DeviceTarget | str, str] | None): Mapping from DeviceTarget to device string.
                                         Example: {DeviceTarget.SPARSE_CODING_LAYER: "cuda:0", 
                                                   DeviceTarget.DICTIONARY_LAYER: "cpu"}
         """
@@ -36,7 +39,7 @@ class DeviceManager:
         if device_map:
             self.update_device_map(device_map)
         self._validate_devices()
-        logger.info(f"Initializing DeviceManager with device configuration: {self}")
+        logger.info(f"Initializing DeviceManager with device configuration: {self}")  # Se podria guardar como atributo y reutilizarse en otros metodos: self.logger = logger
         
     def _validate_devices(self):
         """Validate that all specified devices are available"""
@@ -50,10 +53,10 @@ class DeviceManager:
                     if device_idx >= torch.cuda.device_count():
                         raise RuntimeError(f"CUDA device {device_idx} requested but only "
                                           f"{torch.cuda.device_count()} devices available")
-                except ValueError:
-                    raise RuntimeError(f"Invalid CUDA device specification: {device}")
+                except ValueError as exc:
+                    raise RuntimeError(f"Invalid CUDA device specification: {device}") from exc
     
-    def get_device(self, component: Union[DeviceTarget, str]) -> str:
+    def get_device(self, component: DeviceTarget | str) -> str:
         """
         Get the assigned device for a component.
         
@@ -73,7 +76,7 @@ class DeviceManager:
         return self.device_map.get(component, self.device_map.get(DeviceTarget.GLOBAL, self.default_device))
     
     
-    def update_device_map(self, new_device_map: Dict[Union[DeviceTarget, str], str]):
+    def update_device_map(self, new_device_map: dict[DeviceTarget | str, str]):
         """
         Update the device map with new assignments.
         
