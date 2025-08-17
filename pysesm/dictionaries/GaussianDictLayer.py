@@ -5,16 +5,18 @@ Dictionary layer implementation using Gaussian basis functions.
 Authors: The SESM Team 
 License: 
 '''
+from __future__ import annotations
+
 
 import logging
 
 from dataclasses import dataclass
-from typing import Optional, Callable, Iterator
+from collections.abc import Callable
 import torch
 
-from .DictBaseLayer import DictBaseLayer, DictConfig
 from pysesm.functions.GaussianFunction import GaussianFunction
 from pysesm.base_types import TensorBatch
+from .DictBaseLayer import DictBaseLayer, DictConfig
 
 @dataclass
 class GaussianDictConfig(DictConfig):
@@ -39,7 +41,7 @@ class GaussianDictLayer(DictBaseLayer):
         n_functions: int,
         evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
-        parameter_hook: Optional[Callable[[dict], None]] = None,
+        parameter_hook: Callable[[dict], None] | None = None,
         device = None,
         **kwargs
     ):

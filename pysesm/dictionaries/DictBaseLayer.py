@@ -5,13 +5,14 @@ Abstract base class for all dictionary implementations.
 Authors: The SESM Team 
 License: 
 '''
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Callable, Iterator, Type
-import torch
+from collections.abc import Callable, Iterator
 import logging
 
+import torch
 from pysesm.base_types import BaseConfig, TensorBatch
 
 
@@ -20,8 +21,8 @@ class DictConfig(BaseConfig):
     """Base configuration for all dictionary types"""
     epochs: int
     alpha: float
-    criterion: Optional[torch.nn.Module] = None
-    optimizer_factory: Optional[Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer]] = None
+    criterion: torch.nn.Module | None = None
+    optimizer_factory: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] | None = None
 
 
 class DictBaseLayer(torch.nn.Module, ABC):
@@ -34,7 +35,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
     """
     
     # Each subclass must define this to specify which config type it expects
-    CONFIG_CLASS: Type[DictConfig] = DictConfig
+    CONFIG_CLASS: type[DictConfig] = DictConfig
     
     def __init__(
         self,
@@ -43,7 +44,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         n_functions: int,
         evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
-        parameter_hook: Optional[Callable[[dict], None]] = None,
+        parameter_hook: Callable[[dict], None] | None = None,
         device = None,
         **kwargs  # For subclass-specific parameters like 'psi' for Gaussian
     ):
@@ -96,7 +97,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         Returns:
             torch.nn.Parameter: The initialized parameters for this dictionary
         """
-        ...
+        
     
     @abstractmethod
     def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:
@@ -111,7 +112,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         Returns:
             TensorBatch: Evaluated dictionary matrix
         """
-        pass
+        
     
     @abstractmethod
     def _train_with_strategy(self, X: TensorBatch, y: TensorBatch,
@@ -129,7 +130,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
             h: Sparse coding vector (detached)
             log_losses: Whether to log training losses
         """
-        pass
+        
     
     def _setup_criterion(self):
         """Setup the loss criterion"""
@@ -250,23 +251,24 @@ class DictBaseLayer(torch.nn.Module, ABC):
         """Detaches all tensors within a TensorBatch."""
         if isinstance(tensor_batch, torch.Tensor):
             return tensor_batch.detach()
-        elif getattr(tensor_batch,"is_nested",False):
+        if getattr(tensor_batch,"is_nested",False):
             # Creating a new nested_tensor from detached components
             detached_tensors = [t.detach() for t in tensor_batch.unbind()]
             return torch.nested.as_nested_tensor(detached_tensors,
                                                   layout=tensor_batch.layout)
-        elif isinstance(tensor_batch, list):
+        if isinstance(tensor_batch, list):
             return [t.detach() for t in tensor_batch]
-        else:
-            raise TypeError("Unsupported TensorBatch type for detach: "
-                            f"{type(tensor_batch)}")
+        
+        raise TypeError("Unsupported TensorBatch type for detach: "
+                        f"{type(tensor_batch)}")
+
 
     def _add_hook_info(self, hook_info: dict, **eval_kwargs):
         """
         Add dictionary-specific information to the parameter hook.
         Subclasses can override this to add specialized info.
         """
-        pass
+        
     
     def setup(self, X: torch.Tensor) -> None:
         """
