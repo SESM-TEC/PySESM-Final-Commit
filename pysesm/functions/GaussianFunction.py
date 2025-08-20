@@ -122,7 +122,7 @@ class GaussianFunction(SurrogateFunction):
 
         # Generate random orthogonal matrices Q_all
         Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
-        Q_all, _ = torch.qr(Q_all)
+        Q_all, _ = torch.linalg.qr(Q_all)
 
         # Vectorized initialization of eigenvalues (D_all)
         eig_min_vals = self.eig_range[:, 0]
@@ -140,7 +140,7 @@ class GaussianFunction(SurrogateFunction):
         Sigma_inv_all = torch.bmm(Temp, Q_all.transpose(1, 2))
         
         # Batch Cholesky decomposition
-        L_all = torch.cholesky(Sigma_inv_all).transpose(1, 2)
+        L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2)
 
         # Extract upper triangular elements from all matrices at once
         n = L_all.shape[1]
@@ -160,7 +160,7 @@ class GaussianFunction(SurrogateFunction):
         with torch.no_grad():
             self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
             self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
-            eigvals = torch.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
+            eigvals = torch.linalg.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
             self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta
