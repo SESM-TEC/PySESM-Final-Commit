@@ -9,10 +9,12 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import TypeVar,Generic, Type, Callable, Iterator, Optional
+from dataclasses import dataclass
+from typing import TypeVar,Generic
+from collections.abc import Callable
 import logging
 
 import torch
@@ -36,8 +38,8 @@ class SparseCodingConfig(BaseConfig):
     """
     n_functions: int   # Required, no default
     epochs: int = 100  # Number of training epochs
-    initial_h: Optional[torch.Tensor] = None  # Initial sparse vector (optional)
-    criterion: Optional[torch.nn.Module]  = None
+    initial_h: torch.Tensor | None = None  # Initial sparse vector (optional)
+    criterion: torch.nn.Module | None  = None
 
 T_Config = TypeVar('T_Config', bound=SparseCodingConfig)
 
@@ -51,16 +53,16 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
     """
     
     # Class variable to store the expected config class
-    CONFIG_CLASS: Type[SparseCodingConfig] = SparseCodingConfig
+    CONFIG_CLASS: type[SparseCodingConfig] = SparseCodingConfig
 
     @abstractmethod
     def __init__(self,
                  config: T_Config,
                  evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-                 logger: Optional[logging.Logger] = None,
+                 logger: logging.Logger | None = None,
                  debug: bool = False,
-                 parameter_hook: Optional[Callable] = None,
-                 device: Optional[torch.device] = None):
+                 parameter_hook: Callable | None = None,
+                 device: torch.device | None = None):
         """
         Base initialization. Child classes must call super().__init__()
         """
@@ -100,7 +102,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
             h (torch.Tensor, optional): Initial value for the sparse vector. 
                    If None, it will be randomly initialized.
         """
-        pass
+        
     
     @abstractmethod
     def forward(self, y: torch.Tensor, dictionary: torch.Tensor, 
@@ -116,7 +118,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         Returns:
             torch.Tensor: Computed loss
         """
-        pass
+        
     
     @abstractmethod
     def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, 
@@ -132,7 +134,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         Returns:
             torch.Tensor: Computed loss
         """
-        pass
+        
     
     @abstractmethod
     def partial_fit(self, y: torch.Tensor,
@@ -148,4 +150,4 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         Returns:
             None
         """
-        pass
+        

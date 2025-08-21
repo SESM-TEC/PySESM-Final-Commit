@@ -9,11 +9,12 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-import torch
 from enum import Enum, auto
-from typing import Tuple, Optional
+
+import torch
 
 class StepSizeMethod(Enum):
     """Enumeration of methods for determining the step size in iterative shrinkage algorithms."""
@@ -23,7 +24,7 @@ class StepSizeMethod(Enum):
     FROBENIUS = auto()     # Frobenius norm upper bound (fast but conservative)
 
 
-def soft_threshold(x: torch.Tensor, threshold: float, device=None) -> torch.Tensor:
+def soft_threshold(x: torch.Tensor, threshold: float, device: str | None =None) -> torch.Tensor:
     """
     Applies soft thresholding operation (proximal operator for L1 norm).
     
@@ -50,10 +51,10 @@ def calculate_step_size(
     method: StepSizeMethod, 
     alpha: float = 0.1, 
     power_iterations: int = 10,
-    last_eigenvector: Optional[torch.Tensor] = None,
+    last_eigenvector: torch.Tensor | None = None,
     debug: bool = False, 
-    logger: Optional[logging.Logger] = None
-) -> Tuple[float, Optional[torch.Tensor]]:
+    logger: logging.Logger | None = None
+) -> tuple[float, torch.Tensor | None]:
     """
     Calculates the step size for iterative shrinkage algorithms based on the selected method.
     

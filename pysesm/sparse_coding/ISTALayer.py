@@ -11,11 +11,13 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-import torch
-from typing import Callable, Optional
+from collections.abc import Callable
 from dataclasses import dataclass
+
+import torch
 
 from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_size
@@ -74,9 +76,9 @@ class ISTALayer(SparseCodingBaseLayer):
             self,
             config: ISTAConfig,
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-            logger: Optional[logging.Logger] = None,
+            logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Optional[Callable[[dict], None]] = None,
+            parameter_hook: Callable[[dict], None] | None = None,
             device = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.

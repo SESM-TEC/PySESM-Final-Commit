@@ -10,12 +10,13 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-import torch
-import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+
+from collections.abc import Callable
+import torch
 
 from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from .sparse_coding_utils import soft_threshold
@@ -79,9 +80,9 @@ class ADMMLayer(SparseCodingBaseLayer):
             self,
             config: ADMMConfig,
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-            logger: Optional[logging.Logger] = None,
+            logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Optional[Callable[[dict], None]] = None,
+            parameter_hook: Callable[[dict], None] | None = None,
             device = None):
         """
         Initializes the ADMMLayer with the specified hyperparameters and components.
@@ -131,7 +132,7 @@ class ADMMLayer(SparseCodingBaseLayer):
         self.z = torch.zeros_like(self.h.data)
         self.u = torch.zeros_like(self.h.data)  # Scaled dual variable
     
-    def _factorize_system_matrix(self, dictionary: torch.Tensor) -> Tuple:
+    def _factorize_system_matrix(self, dictionary: torch.Tensor) -> tuple:
         """
         Factorizes the system matrix (D^T D + ρI) for efficient solving.
         
@@ -179,7 +180,7 @@ class ADMMLayer(SparseCodingBaseLayer):
         if self.cached_factorization is None:
             self.cached_factorization = self._factorize_system_matrix(dictionary)
         
-        L, gram = self.cached_factorization
+        L, _  = self.cached_factorization
         
         # Solve the linear system (D^T D + ρI)h = rhs using Cholesky factorization
         # First solve L y = rhs, then L^T h = y
@@ -204,7 +205,7 @@ class ADMMLayer(SparseCodingBaseLayer):
         
         return z_new
     
-    def _compute_residuals(self, h_new: torch.Tensor, z_new: torch.Tensor) -> Tuple[float, float]:
+    def _compute_residuals(self, h_new: torch.Tensor, z_new: torch.Tensor) -> tuple[float, float]:
         """
         Computes the primal and dual residuals for convergence checking.
         
