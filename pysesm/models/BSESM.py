@@ -5,19 +5,18 @@ Provides the batched version of SESM
 Authors: The SESM Team 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-import torch
 import time
-from typing import Callable, Iterator, Optional, List, Tuple
-from dataclasses import dataclass
-import numpy as np
-from sklearn.metrics import mean_squared_error
+from collections.abc import Callable
 
-from pysesm.functions import SurrogateFunction
+from dataclasses import dataclass
+from sklearn.metrics import mean_squared_error
+import torch
+
 from pysesm.blocks import PartitionBlock
 from pysesm.models.SESM import SESM, SESMConfig
-from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
@@ -29,7 +28,7 @@ class BSESMConfig(SESMConfig):
     """
     Configuration for BSESM model, extending base SESMConfig.
     """
-    pass
+
 
 class BSESM(SESM):
     """
@@ -50,10 +49,10 @@ class BSESM(SESM):
         self,
         config: BSESMConfig,
         logger: logging.Logger,
-        device_manager: Optional[DeviceManager] = None,
-        dict_layer_hook: Optional[Callable[[dict], None]] = None,
-        sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,
-        sesm_hook: Optional[Callable[[dict], None]] = None,
+        device_manager: DeviceManager | None = None,
+        dict_layer_hook: Callable[[dict], None] | None = None,
+        sparse_coding_layer_hook: Callable[[dict], None] | None = None,
+        sesm_hook: Callable[[dict], None] | None = None,
         **kwargs,
     ):
         """
@@ -105,19 +104,19 @@ class BSESM(SESM):
                                                   layout=dictionary.layout,
                                                   device=dictionary.device,
                                                   dtype=results[0].dtype)
-        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2:
+        if isinstance(dictionary, torch.Tensor) and dictionary.dim() <= 2:
             return torch.matmul(dictionary, h)
-        elif isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3:
+        if isinstance(dictionary, torch.Tensor) and dictionary.dim() == 3:
             return torch.vmap(torch.matmul)(dictionary, h)
-        elif isinstance(dictionary, list) and isinstance(h, list):
+        if isinstance(dictionary, list) and isinstance(h, list):
             results = [torch.matmul(d, hi) for d, hi in zip(dictionary, h)]
             return results
-        else:
-            raise TypeError("Unsupported TensorBatch types for evaluation_func: "
-                            f"D={type(dictionary)}, h={type(h)}")
 
-    def _aggregate_block_data(self, blocks: List[PartitionBlock]
-                              ) -> Tuple[TensorBatch, TensorBatch, TensorBatch]:
+        raise TypeError("Unsupported TensorBatch types for evaluation_func: "
+                        f"D={type(dictionary)}, h={type(h)}")
+
+    def _aggregate_block_data(self, blocks: list[PartitionBlock]
+                              ) -> tuple[TensorBatch, TensorBatch, TensorBatch]:
         """
         Aggregates data from active blocks into nested_tensors for efficient
         batched processing without padding.
@@ -178,8 +177,8 @@ class BSESM(SESM):
                            X_nested: TensorBatch,
                            y_nested: TensorBatch,
                            h_nested: TensorBatch,
-                           active_blocks: List[PartitionBlock],
-                           current_epoch: int):
+                           active_blocks: list[PartitionBlock],
+                           *_):
         """
         Performs a single global training step for the BSESM model.
         This includes training the dictionary on all active blocks' data
@@ -190,7 +189,7 @@ class BSESM(SESM):
             y_nested (TensorBatch): Aggregated target values for all active blocks.
             h_nested (TensorBatch): Aggregated sparse coding vectors for all active blocks.
             active_blocks (List[PartitionBlock]): List of PartitionBlock objects currently active.
-            current_epoch (int): The current model epoch (for logging or hook context).
+            *_: Additional unused positional arguments.
         """
         # Step 1: Optimize dictionary with fixed h (from previous iteration or initial)
         # The h_nested must be detached for dictionary training (already handled by _aggregate_block_data or DictBaseLayer)
@@ -339,14 +338,13 @@ class BSESM(SESM):
 
         self.partial_fit_count += 1
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor, *_) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Predict the output using the trained BSESM model with active sub-blocks.
 
         Args:
             X (torch.Tensor): Input features for prediction.
             y (torch.Tensor): Target values (used to identify active blocks).
-            *_: Additional unused positional arguments.
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
@@ -402,6 +400,6 @@ class BSESM(SESM):
         sub-blocks.
         """
         y_pred = self.predict(X, y)
-        time = self.elapsed_time / 60
+        current_time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.cpu().numpy(), y.cpu().numpy())
-        return y_pred, time, mse
+        return y_pred, current_time, mse

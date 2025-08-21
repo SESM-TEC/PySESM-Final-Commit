@@ -9,20 +9,18 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-import numpy as np
-import torch
-from typing import Callable, Iterator, Optional
+from collections.abc import Callable
 from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
 
-from ..functions import SurrogateFunction
-from ..blocks import BlockManager
+import numpy as np
+import torch
+
 from ..models.SESM import SESM, SESMConfig
-from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from ..device_manager.DeviceManager import DeviceManager
-from ..factories.SparseCodingFactory import SparseCodingFactory
 from ..factories.BlockManagerFactory import BlockManagerFactory
 
 @dataclass
@@ -52,9 +50,9 @@ class SSESM(SESM):
         config: SSESMConfig,
         logger: logging.Logger,
         device_manager: DeviceManager = None,
-        dict_layer_hook: Optional[Callable[[dict], None]] = None,
-        sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,
-        sesm_hook: Optional[Callable[[dict], None]] = None,
+        dict_layer_hook: Callable[[dict], None] | None = None,
+        sparse_coding_layer_hook: Callable[[dict], None] | None = None,
+        sesm_hook: Callable[[dict], None] | None = None,
         **kwargs
     ):
         """
@@ -102,7 +100,7 @@ class SSESM(SESM):
         return torch.matmul(dictionary, h)    
 
     
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_, initial_h: torch.Tensor = None):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
 
@@ -144,7 +142,7 @@ class SSESM(SESM):
 
             self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor, *_) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Predict the output using the trained SSESM model with active sub-blocks.
 
@@ -156,7 +154,6 @@ class SSESM(SESM):
         Args:
             X (torch.Tensor): Input features for prediction.
             y (torch.Tensor): Target values, used to identify active blocks.
-            *_: Additional unused positional arguments.
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.

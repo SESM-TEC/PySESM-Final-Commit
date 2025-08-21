@@ -306,7 +306,7 @@ def test_bsesm_global_train_step_orchestration(
     model.dictionary_layer.losses = [0.4, 0.5, 0.6]
 
     # Call the method under test
-    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, current_epoch=0)
+    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks)
 
     # Assertions for dictionary training
     mock_dict_partial_fit.assert_called_once_with(X=X_nested, y=y_nested, h=h_nested_initial)

@@ -9,16 +9,16 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
+
 import logging
 import time
-import numpy as np
-import torch
-from typing import Dict, Union, Callable, Iterator, Optional
+from collections.abc import Callable
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from ..validation import validate_sesm_partial_fit
-from ..functions import SurrogateFunction
+import torch
+
 from ..dictionaries.DictBaseLayer import DictBaseLayer, DictConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from ..enums.DeviceTargetEnum import DeviceTarget
@@ -139,9 +139,9 @@ class SESM(torch.nn.Module, ABC):
             config: SESMConfig,
             logger: logging.Logger,
             device_manager=None,
-            dict_layer_hook: Optional[Callable[[dict], None]] = None,
-            sparse_coding_layer_hook: Optional[Callable[[dict], None]] = None,  
-            sesm_hook: Optional[Callable[[dict], None]] = None,
+            dict_layer_hook: Callable[[dict], None] | None = None,
+            sparse_coding_layer_hook: Callable[[dict], None] | None = None,  
+            sesm_hook: Callable[[dict], None] | None = None,
             **kwargs
     ):
         """
@@ -172,7 +172,7 @@ class SESM(torch.nn.Module, ABC):
             **kwargs: Additional keyword arguments passed to the dictionary layer constructor.
                 Can include dictionary-specific parameters not in the config.
         """
-        super(SESM, self).__init__()
+        super().__init__()
         
         self.config = config
         self.n_features = config.n_features
@@ -254,7 +254,6 @@ class SESM(torch.nn.Module, ABC):
         Returns:
             torch.Tensor: The predicted output (D @ h).
         """
-        pass
         
     @property
     def sparse_coding_layer_losses(self):
@@ -326,7 +325,7 @@ class SESM(torch.nn.Module, ABC):
             )
 
     @abstractmethod
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, initial_h: torch.Tensor = None, *_):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_, initial_h: torch.Tensor = None):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
 
@@ -343,7 +342,7 @@ class SESM(torch.nn.Module, ABC):
         Returns:
             None
         """
-        pass
+
             
     def _train_block(self, block: PartitionBlock) -> None:
         """
@@ -468,11 +467,9 @@ class SESM(torch.nn.Module, ABC):
             }
             self.sesm_hook(hook_info)
             
-    def predict(
-            self,
-            X: torch.Tensor,
-            custom_h: torch.Tensor = None
-    ) -> torch.Tensor:
+    def predict(self,
+                X: torch.Tensor,
+                custom_h: torch.Tensor = None) -> torch.Tensor:
         """
         Generate predictions using the trained SESM model with fit, i.e. a single block.
         
@@ -482,7 +479,6 @@ class SESM(torch.nn.Module, ABC):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features) where
                 predictions are needed.
-            
             custom_h (torch.Tensor, optional): Custom sparse vector to use for
                 predictions instead of the learned h. Shape should be (n_functions, 1).
                 Useful for evaluating different sparse representations.
