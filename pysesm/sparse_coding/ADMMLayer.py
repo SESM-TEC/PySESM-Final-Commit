@@ -154,7 +154,11 @@ class ADMMLayer(SparseCodingBaseLayer):
         
         # Cholesky factorization for solving linear systems
         # We'll use L L^T = (D^T D + ρI)
-        L = torch.linalg.cholesky(system_matrix)
+        L = torch.linalg.cholesky(system_matrix) # pylint: disable=not-callable
+        # Pylinter have false positive with all torch.linalg functions
+        # Other persons have reported this issue since 2023 so I disable the checker:
+        # https://github.com/pytorch/pytorch/issues/149639
+        # https://github.com/pylint-dev/pylint/issues/9218
         
         return (L, gram)
 
@@ -184,8 +188,8 @@ class ADMMLayer(SparseCodingBaseLayer):
         
         # Solve the linear system (D^T D + ρI)h = rhs using Cholesky factorization
         # First solve L y = rhs, then L^T h = y
-        y_intermediate = torch.linalg.solve_triangular(L, rhs, upper=False)
-        h_new = torch.linalg.solve_triangular(L.T, y_intermediate, upper=True)
+        y_intermediate = torch.linalg.solve_triangular(L, rhs, upper=False) # pylint: disable=not-callable 
+        h_new = torch.linalg.solve_triangular(L.T, y_intermediate, upper=True) # pylint: disable=not-callable
         
         return h_new
     
@@ -429,7 +433,7 @@ class ADMMLayer(SparseCodingBaseLayer):
 
             # Track best solution (optional)
             if loss < best_loss:
-                best_loss = loss
+                best_loss = loss.item()
                 best_h = self.h.data.clone()
                 no_improvement_count = 0
             else:
