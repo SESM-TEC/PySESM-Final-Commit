@@ -68,15 +68,16 @@ class GaussianFunction(SurrogateFunction):
                 between 0.1 and 1.0 for each eigendirection
     """
 
-    eig_range: RangeType
-    mu_range: RangeType
 
     def __init__(self, 
                  n_features, 
                  n_functions, 
                  logger, 
-                 mu_range =[-1, 1], 
-                 eig_range=[0.1, 0.5]):
+                 mu_range: RangeType = None, 
+                 eig_range: RangeType = None):
+
+        mu_range = [-1, 1] if mu_range is None else mu_range
+        eig_range = [0.1, 0.5] if eig_range is None else eig_range
         
         super().__init__(n_features=n_features, 
                          n_functions=n_functions, 
@@ -122,7 +123,7 @@ class GaussianFunction(SurrogateFunction):
 
         # Generate random orthogonal matrices Q_all
         Q_all = torch.rand(self.n_functions, self.n_features, self.n_features)
-        Q_all, _ = torch.linalg.qr(Q_all)
+        Q_all, _ = torch.linalg.qr(Q_all) # pylint: disable=not-callable
 
         # Vectorized initialization of eigenvalues (D_all)
         eig_min_vals = self.eig_range[:, 0]
@@ -140,7 +141,7 @@ class GaussianFunction(SurrogateFunction):
         Sigma_inv_all = torch.bmm(Temp, Q_all.transpose(1, 2))
         
         # Batch Cholesky decomposition
-        L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2)
+        L_all = torch.linalg.cholesky(Sigma_inv_all).transpose(1, 2) # pylint: disable=not-callable
 
         # Extract upper triangular elements from all matrices at once
         n = L_all.shape[1]
@@ -160,7 +161,8 @@ class GaussianFunction(SurrogateFunction):
         with torch.no_grad():
             self.logger.info(f"Mu statistics - min: {mu.min():.4f}, max: {mu.max():.4f}, mean: {mu.mean():.4f}")
             self.logger.info(f"Rho statistics - min: {Rho.min():.4f}, max: {Rho.max():.4f}, mean: {Rho.mean():.4f}")
-            eigvals = torch.linalg.eigvalsh(Sigma_inv_all)  # Get all eigenvalues at once
+            # Get all eigenvalues at once
+            eigvals = torch.linalg.eigvalsh(Sigma_inv_all) # pylint: disable=not-callable
             self.logger.info(f"Sigma_inv eigenvalues - min: {eigvals.abs().min():.4f}, max: {eigvals.abs().max():.4f}")
 
         return Theta
