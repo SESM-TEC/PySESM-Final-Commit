@@ -100,7 +100,7 @@ class SSESM(SESM):
         return torch.matmul(dictionary, h)    
 
     
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_, initial_h: torch.Tensor = None):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
 
@@ -110,7 +110,6 @@ class SSESM(SESM):
         Args:
             X (torch.Tensor): Input features for training.
             y (torch.Tensor): Target values.
-            initial_h (torch.Tensor): Initial h value or None for random initialization.
             *_: Additional unused positional arguments.
 
         Returns:

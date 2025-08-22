@@ -18,7 +18,6 @@ def generate_nondiag_covariance_matrices(dtype=torch.float32):
     tuple: Tuple containing three non-diagonal covariance
            tensors (sigma1, sigma2, sigma3).
     """
-    e0 = torch.tensor([1.0, 0.0], dtype=dtype)
 
     def generate_sigma(rotation_angle, scaling_factors):
         E = torch.tensor(

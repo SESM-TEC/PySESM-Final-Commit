@@ -325,7 +325,7 @@ class SESM(torch.nn.Module, ABC):
             )
 
     @abstractmethod
-    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_, initial_h: torch.Tensor = None):
+    def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
         """
         Perform a partial fit on the model, iteratively updating parameters using active sub-blocks.
 
@@ -336,7 +336,6 @@ class SESM(torch.nn.Module, ABC):
         Args:
             X (torch.Tensor): Input features for training.
             y (torch.Tensor): Target values.
-            initial_h (torch.Tensor): Initial h value or None for random initialization.
             *_: Additional unused positional arguments.
 
         Returns:
@@ -435,6 +434,8 @@ class SESM(torch.nn.Module, ABC):
             X (torch.Tensor): Input data of shape (n_samples, n_features).
             
             y (torch.Tensor): Target data of shape (n_samples,) or (n_samples, 1).
+
+            sparsecoding (SparseCodingBaseLayer): The sparse coding layer responsible for
         """
         # Step 1: Optimize dictionary with fixed h
         # Detach h to prevent gradient flow during dictionary optimization
@@ -472,7 +473,7 @@ class SESM(torch.nn.Module, ABC):
             
     def predict(self,
                 X: torch.Tensor,
-                custom_h: torch.Tensor = None) -> torch.Tensor:
+                y: torch.Tensor = None) -> torch.Tensor:
         """
         Generate predictions using the trained SESM model with fit, i.e. a single block.
         
@@ -482,7 +483,7 @@ class SESM(torch.nn.Module, ABC):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features) where
                 predictions are needed.
-            custom_h (torch.Tensor, optional): Custom sparse vector to use for
+            y (torch.Tensor, optional): Custom sparse vector to use for
                 predictions instead of the learned h. Shape should be (n_functions, 1).
                 Useful for evaluating different sparse representations.
 
@@ -493,13 +494,13 @@ class SESM(torch.nn.Module, ABC):
         Raises:
             ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        return self._predict(X,self.sparse_coding_layer,custom_h)
+        return self._predict(X,self.sparse_coding_layer,y)
 
     def _predict(
             self,
             X: torch.Tensor,
             sparsecoding: SparseCodingBaseLayer,
-            custom_h: torch.Tensor = None
+            y: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Generate predictions using the trained SESM model, but for one block only.
@@ -517,7 +518,7 @@ class SESM(torch.nn.Module, ABC):
             sparsecoding (SparseCodingBaseLayer): the sparse coding layer of the block
                 in charge of the X points.
             
-            custom_h (torch.Tensor, optional): Custom sparse vector to use for
+            y (torch.Tensor, optional): Custom sparse vector to use for
                 predictions instead of the learned h. Shape should be (n_functions, 1).
                 Useful for evaluating different sparse representations.
 
@@ -537,8 +538,8 @@ class SESM(torch.nn.Module, ABC):
         dictionary = self.dictionary_layer.dictionary.to(device)
         
         # Determine which h to use
-        if custom_h is not None:
-            h = custom_h.to(device)
+        if y is not None:
+            h = y.to(device)
         elif sparsecoding.h is not None:
             h = sparsecoding.h.to(device)
         else:

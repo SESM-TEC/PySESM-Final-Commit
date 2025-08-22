@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import wandb
 
-def log_to_console(layer_name, info):
+
+def log_to_console(layer_name: str, info):
     """
     Handles logging to console
     
     Args:
-        layer_name: Name of the layer being logged
+        layer_name (str): Name of the layer being logged
         info: Dictionary of metrics to log
     """
     log_message = f"{layer_name} - " + ", ".join(f"{k}: {v}" for k, v in info.items())

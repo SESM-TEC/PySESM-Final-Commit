@@ -1,7 +1,6 @@
-import numpy as np
-import torch
 import math
 
+import torch
 
 def to_triu_matrix(non_zeros):
     """Fill an upper triangular matrix with the content of the column
