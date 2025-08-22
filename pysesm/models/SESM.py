@@ -374,7 +374,10 @@ class SESM(torch.nn.Module, ABC):
         
         # Ensure sparse coding layer is initialized with block's h
         if not hasattr(block.sparse_coding_layer, 'h') or block.sparse_coding_layer.h is None:
-            block.sparse_coding_layer.setup(block.h)
+            raise RuntimeError(
+                f"Critical error: block.sparse_coding_layer.h of the {block.block_index}-th block"
+                "is no initialized yet."
+            )
 
         # Ensure the target y have the proper dimensions
         if block.target.dim() == 1:

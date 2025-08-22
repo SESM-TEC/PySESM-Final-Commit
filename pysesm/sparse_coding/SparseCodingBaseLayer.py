@@ -138,7 +138,9 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
     
     @abstractmethod
     def partial_fit(self, y: torch.Tensor,
-                    dictionary: torch.Tensor, log_losses: bool = True) -> None:
+                    dictionary: torch.Tensor,
+                    log_losses: bool = True,
+                    reset_state: bool = True) -> None:
         """
         Performs multiple train steps (the given number of epochs)
         

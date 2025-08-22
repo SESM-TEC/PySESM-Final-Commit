@@ -103,6 +103,7 @@ class ADMMLayer(SparseCodingBaseLayer):
 
         self.losses = []
         self.cached_factorization = None
+        self.iter_count = 0
         
     def setup(self, h: torch.Tensor = None) -> None:
         """
@@ -290,7 +291,9 @@ class ADMMLayer(SparseCodingBaseLayer):
                     self.logger.debug(f"Decreased rho to {self.config.rho:.6f}")
 
 
-    def train_step(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> torch.Tensor:
+    def train_step(self, y: torch.Tensor,
+                   dictionary: torch.Tensor,
+                   log_losses: bool = True) -> torch.Tensor:
         """
         Performs a single ADMM iteration step.
 
@@ -337,6 +340,8 @@ class ADMMLayer(SparseCodingBaseLayer):
             # 4. Compute residuals for monitoring (but don't use for stopping here)
             primal_residual, dual_residual = self._compute_residuals(h_new, z_new)
 
+            self.iter_count +=1
+            
             # 5. Update variables for next iteration
             self.h.data = h_new
             self.z = z_new
@@ -396,7 +401,10 @@ class ADMMLayer(SparseCodingBaseLayer):
         return loss
 
     
-    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor,
+                    dictionary: torch.Tensor,
+                    log_losses: bool = True,
+                    reset_state: bool = True) -> None:
         """
         Performs multiple ADMM iterations.
 
@@ -409,8 +417,14 @@ class ADMMLayer(SparseCodingBaseLayer):
             log_losses (bool): Whether to log losses.
         """
         epochs=self.config.epochs
-        # Initialize cached factorization for efficiency across iterations
-        self.cached_factorization = self._factorize_system_matrix(dictionary)
+
+        if reset_state:
+            self.z = torch.zeros_like(self.h.data)
+            self.u = torch.zeros_like(self.h.data)
+            self.iter_count = 0
+            self.cached_factorization = None # Invalidate cached factorization if state is reset
+            self.losses = [] # Reset losses for this new partial_fit cycle
+            
 
         # Track convergence metrics
         converged = False
@@ -418,6 +432,23 @@ class ADMMLayer(SparseCodingBaseLayer):
         best_h = None
         no_improvement_count = 0
 
+        recalculate_factorization = False
+        if reset_state or self.cached_factorization is None:
+            recalculate_factorization = True
+        elif self.cached_factorization is not None:
+            _, old_gram_matrix = self.cached_factorization # Last gram
+            # Calcular el nuevo gram para comparar dimensiones (sin cholesky todavía)
+            if old_gram_matrix.shape[0] != dictionary.shape[1]:
+                recalculate_factorization = True
+
+        if recalculate_factorization:
+            self.cached_factorization = self._factorize_system_matrix(dictionary)
+        
+        if self.cached_factorization is None or reset_state:
+            # Initialize cached factorization for efficiency across iterations
+            self.cached_factorization = self._factorize_system_matrix(dictionary)
+
+        
         for epoch in range(epochs):
             # Perform a single ADMM iteration
             loss = self.train_step(y, dictionary, log_losses)
@@ -464,4 +495,4 @@ class ADMMLayer(SparseCodingBaseLayer):
                 self.logger.debug(f"Using best solution with loss {best_loss:.6f}")
 
         # Clean up cached factorization to free memory
-        self.cached_factorization = None
+        # self.cached_factorization = None

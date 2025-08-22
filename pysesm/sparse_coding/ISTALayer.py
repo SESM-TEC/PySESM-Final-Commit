@@ -228,7 +228,10 @@ class ISTALayer(SparseCodingBaseLayer):
 
         return loss
     
-    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor,
+                    dictionary: torch.Tensor,
+                    log_losses: bool = True,
+                    reset_state: bool = True) -> None:
         """
         Performs multiple ISTA iterations.
         
@@ -242,6 +245,12 @@ class ISTALayer(SparseCodingBaseLayer):
             log_losses (bool): Whether to log losses.
         """
         epochs = self.config.epochs
+
+        # Reset ISTA state
+        if reset_state:
+            self.last_eigenvector = None # Reset eigenvector for step estimation
+            self.losses = [] # Reset losses for a new partial_fit cycle
+        
         for epoch in range(epochs):
             loss = self.train_step(y, dictionary, log_losses)
             

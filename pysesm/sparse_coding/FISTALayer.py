@@ -312,7 +312,10 @@ class FISTALayer(SparseCodingBaseLayer):
 
         return loss
     
-    def partial_fit(self, y: torch.Tensor, dictionary: torch.Tensor, log_losses: bool = True) -> None:
+    def partial_fit(self, y: torch.Tensor,
+                    dictionary: torch.Tensor,
+                    log_losses: bool = True,
+                    reset_state: bool = True) -> None:
         """
         Performs multiple FISTA iterations.
         
@@ -324,11 +327,20 @@ class FISTALayer(SparseCodingBaseLayer):
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
+            reset_state (bool): If True, resets internal state (like momentum parameter 't', 
+                                auxiliary variables 'z' and 'prev_h', and counters) 
+                                before optimization. If False, it attempts to continue 
+                                from the previous state. Default: True.
         """
         epochs = self.config.epochs
-        # Reset iteration counter for fixed restart strategy
-        self.iter_count = 0
-        self.prev_loss = float('inf')
+        if reset_state:
+            # Reset iteration counter for fixed restart strategy
+            self.iter_count = 0
+            self.prev_loss = float('inf')
+            self.t = 1.0
+            self.z = self.h.clone().detach()
+            self.prev_h = self.h.clone().detach()
+            self.losses = []
         
         for epoch in range(epochs):
             loss = self.train_step(y, dictionary, log_losses)

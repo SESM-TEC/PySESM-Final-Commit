@@ -202,7 +202,7 @@ class BlockManager(ABC):
     @abstractmethod
     def retrieve_active_blocks(self):
         """
-        Retrieve the currently active blocks, i.e. all blecks that have data
+        Retrieve the currently active blocks, i.e. all blocks that have data
         points assigned to them.
 
         This method should return a list or array of `PartitionBlock` objects
