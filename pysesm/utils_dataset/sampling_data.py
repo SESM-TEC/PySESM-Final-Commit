@@ -1,5 +1,8 @@
+from typing import Any
+
 import torch
 import numpy as np
+
 
 def generate_uniform_sampling(total_points, n_samples=500):
     """
@@ -26,7 +29,11 @@ def generate_uniform_sampling(total_points, n_samples=500):
     return selected_indexes
 
 
-def sample_data(x_values, y_values, z_values, sampled_indices, dtype=torch.float32):
+def sample_data(x_values: Any, 
+                y_values: Any, 
+                z_values: Any, 
+                sampled_indices: list, 
+                dtype: torch.dtype=torch.float32):
     """
     Sample data based on selected indices.
 
@@ -35,6 +42,7 @@ def sample_data(x_values, y_values, z_values, sampled_indices, dtype=torch.float
         y_values (array-like): Y-axis values.
         z_values (array-like): Z-axis values.
         sampled_indices (list): List of indices to sample.
+        dtype (torch.dtype): Data type for the output tensors (default is torch.float32).
 
     Returns:
         tuple: Tuple containing sampled X (features) and y (labels).

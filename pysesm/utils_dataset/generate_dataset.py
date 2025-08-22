@@ -1,17 +1,19 @@
-from pysesm.utils_dataset.design_matrices import *
-from pysesm.utils_dataset.gaussian_covariance_density import *
-from pysesm.utils_dataset.mesh_generation import *
-from typing import Callable, List, Tuple, Dict, Union, Optional
+from __future__ import annotations
+
+from collections.abc import Callable
 import torch
+
+from pysesm.utils_dataset.design_matrices import create_design_matrix_train, create_design_matrix_test
+from pysesm.utils_dataset.mesh_generation import generate_mu, generate_mesh_samples, generate_random_samples
 
 def generate_gaussian_dataset(
     n_samples: int,
-    means: List[Tuple[float, float]] = [(1, 1), (1, -1), (-1, -1)],
-    variances: List[float] = [0.15, 0.5, 0.75],
-    weights: List[float] = [1.25, 0.5, 0.75],
-    limits: Tuple[float, float] = (-2, 2),
+    means: list[tuple[float, float]] = [(1, 1), (1, -1), (-1, -1)],
+    variances: list[float] = [0.15, 0.5, 0.75],
+    weights: list[float] = [1.25, 0.5, 0.75],
+    limits: tuple[float, float] = (-2, 2),
     mesh_divisions: int = 50
-) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
+) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Create a dataset from a weighted mixture of gaussians with customizable parameters.
 
@@ -65,10 +67,10 @@ def generate_gaussian_dataset(
 def generate_custom_function_dataset(
     n_samples: int,
     function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    function_params: Dict = {},
-    limits: Tuple[float, float] = (-2, 2),
+    function_params: dict = {},
+    limits: tuple[float, float] = (-2, 2),
     mesh_divisions: int = 50
-) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
+) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Generate a dataset using a parametrizable 2D function.
 
@@ -109,10 +111,10 @@ def generate_custom_nd_function_dataset(
     n_samples: int,
     n_dimensions: int,
     function: Callable[[torch.Tensor], torch.Tensor],
-    function_params: Dict = {},
-    limits: Tuple[float, float] = (-2.0, 2.0),
+    function_params: dict = {},
+    limits: tuple[float, float] = (-2.0, 2.0),
     mesh_divisions: int = 50
-) -> Tuple[Dict, torch.Tensor, torch.Tensor, Dict, torch.Tensor, torch.Tensor]:
+) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Generate a dataset using a parametrizable N-D function.
 
@@ -164,7 +166,7 @@ def print_nd_dataset_info(dataset, name="Dataset"):
             print(f"  dtype: {value.dtype}")
             
             if len(value.shape) > 1:  # Para X (multidimensional)
-                print(f"  Rango por dimensión:")
+                print("  Rango por dimensión:")
                 for dim in range(value.shape[1]):
                     print(f"    Dim {dim}: [{value[:, dim].min():.4f}, {value[:, dim].max():.4f}]")
                 print(f"  Primeras 3 muestras:\n{value[:3]}")
