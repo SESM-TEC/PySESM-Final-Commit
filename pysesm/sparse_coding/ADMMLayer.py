@@ -436,9 +436,8 @@ class ADMMLayer(SparseCodingBaseLayer):
         if reset_state or self.cached_factorization is None:
             recalculate_factorization = True
         elif self.cached_factorization is not None:
-            _, old_gram_matrix = self.cached_factorization # Last gram
-            # Calcular el nuevo gram para comparar dimensiones (sin cholesky todavía)
-            if old_gram_matrix.shape[0] != dictionary.shape[1]:
+            expected_gram_shape = (dictionary.shape[1], dictionary.shape[1]) # Shape of D^T D
+            if self.cached_factorization[1].shape != expected_gram_shape:
                 recalculate_factorization = True
 
         if recalculate_factorization:
