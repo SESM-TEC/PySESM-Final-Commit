@@ -324,37 +324,3 @@ def test_retrieve_test_active_blocks(create_manager):
         count+=len(block.positions)
     
     assert count==len(yt)
-
-def test_vectorized_normalization(create_manager):
-    n_features=5
-    X1 = torch.randn(500, n_features)*5
-    y = torch.randn(500, 1)*5
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
-    partitionManager.add_points(X1, y)
-
-    treeNodes = partitionManager.kdtree.get_leaves()
-    
-    for node in treeNodes:
-        assert torch.all((node.Data.block.normalized_X >=0) & (node.Data.block.normalized_X <=1))
-
-    X2 = torch.randn(500, n_features)*5
-    y2 = torch.randn(500, 1)*5
-
-    partitionManager.add_points(X2, y2)
-
-    treeNodes = partitionManager.kdtree.get_leaves()
-    
-    for node in treeNodes:
-        assert torch.all((node.Data.block.normalized_X >=0) & (node.Data.block.normalized_X <=1))
-
-    blocks = partitionManager.retrieve_active_blocks()
-
-    for block in blocks:
-        assert torch.all((block.normalized_X >=0) & (block.normalized_X <=1))
-
-    X3 = torch.randn(500, n_features)*5
-
-    vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
-        

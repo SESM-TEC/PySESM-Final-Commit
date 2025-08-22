@@ -78,7 +78,6 @@ class AdaptativePartitionManager(BlockManager):
         self.total_blocks: int = 0
         self.splits: int = 0
         self.initial_bounds = None
-        self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
         self.kdtree: KDTree = None
         self.device_manager: device_manager = device_manager
         self.device="cpu"
@@ -196,8 +195,8 @@ class AdaptativePartitionManager(BlockManager):
         vectorized_normalize(x)
         
         for block in x:
-            aspect_ratio = block.block_size / block.block_size.max()
-            block.normalized_X = block.normalized_X * aspect_ratio
+           aspect_ratio = block.block_size / block.block_size.max()
+           block.normalized_X = block.normalized_X * aspect_ratio
 
     def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = False):
         """
