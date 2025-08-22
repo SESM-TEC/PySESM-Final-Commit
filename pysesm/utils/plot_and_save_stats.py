@@ -1,10 +1,14 @@
 import csv
+import os
+
 import numpy as np
 import plotly.express as px
 import pandas as pd
 import plotly.graph_objects as go
+
 import matplotlib.pyplot as plt
-import os
+import matplotlib.cm as cm
+
 import torch
 
 from pysesm.models.SESM import SESM
@@ -48,7 +52,6 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngrou
         active_blocks = model.partition_manager.retrieve_active_blocks()
         
         # Generar colores únicos para cada bloque
-        import matplotlib.cm as cm
         colors = cm.tab10(np.linspace(0, 1, len(active_blocks)))
         
         # Iterar sobre los bloques y plotear sus puntos
@@ -178,9 +181,6 @@ def plot_stats(directory, num_files):
     Args:
         directory (str): The directory containing CSV files.
         num_files (int): The number of CSV files to process.
-
-    Returns:
-        None: Displays an interactive plot and saves an HTML file.
 
     Note:
         Assumes that each CSV file contains loss values for the same number of epochs.

@@ -7,16 +7,16 @@ Authors: The SESM Team
 
 License: 
 '''
+from __future__ import annotations
 
 import logging
-from typing import Optional
 
 
 # Variable to ensure that the configuration is made just once
 _configured_loggers = {}
 
 def setup_logger(name: str = 'pysesm', level: int = logging.INFO, 
-                 log_file: Optional[str] = None) -> logging.Logger:
+                 log_file: str | None = None) -> logging.Logger:
     """
     Configure and return a logger instance.
 
@@ -27,6 +27,7 @@ def setup_logger(name: str = 'pysesm', level: int = logging.INFO,
         name (str): Logger name. Default: 'pysesm'.
         level (int): Minimum logging level (e.g. logging.INFO, logging.DEBUG, logging.WARNING).
                      Default:  logging.INFO.
+        log_file: log file name
 
     Returns:
         logging.Logger: Configured logger instance.
