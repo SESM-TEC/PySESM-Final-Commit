@@ -135,7 +135,7 @@ device_map = {
 }
 
 sparse_coding_config = ISTAConfig(
-    epochs=100,
+    epochs=50,
     alpha=0.10,
     lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,

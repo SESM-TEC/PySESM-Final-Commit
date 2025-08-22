@@ -8,7 +8,6 @@ adapts itself depending on the data it has.
 
 Author: Hender Valdivia
 '''
-
 from dataclasses import dataclass
 from typing import Union, Callable
 
@@ -16,11 +15,12 @@ import logging
 import torch
 import numpy as np
 
-from pysesm.blocks.BlockManager import BlockManager, BlockManagerConfig
+from pysesm.blocks.SESMData import SESMData
+from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.blocks.SESMData import SESMData
+from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
 
@@ -45,9 +45,9 @@ class AdaptativePartitionConfig(BlockManagerConfig):
     data_object=SESMData
     
 class AdaptativePartitionManager(BlockManager):
-
+    
     CONFIG_CLASS = AdaptativePartitionConfig 
-
+    
     def __init__(
         self,
         config: AdaptativePartitionConfig,
@@ -66,21 +66,19 @@ class AdaptativePartitionManager(BlockManager):
                 If not provided, bounds are automatically derived from the data.
             threshold (float, optional): Threshold for determining block activity.
         """
-
-
         super().__init__(config=config, logger=logger, device_manager=device_manager)
         
         self.logger = logger
         self.maxNodeSize = config.maxNodeSize
         self.maxSplitsBeforeRestart = config.maxSplitsBeforeRestart
-        self.blocks: np.ndarray = np.empty(0, dtype=object)  
+        self.blocks: np.ndarray = np.empty(0, dtype=object)
         self.sparse_coding_layer_hook = sparse_coding_layer_hook
         self.X: torch.Tensor = None
         self.y: torch.Tensor = None
         self.total_blocks: int = 0
         self.splits: int = 0
         self.initial_bounds = None
-       # self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
+        self._vectorized_normalization: np.vectorize = np.vectorize(lambda x: x.normalize_points())
         self.kdtree: KDTree = None
         self.device_manager: device_manager = device_manager
         self.device="cpu"
@@ -127,6 +125,7 @@ class AdaptativePartitionManager(BlockManager):
             for index in np.ndindex(self.blocks.shape):
                 node=treeNodes[index[0]]
                 block_size=node.Data.bounds[1]-node.Data.bounds[0]
+
                 self.total_blocks+=1
                 self.blocks[index] = PartitionBlock(
                     space_origin=node.Data.bounds[0],  
@@ -134,12 +133,12 @@ class AdaptativePartitionManager(BlockManager):
                     block_size=block_size,
                     device=self.device
                 )
-                #self.blocks[index].block_scope[0]=node.
+
                 node.Data.block=self.blocks[index] #Define node blocks
                 if self.config.overlap_ratio is None:
-                    node.Data.overlap = torch.zeros_like(node.Data.bounds,device=self.device)
+                    node.Data.overlap = torch.zeros_like(block_size,device=self.device)
                 else:
-                    node.Data.overlap = node.Data.bounds * torch.tensor(self.config.overlap_ratio,device=self.device)
+                    node.Data.overlap = block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
                 
         #Given a kdtree, update the space coverage
         else:  
@@ -147,10 +146,8 @@ class AdaptativePartitionManager(BlockManager):
                 self.kdtree.add_point(row[:-1],row[-1:])
             
             treeNodes=self.kdtree.get_leaves()
-            assert self.kdtree.split==(len(treeNodes)>self.total_blocks)
             if self.kdtree.split:    #If a node was split, update self.blocks
                 self.kdtree.split=False
-                
                 self.splits=len(treeNodes)-self.total_blocks    #How many nodes were split
                 self.blocks = np.empty(len(treeNodes), dtype=object)  
                 
@@ -158,13 +155,11 @@ class AdaptativePartitionManager(BlockManager):
                     node=treeNodes[index[0]]
                     node.Data.block.block_index=index
                     self.blocks[index]=node.Data.block
-                    
                     if node.Data.overlap is None:
                         if self.config.overlap_ratio is None:
                             node.Data.overlap = torch.zeros_like(node.Data.block.block_size,device=self.device)
                         else:
                             node.Data.overlap = node.Data.block.block_size * torch.tensor(self.config.overlap_ratio,device=self.device)
-                
                 self.total_blocks=len(treeNodes)
 
         #After many splits, recreate the kdtree to avoid any bias
@@ -187,8 +182,24 @@ class AdaptativePartitionManager(BlockManager):
         self.splits = 0
         self._update_block_arrangement(X, y)
 
+    def _vectorized_normalization(self, x: np.ndarray = None):
+        """
+        Applies normalization while preserving aspect ratio for dimensions.
+        
+        Args:
+            x: Array of blocks containing X data to normalize
+        """
+        if x is None:
+            return
+        
+        vectorized_normalize = np.vectorize(lambda block: block.normalize_points())
+        vectorized_normalize(x)
+        
+        for block in x:
+            aspect_ratio = block.block_size / block.block_size.max()
+            block.normalized_X = block.normalized_X * aspect_ratio
 
-    def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = True):
+    def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = False):
         """
         Maps kdtree leaf nodes data to their blocks.
         """
@@ -210,7 +221,7 @@ class AdaptativePartitionManager(BlockManager):
             # Only keep rows where all dimensions are within bounds
             mask_extended = mask.all(dim=1)
             
-            X_selected=X[mask_extended]
+            X_selected = X[mask_extended]
             Y_selected = Y[mask_extended]
 
             for i, _ in enumerate(X_selected):
@@ -220,7 +231,6 @@ class AdaptativePartitionManager(BlockManager):
             block = self.blocks[idx]
             if len(block.y) > 0:  # Only if block has points
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
-
 
     def _prepare_block_targets(self):
         """
@@ -233,31 +243,6 @@ class AdaptativePartitionManager(BlockManager):
                 # PartitionBlock.calculate_amplitude_and_target handles y processing,
                 # amplitude calculation, and ensuring self.target is 2D.
                 block.calculate_amplitude_and_target()
-
-    def _vectorized_normalization(self, x: np.ndarray = None):
-        """
-        Applies normalization while preserving aspect ratio for dimensions.
-        
-        Args:
-            x: Array of blocks containing X data to normalize
-        """
-        if x is None:
-            return
-        
-        for block in x:
-            X = torch.stack(block.X)  
-            min_values, _ = torch.min(X, dim=0)  # minimum per column
-            max_values, _ = torch.max(X, dim=0)  # maximum per column
-            
-            block.block_scope[0] = min_values
-            block.block_size = max_values - min_values
-        
-        vectorized_normalize = np.vectorize(lambda block: block.normalize_points())
-        vectorized_normalize(x)
-        
-        for block in x:
-            aspect_ratio = block.block_size / block.block_size.max()
-            block.normalized_X = block.normalized_X * aspect_ratio
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor):
         """
