@@ -343,7 +343,7 @@ class SESM(torch.nn.Module, ABC):
         """
 
             
-    def _train_block(self, block: PartitionBlock) -> None:
+    def _train_block(self, block: PartitionBlock, permutation: int) -> None:
         """
         Perform partial training on the SESM model using a PartitionBlock.
         
@@ -387,7 +387,7 @@ class SESM(torch.nn.Module, ABC):
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self._block_train_step(block=block,epoch=epoch)
+            self._block_train_step(block=block,epoch=permutation)
 
             self.elapsed_time += time.time() - epoch_start_time
             
@@ -397,8 +397,8 @@ class SESM(torch.nn.Module, ABC):
                    epoch == self.model_epochs - 1 ) ):
                 self.logger.info(
                     f"Block {block.block_index} - Epoch {epoch + 1}/{self.model_epochs}: "
-                    f"Loss Sparse Coding: {block.sparse_coding_layer.losses[-1]:.6f}, "
-                    f"Loss Dictionary: {self.dictionary_layer_losses[-1]:.6f}"
+                    f"Dict Loss: {self.dictionary_layer_losses[-1]:.6f}, "
+                    f"SC Loss: {block.sparse_coding_layer.losses[-1]:.6f}"
                 )
                 
         self.partial_fit_count += 1

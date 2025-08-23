@@ -13,6 +13,7 @@ import torch
 
 import matplotlib.pyplot as plt
 
+from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
@@ -26,7 +27,7 @@ from pysesm.utils.plot_and_save_stats import plot_surface
 #from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 #from pysesm.device_manager.DeviceManager import DeviceManager
-
+from mpl_toolkits.mplot3d import Axes3D
 
 
 
@@ -190,7 +191,7 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 5000,
+    model_epochs = 7500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
@@ -199,7 +200,7 @@ ssesm_config = SSESMConfig(
 
 bsesm_config = BSESMConfig(
     n_features = n_features,
-    model_epochs = 5000,
+    model_epochs = 7500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
@@ -249,20 +250,20 @@ def show_data(X, y, c, marker, label, ax=None):
     return ax
 
 
-def show_all_h(bsesm_model: BSESM, bsesm_logger: logging.Logger, threshold: float = 1e-6):
+def show_all_h(model: SESM, logger: logging.Logger, threshold: float = 1e-6):
     """
-    Imprime los vectores h de todos los bloques activos del modelo BSESM.
+    Imprime los vectores h de todos los bloques activos del modelo SESM.
     
     Args:
-        bsesm_model (BSESM): La instancia del modelo BSESM entrenado.
-        bsesm_logger (logging.Logger): La instancia del logger para la salida.
+        model (SESM): La instancia del modelo SESM entrenado.
+        logger (logging.Logger): La instancia del logger para la salida.
         threshold (float): Umbral para considerar un componente de h como no nulo.
     """
-    bsesm_logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
-    active_blocks = bsesm_model.partition_manager.retrieve_active_blocks()
+    logger.info("\n--- INICIANDO INSPECCIÓN DE VECTORES H POR BLOQUE ---")
+    active_blocks = model.partition_manager.retrieve_active_blocks()
     
     if not active_blocks:
-        bsesm_logger.info("No se encontraron bloques activos en el modelo.")
+        logger.info("No se encontraron bloques activos en el modelo.")
         return
 
     for block in active_blocks:
@@ -276,16 +277,16 @@ def show_all_h(bsesm_model: BSESM, bsesm_logger: logging.Logger, threshold: floa
             total_components = h_tensor.numel()
             sparsity_ratio = (total_components - non_zero_components) / total_components * 100
             
-            bsesm_logger.info(f"  Bloque {block_index_str}:")
-            bsesm_logger.info(f"    Amplitud: {block.amplitude}")
-            bsesm_logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
-            bsesm_logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
-            bsesm_logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
-            bsesm_logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
-            bsesm_logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
+            logger.info(f"  Bloque {block_index_str}:")
+            logger.info(f"    Amplitud: {block.amplitude}")
+            logger.info(f"    Vector h (forma {h_tensor.shape}):\n{h_tensor.numpy().flatten()}")
+            logger.info(f"    Componentes no nulos: {non_zero_components} / {total_components}")
+            logger.info(f"    Esparcidad: {sparsity_ratio:.2f}%")
+            logger.info(f"    Norma L1 de h: {torch.norm(h_tensor, p=1).item():.4f}")
+            logger.info(f"    Norma L2 de h: {torch.norm(h_tensor, p=2).item():.4f}")
         else:
-            bsesm_logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
-    bsesm_logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
+            logger.warning(f"  Bloque {block_index_str}: No se encontró capa de sparse coding o vector h.")
+    logger.info("--- FIN DE INSPECCIÓN DE VECTORES H POR BLOQUE ---\n")
 
 
 # DATA GENERATION

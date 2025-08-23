@@ -190,72 +190,51 @@ class BSESM(SESM):
             h_nested (TensorBatch): Aggregated sparse coding vectors for all active blocks.
             active_blocks (List[PartitionBlock]): List of PartitionBlock objects currently active.
             epoch (int): The current SESM model epoch.
+
+        Returns:
+            TensorBatch: Updated h_nested after sparse coding optimization.
         """
-        # Step 1: Optimize dictionary with fixed h (from previous iteration or initial)
-        # The h_nested must be detached for dictionary training (already handled by _aggregate_block_data or DictBaseLayer)
+        
+        # Step 1: Optimize dictionary with fixed h
         self.dictionary_layer.partial_fit(
             X=X_nested,
             y=y_nested,
-            h=h_nested # h is detached internally by DictBaseLayer for dict training
+            h=h_nested  # h is detached internally by DictBaseLayer for dict training
         )
         # Dictionary losses are internally tracked by dictionary_layer.losses.
-        # They will be logged at the BSESM model_epoch level.
         self._dict_losses.append(self.dictionary_layer.losses[-1])
-        
+
         # Step 2: Optimize h with fixed dictionary (Mega-Matrix approach)
-        # Ensure no_grad here, as dictionary parameters are fixed for SC phase.
-        with torch.no_grad():
-            # dictionary_layer.forward will return a NestedTensor here.
-            dict_nested_updated = self.dictionary_layer.forward(X_nested)
-            
-            # Unbind NestedTensors to get lists for torch.cat and block_diag
-            # y_nested is already a NestedTensor, get its unbound list of tensors
-            y_list_unbound = y_nested.unbind()
-            dict_list_unbound = dict_nested_updated.unbind()
+        # Use the already calculated dictionary (like SSESM)
+        dict_nested_detached = self.dictionary_layer.dictionary.detach()
 
-            # Pack data into the mega-matrix formulation
-            Y_mega = torch.cat(y_list_unbound) # Concatenate all y_i into a single column vector
-            D_mega = torch.block_diag(*dict_list_unbound) # Create block-diagonal matrix D_mega
-            
-            # The number of functions for the global SC layer is the total
-            # number of columns in D_mega (sum of n_functions for each block).
-            # This needs to be set dynamically if blocks have different n_functions,
-            # but for now, we assume all blocks share the same n_functions from config.
-            # So, total n_functions = len(active_blocks) * self.n_functions
-            self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
-            
-            # Solve the single, large sparse coding problem
-            # The global sparse coding layer will run its own internal partial_fit loop
-            # for `self.sparse_coding_config.epochs` iterations.
-            self.global_sparse_coding_layer.partial_fit(y=Y_mega,
-                                                        dictionary=D_mega,
-                                                        reset_state=(epoch==0))
-            
-            self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
-            
-            # Retrieve the optimized H_mega from the global sparse coding layer
-            H_mega_optimizado = self.global_sparse_coding_layer.h.detach()
-            
-            # Unpack the results and update each block's h for the next epoch
-            # h_split_sizes must match the original n_functions for each block
-            h_split_sizes = [block.sparse_coding_layer.h.shape[0]
-                             for block in active_blocks]
-            h_optimizado_list = torch.split(H_mega_optimizado,
-                                            h_split_sizes, dim=0) # Specify dim=0 for splitting H_mega_optimizado
+        # Unbind NestedTensors to get lists for torch.cat and block_diag
+        y_list_unbound = y_nested.unbind()
+        dict_list_unbound = dict_nested_detached.unbind()
 
-            for i, block in enumerate(active_blocks):
-                # Update the h-vector of the individual sparse coding layer within each block object.
-                # Ensure it's moved to the correct device (which it should already be, but good practice).
-                block.sparse_coding_layer.h.data = \
-                    h_optimizado_list[i].to(block.sparse_coding_layer.device)
+        # Pack data into the mega-matrix formulation
+        Y_mega = torch.cat(y_list_unbound).detach()  # Concatenate all y_i into a single column vector
+        D_mega = torch.block_diag(*dict_list_unbound).detach()  # Create block-diagonal matrix D_mega
 
-        # Losses are logged by partial_fit in the BSESM model_epochs loop.
-        # The internal losses of dictionary_layer and global_sparse_coding_layer
-        # are already being collected by those layers.
+        # Update the number of functions for the global SC layer dynamically
+        self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
 
+        # Solve the single, large sparse coding problem
+        self.global_sparse_coding_layer.partial_fit(y=Y_mega,
+                                                    dictionary=D_mega,
+                                                    reset_state=(epoch==0))
+
+        self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
+
+        # Update h_nested directly with optimized values - zero extra allocations
+        # Both have identical memory layout: (total_functions, 1)
+        h_nested.values().data.copy_(self.global_sparse_coding_layer.h.detach())
+
+        return h_nested
 
 
     def partial_fit(self, X: torch.Tensor, y: torch.Tensor, *_):
+
         """
         Perform a partial fit on the BSESM model, training dictionary and
         sparse codes globally.
@@ -285,18 +264,17 @@ class BSESM(SESM):
             config=self.sparse_coding_config,
             evaluation_func=self.evaluation_func
         )
-        
+
         # Retrieve active blocks (these will be the same across model_epochs for this call to partial_fit)
         active_blocks = self.partition_manager.retrieve_active_blocks()
         if not active_blocks:
             self.logger.warning("No active blocks found. Skipping training.")
             return
 
-        
-        # Step 1: Aggregate data into nested_tensors
+        # Step 1: Aggregate data into nested_tensors (X and y don't change during training)
         X_nested, y_nested, h_nested = self._aggregate_block_data(active_blocks)
 
-        #  Initialize/Update self.global_sparse_coding_layer's h
+        # Initialize/Update self.global_sparse_coding_layer's h
         H_mega_initial = h_nested.values()
 
         # Update n_functions for the global SC layer's config
@@ -310,24 +288,22 @@ class BSESM(SESM):
             self.global_sparse_coding_layer.setup(H_mega_initial)
         else:
             self.global_sparse_coding_layer.h.data = H_mega_initial.to(self.global_sparse_coding_layer.device)
-        # End of Initialize/Update self.global_sparse_coding_layer's h
 
-        
         # Main training loop for BSESM model_epochs
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            # Perform a single global training step for dictionary and sparse codes
-            self._global_train_step(X_nested, y_nested, h_nested, active_blocks, epoch)
+            # Perform a single global training step and get updated h_nested
+            h_nested = self._global_train_step(X_nested, y_nested, h_nested, active_blocks, epoch)
 
             self.elapsed_time += time.time() - epoch_start_time
-            
+
             # Log progress for BSESM model_epochs
             if ( (self.config.log_interval > 0) and
                  ( (epoch + 1) % self.config.log_interval == 0 or
                    epoch == 0 or
                    epoch == self.model_epochs - 1 ) ):
-                
+
                 # Retrieve last losses for logging
                 dict_loss = self.dictionary_layer.losses[-1] if self.dictionary_layer.losses else float('nan')
                 sc_loss = self._sparse_coding_losses[-1] if self._sparse_coding_losses else float('nan')
@@ -336,7 +312,7 @@ class BSESM(SESM):
                     f"BSESM Epoch {epoch + 1}/{self.model_epochs}: "
                     f"Dict Loss: {dict_loss:.6f}, SC Loss: {sc_loss:.6f}"
                 )
-                
+
             # Call SESM hook if provided for monitoring after each SESM model epoch
             if self.sesm_hook is not None:
                 hook_info = {
@@ -347,10 +323,19 @@ class BSESM(SESM):
                     'h_mega': self.global_sparse_coding_layer.h.detach().clone(),
                     'dictionary_params': self.dictionary_layer.theta_params.detach().clone()
                 }
-                hook_info['h_per_block'] = [block.sparse_coding_layer.h.detach().clone() for block in active_blocks]
+                # Extract current h values from h_nested for monitoring
+                h_list_current = h_nested.unbind()
+                hook_info['h_per_block'] = [h.detach().clone() for h in h_list_current]
                 self.sesm_hook(hook_info)
 
+        # Step 2: After training is complete, distribute final h values to individual blocks
+        h_list_final = h_nested.unbind()
+        for i, block in enumerate(active_blocks):
+            # Update the h-vector of the individual sparse coding layer within each block object.
+            block.sparse_coding_layer.h.data = h_list_final[i].to(block.sparse_coding_layer.device)
+
         self.partial_fit_count += 1
+
 
     def predict(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """

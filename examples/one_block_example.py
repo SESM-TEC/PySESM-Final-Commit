@@ -13,25 +13,26 @@ import torch
 
 import matplotlib.pyplot as plt
 
+from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
-from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
-from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStrategy, MomentumScheme
-from pysesm.sparse_coding import ADMMLayer, ADMMConfig
-from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
+from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
+#from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme, StepSizeMethod
+#from pysesm.sparse_coding import ADMMConfig
+from pysesm.dictionaries import GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
-from pysesm.utils.metric_loggers import *
+#from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
+#from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
 
 
 
 class KLDivLossWrapper(torch.nn.Module):
-    def __init__(self, reduction='mean', log_input=False):
+    def __init__(self, reduction='mean'):
         super(KLDivLossWrapper, self).__init__()
         self.kl_loss = torch.nn.KLDivLoss(reduction=reduction)
         
@@ -146,10 +147,12 @@ sparse_coding_config = ISTAConfig(
     criterion=torch.nn.MSELoss()
 )
 # sparse_coding_config = FISTAConfig(
+#     epochs=400,
 #     alpha = 0.020,
 #     lambd = 0.00001,
 #     step_size_method = StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
 #     power_iterations = 10,
+#     early_stopping = False,
 #     n_functions = n_functions,
 #     restart_strategy = RestartStrategy.ADAPTIVE, # .NONE,
 #     momentum_scheme = MomentumScheme.MONOTONIC, # .ORIGINAL,
@@ -188,7 +191,7 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 5000,
+    model_epochs = 7500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
@@ -197,11 +200,11 @@ ssesm_config = SSESMConfig(
 
 bsesm_config = BSESMConfig(
     n_features = n_features,
-    model_epochs = 20,
+    model_epochs = 7500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=25,
+    log_interval=100,
 )
 
 
@@ -247,12 +250,12 @@ def show_data(X, y, c, marker, label, ax=None):
     return ax
 
 
-def show_all_h(model: SSESM, logger: logging.Logger, threshold: float = 1e-6):
+def show_all_h(model: SESM, logger: logging.Logger, threshold: float = 1e-6):
     """
-    Imprime los vectores h de todos los bloques activos del modelo SSESM.
+    Imprime los vectores h de todos los bloques activos del modelo SESM.
     
     Args:
-        model (SSESM): La instancia del modelo SSESM entrenado.
+        model (SESM): La instancia del modelo SESM entrenado.
         logger (logging.Logger): La instancia del logger para la salida.
         threshold (float): Umbral para considerar un componente de h como no nulo.
     """
@@ -304,14 +307,14 @@ else:
 
 try:
     # TRAIN AND TEST THE ALL MODELS
-    logging.info("Training model {}".format(model.__class__.__name__))
+    logging.info("Training model %s", model.__class__.__name__)
     model_folder = f"{folder_name}_{model.__class__.__name__}"
     model.partial_fit(X_train, y_train)
     if which_sesm=="ssesm":
         show_all_h(model, logger)
     y_predicted, time, mse_value = model.performance_stats(X_test, y_test)
 
-    logging.info("Model: {}, MSE Value = {:.6f}, time ={:.6f}".format(model.__class__.__name__, mse_value, time))
+    logging.info("Model: %s, MSE Value = %.6f, time = %.6f", model.__class__.__name__, mse_value, time)
 
     plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
 
