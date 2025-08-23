@@ -137,11 +137,11 @@ device_map = {
 }
 
 sparse_coding_config = ISTAConfig(
-    epochs=400,
-    alpha=0.050,
-    lambd=0.0001,
+    epochs=50,
+    alpha=0.10,
+    lambd=0.00001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
-    power_iterations=20,
+    power_iterations=10,
     n_functions=n_functions,
     criterion=torch.nn.MSELoss()
 )
@@ -169,16 +169,15 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 500,
-    alpha = 0.2,
+    epochs = 4,
+    alpha = 0.01,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     criterion = JensenShannonLossWrapper(),
-    #optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-    optimizer_factory = lambda params, lr: torch.optim.Adam(params, lr=lr),
-    mu_epochs = 50,
-    rho_epochs = 50,
-    split_mu_rho = False,
+    optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
+    mu_epochs = 10,
+    rho_epochs = 10,
+    split_mu_rho = True,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
 )
@@ -200,11 +199,11 @@ ssesm_config = SSESMConfig(
 
 bsesm_config = BSESMConfig(
     n_features = n_features,
-    model_epochs = 400,
+    model_epochs = 5000,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=25,
+    log_interval=100,
 )
 
 

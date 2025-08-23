@@ -10,7 +10,9 @@ License:
 
 import logging
 import torch
+
 import matplotlib.pyplot as plt
+
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
