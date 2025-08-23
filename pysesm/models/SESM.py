@@ -403,7 +403,9 @@ class SESM(torch.nn.Module, ABC):
                 
         self.partial_fit_count += 1
 
-    def _block_train_step(self,block: PartitionBlock):
+    def _block_train_step(self,
+                          block: PartitionBlock,
+                          epoch: int):
         """
         Perform a single training step through the SESM model for one block.
         """
@@ -412,13 +414,14 @@ class SESM(torch.nn.Module, ABC):
         X = block.normalized_X
         y = block.target if block.target.dim() == 2 else block.target.unsqueeze(-1)
         
-        self._train_step(X,y,block.sparse_coding_layer)
+        self._train_step(X=X,y=y,sparsecoding=block.sparse_coding_layer,epoch=epoch)
 
 
     def _train_step(self,
                     X: torch.Tensor,
                     y: torch.Tensor,
-                    sparsecoding: SparseCodingBaseLayer
+                    sparsecoding: SparseCodingBaseLayer,
+                    epoch: int
     ):
         """
         Perform a single training step through the SESM model.
@@ -456,7 +459,8 @@ class SESM(torch.nn.Module, ABC):
         # Detach dictionary to prevent gradient flow during sparse coding
         dictionary_for_sparse = self.dictionary_layer.dictionary.detach()
         sparsecoding.partial_fit(y=y, 
-                                 dictionary=dictionary_for_sparse)
+                                 dictionary=dictionary_for_sparse,
+                                 reset_state=(epoch==0))
 
         self._sparse_coding_losses.append(sparsecoding.losses[-1])
         

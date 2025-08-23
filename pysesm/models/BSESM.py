@@ -128,7 +128,7 @@ class BSESM(SESM):
             Tuple containing three nested_tensors:
                 - X_nested (TensorBatch): Normalized input features for each block.
                 - y_nested (TensorBatch): Target values for each block.
-                - h_nested (TensorBatch): Initial `h` vectors for each block.
+                - h_nested (TensorBatch): `h` vectors for each block.
         """
         if not blocks:
             # Return empty nested tensors. This handles cases where no
@@ -178,18 +178,18 @@ class BSESM(SESM):
                            y_nested: TensorBatch,
                            h_nested: TensorBatch,
                            active_blocks: list[PartitionBlock],
-                           *_):
+                           epoch: int):
         """
         Performs a single global training step for the BSESM model.
         This includes training the dictionary on all active blocks' data
-        and then training the global sparse coding layer.
+        and then training the global sparse coding layer for the current epoch.
 
         Args:
             X_nested (TensorBatch): Aggregated normalized input features for all active blocks.
             y_nested (TensorBatch): Aggregated target values for all active blocks.
             h_nested (TensorBatch): Aggregated sparse coding vectors for all active blocks.
             active_blocks (List[PartitionBlock]): List of PartitionBlock objects currently active.
-            *_: Additional unused positional arguments.
+            epoch (int): The current SESM model epoch.
         """
         # Step 1: Optimize dictionary with fixed h (from previous iteration or initial)
         # The h_nested must be detached for dictionary training (already handled by _aggregate_block_data or DictBaseLayer)
@@ -200,6 +200,7 @@ class BSESM(SESM):
         )
         # Dictionary losses are internally tracked by dictionary_layer.losses.
         # They will be logged at the BSESM model_epoch level.
+        self._dict_losses.append(self.dictionary_layer.losses[-1])
         
         # Step 2: Optimize h with fixed dictionary (Mega-Matrix approach)
         # Ensure no_grad here, as dictionary parameters are fixed for SC phase.
@@ -223,19 +224,14 @@ class BSESM(SESM):
             # So, total n_functions = len(active_blocks) * self.n_functions
             self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
             
-            # Prepare initial H_mega from aggregated h_nested values (these are the current h values for each block)
-            # h_nested.values() gives the concatenated tensor of all h_i values
-            H_mega_initial = h_nested.values()
-            
-            # Setup the global sparse coding layer with the combined h vector.
-            # This re-initializes its internal h.
-            self.global_sparse_coding_layer.setup(H_mega_initial)
-
             # Solve the single, large sparse coding problem
             # The global sparse coding layer will run its own internal partial_fit loop
             # for `self.sparse_coding_config.epochs` iterations.
             self.global_sparse_coding_layer.partial_fit(y=Y_mega,
-                                                        dictionary=D_mega)
+                                                        dictionary=D_mega,
+                                                        reset_state=(epoch==0))
+            
+            self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
             
             # Retrieve the optimized H_mega from the global sparse coding layer
             H_mega_optimizado = self.global_sparse_coding_layer.h.detach()
@@ -296,8 +292,26 @@ class BSESM(SESM):
             self.logger.warning("No active blocks found. Skipping training.")
             return
 
+        
         # Step 1: Aggregate data into nested_tensors
         X_nested, y_nested, h_nested = self._aggregate_block_data(active_blocks)
+
+        #  Initialize/Update self.global_sparse_coding_layer's h
+        H_mega_initial = h_nested.values()
+
+        # Update n_functions for the global SC layer's config
+        self.global_sparse_coding_layer.config.n_functions = H_mega_initial.shape[0]
+
+        # Decide if we need to force a full setup for global SC layer (recreating h Parameter)
+        if self.global_sparse_coding_layer.h.shape[0] != H_mega_initial.shape[0]:
+            self.logger.debug(f"Global sparse coding layer's h dimension changed from "
+                              f"{self.global_sparse_coding_layer.h.shape[0]} to "
+                              f"{H_mega_initial.shape[0]}. Forcing setup.")
+            self.global_sparse_coding_layer.setup(H_mega_initial)
+        else:
+            self.global_sparse_coding_layer.h.data = H_mega_initial.to(self.global_sparse_coding_layer.device)
+        # End of Initialize/Update self.global_sparse_coding_layer's h
+
         
         # Main training loop for BSESM model_epochs
         for epoch in range(self.model_epochs):
@@ -316,7 +330,7 @@ class BSESM(SESM):
                 
                 # Retrieve last losses for logging
                 dict_loss = self.dictionary_layer.losses[-1] if self.dictionary_layer.losses else float('nan')
-                sc_loss = self.global_sparse_coding_layer.losses[-1] if self.global_sparse_coding_layer.losses else float('nan')
+                sc_loss = self._sparse_coding_losses[-1] if self._sparse_coding_losses else float('nan')
 
                 self.logger.info(
                     f"BSESM Epoch {epoch + 1}/{self.model_epochs}: "
@@ -329,7 +343,7 @@ class BSESM(SESM):
                     'partial_fit_call_count': self.partial_fit_count,
                     'model_epoch': epoch,
                     'dict_losses': self.dictionary_layer.losses,
-                    'sparse_coding_losses': self.global_sparse_coding_layer.losses,
+                    'sparse_coding_losses': self._sparse_coding_losses,
                     'h_mega': self.global_sparse_coding_layer.h.detach().clone(),
                     'dictionary_params': self.dictionary_layer.theta_params.detach().clone()
                 }

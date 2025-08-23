@@ -267,11 +267,9 @@ def test_bsesm_partial_fit_model_epochs_loop(
 @patch.object(BSESM, 'evaluation_func') # Patch BSESM's own evaluation_func
 @patch.object(GaussianDictLayer, 'forward') # Patch dictionary_layer.forward
 @patch.object(GaussianDictLayer, 'partial_fit') # Patch dictionary_layer.partial_fit
-@patch.object(ISTALayer, 'setup') # Patch global_sparse_coding_layer.setup
 @patch.object(ISTALayer, 'partial_fit') # Patch global_sparse_coding_layer.partial_fit
 def test_bsesm_global_train_step_orchestration(
     mock_global_sc_partial_fit,
-    mock_global_sc_setup,
     mock_dict_partial_fit,
     mock_dict_forward,
     mock_eval_func_bsesm, # This is BSESM.evaluation_func
@@ -293,6 +291,12 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_evaluated_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device) for block in active_blocks]
     mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
 
+    # Simulate that BSESM.partial_fit has already prepared global_sparse_coding_layer
+    # by updating its h.data and potentially setting up its internal state.
+    # We set h.data directly here, as _global_train_step expects it to be ready.
+    model.global_sparse_coding_layer.h.data = h_nested_initial.values().to(device)
+    # For ISTALayer, setup doesn't do much beyond h. For FISTA/ADMM, partial_fit handles reset.
+    
     # Simulate global_sparse_coding_layer.partial_fit output (optimized H_mega)
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
     mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
@@ -306,7 +310,7 @@ def test_bsesm_global_train_step_orchestration(
     model.dictionary_layer.losses = [0.4, 0.5, 0.6]
 
     # Call the method under test
-    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks)
+    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, epoch=0)
 
     # Assertions for dictionary training
     mock_dict_partial_fit.assert_called_once_with(X=X_nested, y=y_nested, h=h_nested_initial)
@@ -318,10 +322,6 @@ def test_bsesm_global_train_step_orchestration(
     expected_Y_mega = torch.cat(y_nested.unbind()) # y_nested is already a NestedTensor
     expected_D_mega = torch.block_diag(*mock_dict_evaluated_list) # Use the mocked list from dict_forward
 
-    mock_global_sc_setup.assert_called_once()
-    # Verify setup received the concatenated initial h
-    assert torch.allclose(mock_global_sc_setup.call_args[0][0], h_nested_initial.values())
-    
     mock_global_sc_partial_fit.assert_called_once()
     # Extract call arguments and assert tensor equality explicitly
     call_args = mock_global_sc_partial_fit.call_args

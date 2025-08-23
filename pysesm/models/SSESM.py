@@ -132,7 +132,7 @@ class SSESM(SESM):
             
             for block in permuted_blocks:
                 # Reuse the SESM approach at the parent class
-                super()._train_block(block)
+                super()._train_block(block, epoch=permutation)
                 
                 self.logger.debug(
                     f"Block {block.block_index}/{len(active_blocks)} processed. "
