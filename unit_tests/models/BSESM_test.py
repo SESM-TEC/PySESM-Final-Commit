@@ -1,7 +1,7 @@
 # unit_tests/models/BSESM_test.py
 
 import logging
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -27,7 +27,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 @pytest.fixture(scope="module")
-def device_manager_fixture():
+def _device_manager_fixture():
     # Configure all layers to run on CPU for consistent testing environment
     device_map = {
         DeviceTarget.GLOBAL: "cpu",
@@ -38,7 +38,7 @@ def device_manager_fixture():
     return DeviceManager(logger=logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
 
 @pytest.fixture(scope="module")
-def common_evaluation_func():
+def _common_evaluation_func():
     """
     Provides a standard evaluation function (D @ h) that handles TensorBatch.
     Ensures h is a column vector and output is consistently shaped.
@@ -87,7 +87,7 @@ def common_evaluation_func():
     return _eval_func_impl
 
 @pytest.fixture
-def bsesm_config_fixture():
+def _bsesm_config_fixture():
     # Common configuration for BSESM tests
     n_features = 2
     n_functions = 5
@@ -115,17 +115,17 @@ def bsesm_config_fixture():
     )
 
 @pytest.fixture
-def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture): # Removed common_evaluation_func here, it's passed in nested_tensor_data_generator
+def _sample_bsesm_model(_bsesm_config_fixture, _device_manager_fixture): # Removed common_evaluation_func here, it's passed in nested_tensor_data_generator
     # Create a BSESM instance, ensuring evaluation_func is passed correctly
     model = BSESM(
-        config=bsesm_config_fixture,
+        config=_bsesm_config_fixture,
         logger=logger,
-        device_manager=device_manager_fixture,
+        device_manager=_device_manager_fixture,
     )
     return model
 
 @pytest.fixture
-def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture, common_evaluation_func):
+def _nested_tensor_data_generator(_device_manager_fixture, _bsesm_config_fixture, _common_evaluation_func):
     """
     Generates active blocks and corresponding NestedTensor data for tests.
     Returns: (X_nested, y_nested, h_nested, active_blocks)
@@ -135,9 +135,9 @@ def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture, c
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
         
-        device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
-        n_features = bsesm_config_fixture.n_features
-        n_functions = bsesm_config_fixture.sparse_coding_config.n_functions
+        device = _device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+        n_features = _bsesm_config_fixture.n_features
+        # n_functions = _bsesm_config_fixture.sparse_coding_config.n_functions
 
         active_blocks = []
         X_list, y_list, h_list = [], [], []
@@ -157,8 +157,8 @@ def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture, c
 
             # Create a real ISTALayer instance for the block
             sparse_coding_layer_instance = ISTALayer(
-                config=bsesm_config_fixture.sparse_coding_config,
-                evaluation_func=common_evaluation_func,
+                config=_bsesm_config_fixture.sparse_coding_config,
+                evaluation_func=_common_evaluation_func,
                 logger=logging.getLogger(f"test_istalayer_block_{i}"),
                 device=device
             )
@@ -180,9 +180,9 @@ def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture, c
 
 # --- Tests for BSESM Class ---
 
-def test_bsesm_initialization(sample_bsesm_model, common_evaluation_func):
+def test_bsesm_initialization(_sample_bsesm_model, _common_evaluation_func):
     """Verify core components are initialized correctly."""
-    model = sample_bsesm_model
+    model = _sample_bsesm_model
     assert isinstance(model, BSESM)
     assert hasattr(model, 'global_sparse_coding_layer')
     assert isinstance(model.global_sparse_coding_layer, ISTALayer)
@@ -203,22 +203,22 @@ def test_bsesm_partial_fit_model_epochs_loop(
     mock_init_sc_per_block,
     mock_add_points,
     mock_global_train_step,
-    sample_bsesm_model, bsesm_config_fixture, nested_tensor_data_generator,
-    device_manager_fixture, common_evaluation_func # Pass common_evaluation_func here
+    _sample_bsesm_model, _bsesm_config_fixture, _nested_tensor_data_generator,
+    _device_manager_fixture, _common_evaluation_func # Pass common_evaluation_func here
 ):
     """
     Test that partial_fit orchestrates the main model_epochs loop and calls
     _global_train_step the correct number of times.
     """
-    model = sample_bsesm_model
-    model_epochs = bsesm_config_fixture.model_epochs
-    n_features = bsesm_config_fixture.n_features
+    model = _sample_bsesm_model
+    model_epochs = _bsesm_config_fixture.model_epochs
+    n_features = _bsesm_config_fixture.n_features
 
-    X_input = torch.randn(10, n_features, device=device_manager_fixture.get_device(DeviceTarget.GLOBAL))
-    y_input = torch.randn(10, 1, device=device_manager_fixture.get_device(DeviceTarget.GLOBAL))
+    X_input = torch.randn(10, n_features, device=_device_manager_fixture.get_device(DeviceTarget.GLOBAL))
+    y_input = torch.randn(10, 1, device=_device_manager_fixture.get_device(DeviceTarget.GLOBAL))
 
     # Mock return values for internal steps
-    X_nested, y_nested, h_nested, active_blocks = nested_tensor_data_generator(num_blocks=2, min_samples_per_block=5, max_samples_per_block=10)
+    X_nested, y_nested, h_nested, active_blocks = _nested_tensor_data_generator(num_blocks=2, min_samples_per_block=5, max_samples_per_block=10)
     mock_retrieve_active_blocks.return_value = active_blocks
     mock_aggregate_block_data.return_value = (X_nested, y_nested, h_nested)
     
@@ -239,7 +239,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
     mock_add_points.assert_called_once_with(X_input, y_input)
     # The common_evaluation_func needs to be passed to init_sparse_coding_per_block
     mock_init_sc_per_block.assert_called_once_with(
-        config=bsesm_config_fixture.sparse_coding_config,
+        config=_bsesm_config_fixture.sparse_coding_config,
         evaluation_func=model.evaluation_func # Pass model's evaluation_func
     )
     mock_retrieve_active_blocks.assert_called_once()
@@ -285,26 +285,26 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_partial_fit,
     mock_dict_forward,
     mock_eval_func_bsesm, # This is BSESM.evaluation_func
-    sample_bsesm_model, nested_tensor_data_generator, device_manager_fixture, common_evaluation_func # Pass common_evaluation_func
+    _sample_bsesm_model, _nested_tensor_data_generator, _device_manager_fixture, _common_evaluation_func # Pass common_evaluation_func
 ):
     """
     Test the _global_train_step method's orchestration of dictionary and sparse coding
     training, including data aggregation, mega-matrix construction, and h distribution.
     """
-    model = sample_bsesm_model
+    model = _sample_bsesm_model
     n_functions = model.n_functions
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+    device = _device_manager_fixture.get_device(DeviceTarget.GLOBAL)
 
     # Prepare mocked data
     num_blocks = 2
-    X_nested, y_nested, h_nested_initial, active_blocks = nested_tensor_data_generator(num_blocks=num_blocks, min_samples_per_block=5, max_samples_per_block=10)
+    X_nested, y_nested, h_nested_initial, active_blocks = _nested_tensor_data_generator(num_blocks=num_blocks, min_samples_per_block=5, max_samples_per_block=10)
     
     # Simulate dictionary_layer.forward output (NestedTensor of D_i matrices)
     mock_dict_evaluated_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device) for block in active_blocks]
     mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
 
     # Define a side_effect for mock_dict_partial_fit to simulate its real behavior
-    def simulate_dict_partial_fit_side_effect(X, y, h, log_losses=True):
+    def simulate_dict_partial_fit_side_effect(X, _y, _h, log_losses=True):
         # In a real scenario, partial_fit calls self.forward and assigns self.dictionary
         # Here we directly call the mocked forward mockeado (which has a return_value configured)
         # and then we assigned the result to the dictonary attribute of the real instance
@@ -316,7 +316,7 @@ def test_bsesm_global_train_step_orchestration(
     # Simulate global_sparse_coding_layer.partial_fit updating its internal h.data
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
     mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
-    def simulate_global_sc_partial_fit_side_effect(y, dictionary, reset_state):
+    def simulate_global_sc_partial_fit_side_effect(_y, _dictionary, _reset_state):
         model.global_sparse_coding_layer.h.data = mock_optimized_h_mega.clone()
         model.global_sparse_coding_layer.losses.append(0.01) # Simulate a loss
     mock_global_sc_partial_fit.side_effect = simulate_global_sc_partial_fit_side_effect
@@ -372,13 +372,13 @@ def test_bsesm_global_train_step_orchestration(
     # Ensure BSESM's own evaluation_func is NOT called by _global_train_step directly
     mock_eval_func_bsesm.assert_not_called()
 
-def test_bsesm_aggregate_block_data_behavior(sample_bsesm_model, nested_tensor_data_generator):
+def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor_data_generator):
     """
     Test the _aggregate_block_data method to ensure it correctly
     creates NestedTensors for X, y, and h from active blocks.
     """
-    model = sample_bsesm_model
-    device = model.device_manager.get_device(DeviceTarget.GLOBAL)
+    model = _sample_bsesm_model
+    # device = model.device_manager.get_device(DeviceTarget.GLOBAL)
     n_features = model.n_features
     n_functions = model.n_functions
 
@@ -386,7 +386,7 @@ def test_bsesm_aggregate_block_data_behavior(sample_bsesm_model, nested_tensor_d
     num_blocks = 3
     min_samples = 5
     max_samples = 15
-    X_nested_expected, y_nested_expected, h_nested_expected, active_blocks = nested_tensor_data_generator(
+    X_nested_expected, y_nested_expected, h_nested_expected, active_blocks = _nested_tensor_data_generator(
         num_blocks=num_blocks, min_samples_per_block=min_samples, max_samples_per_block=max_samples
     )
 
@@ -436,7 +436,7 @@ def test_bsesm_aggregate_block_data_behavior(sample_bsesm_model, nested_tensor_d
     assert h_empty_nested.unbind()[0].shape == (0, n_functions, 1) # And has the correct function and output dimensions
 
 @pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
-def test_bsesm_predict_workflow(sample_bsesm_model, device_manager_fixture, common_evaluation_func):
+def test_bsesm_predict_workflow(_sample_bsesm_model, _device_manager_fixture, _common_evaluation_func):
     """
     Test integrador del flujo de predict sin mocks:
     - Usa PartitionManager real para activar bloques sobre X_test_input.
@@ -444,10 +444,10 @@ def test_bsesm_predict_workflow(sample_bsesm_model, device_manager_fixture, comm
     - Ajusta h de cada bloque a un patrón conocido y fija amplitudes a 1.0.
     - Reconstruye y_expected con la misma lógica y compara contra model.predict.
     """
-    model = sample_bsesm_model
-    model.evaluation_func = common_evaluation_func
+    model = _sample_bsesm_model
+    model.evaluation_func = _common_evaluation_func
 
-    device = torch.device(device_manager_fixture.get_device(DeviceTarget.GLOBAL))
+    device = torch.device(_device_manager_fixture.get_device(DeviceTarget.GLOBAL))
     n_functions = model.n_functions
 
     # Datos de prueba: 5 puntos que caen en distintos bloques (según partición 2x2 en [-2,2]^2)

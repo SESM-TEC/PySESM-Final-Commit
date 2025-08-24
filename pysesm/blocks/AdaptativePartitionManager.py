@@ -19,7 +19,7 @@ from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
+from pysesm.device_manager.DeviceManager import DeviceManager
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
@@ -52,7 +52,7 @@ class AdaptativePartitionManager(BlockManager):
         self,
         config: AdaptativePartitionConfig,
         logger: logging.Logger,
-        device_manager=None,
+        device_manager: DeviceManager =None,
         sparse_coding_layer_hook=None
     ):
         """
@@ -79,10 +79,7 @@ class AdaptativePartitionManager(BlockManager):
         self.splits: int = 0
         self.initial_bounds = None
         self.kdtree: KDTree = None
-        self.device_manager: device_manager = device_manager
-        self.device="cpu"
-        if self.device_manager is not None:
-            self.device=device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        self.device_manager: DeviceManager = device_manager              
 
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
         """
@@ -348,7 +345,7 @@ class AdaptativePartitionManager(BlockManager):
         Returns:
             List[PartitionBlock]: A list of active blocks corresponding to the test data.
         """
-        device = self.device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+        device = self.device
         X = X.to(device)
         y = y.to(device).unsqueeze(-1)
 
