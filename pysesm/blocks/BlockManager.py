@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Union, Callable, Optional
 
 import logging
+import warnings
 import torch
 from numpy.typing import NDArray
 
@@ -211,11 +212,56 @@ class BlockManager(ABC):
         """
         
 
-    @abstractmethod
     def retrieve_test_active_blocks(self, X: torch.Tensor, y: torch.Tensor):
         """
         Provided a tensor with test data, return a list of the PartitionBlock
         objects with their data replaced by those points in the provided test
         set assigend to the corresponding blocks.
+
+        .. deprecated:: 
+           This method is deprecated. Use retrieve_training_blocks() or 
+           retrieve_inference_blocks() instead.
         """
+        warnings.warn("retrieve_test_active_blocks is deprecated. Use retrieve_training_blocks "
+                     "or retrieve_inference_blocks instead.", DeprecationWarning, stacklevel=2)
+        return self.retrieve_training_blocks(X, y)
         
+    @abstractmethod
+    def _retrieve_blocks_generic(self, X: torch.Tensor, y: torch.Tensor = None, for_inference: bool = False):
+        """
+        Generic method to retrieve blocks for both training and inference.
+        Subclasses must implement the specific logic for their partitioning strategy.
+        
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor, optional): Target data. If None, creates dummy targets.
+            for_inference (bool): If True, clears target data after mapping.
+            
+        Returns:
+            List[PartitionBlock]: A list of active blocks.
+        """
+
+    def retrieve_training_blocks(self, X: torch.Tensor, y: torch.Tensor):
+        """
+        Retrieves active blocks for training/validation purposes.
+        
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor): Target data of shape (n_samples,).
+            
+        Returns:
+            List[PartitionBlock]: A list of active blocks with training data.
+        """
+        return self._retrieve_blocks_generic(X, y, for_inference=False)
+        
+    def retrieve_inference_blocks(self, X: torch.Tensor):
+        """
+        Retrieves active blocks for inference/prediction purposes.
+        
+        Args:
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            
+        Returns:
+            List[PartitionBlock]: A list of active blocks ready for prediction.
+        """
+        return self._retrieve_blocks_generic(X, y=None, for_inference=True)

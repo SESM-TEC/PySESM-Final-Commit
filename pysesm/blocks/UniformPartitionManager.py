@@ -377,39 +377,53 @@ class UniformPartitionManager(BlockManager):
 
 
     
-    def retrieve_test_active_blocks(self, X, y):
+    def _retrieve_blocks_generic(self, X: torch.Tensor, y: torch.Tensor = None, for_inference: bool = False):
         """
-        Retrieves active blocks for testing purposes.
-
+        Generic method to retrieve blocks for both training and inference.
+        
         Args:
-            X (torch.Tensor): Test input data of shape (n_samples, n_features).
-            y (torch.Tensor): Test target data of shape (n_samples,).
-
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor, optional): Target data. If None, creates dummy targets.
+            for_inference (bool): If True, clears target data after mapping.
+            
         Returns:
-            List[PartitionBlock]: A list of active blocks corresponding to the test data.
+            List[PartitionBlock]: A list of active blocks.
         """
         X = X.to(self.device)
-        y = y.to(self.device)
-
-
-        # 1. Create the new test block structure and transfer learned properties
-        test_blocks = self._create_test_block_structure()
+        
+        # Handle y parameter
+        if y is not None:
+            y = y.to(self.device)
+        else:
+            # Create dummy y for spatial mapping
+            y = torch.zeros(X.shape[0], 1, device=self.device)
+        
+        # Create the block structure and transfer learned properties
+        temp_blocks = self._create_test_block_structure()
             
-        # Temporarily use the test_blocks for mapping
-        temp_current_blocks = self.blocks
-        self.blocks = test_blocks
+        # Temporarily use temp_blocks for mapping
+        original_blocks = self.blocks
+        self.blocks = temp_blocks
 
-        # 2. Map test points into test blocks. This populates new_pb.X, new_pb.y.
+        # Map points into blocks
         self._map_points(X, y, expand_scope=False)
 
-        # 3. Prepare target for inference using the transferred amplitude
-        self._prepare_test_block_targets(self.blocks) # Pass self.blocks (which is test_blocks temporarily)
+        if for_inference:
+            # Clear target data for inference (we only needed y for spatial mapping)
+            for idx in np.ndindex(self.blocks.shape):
+                block = self.blocks[idx]
+                if block.is_active:
+                    block.y = []
+                    block.target = None
+        else:
+            # Prepare targets for training/validation
+            self._prepare_test_block_targets(self.blocks)
 
-        # 4. Normalize X coordinates for test blocks
-        self._vectorized_normalization(self.blocks) # Calls normalize_points on each block
+        # Normalize X coordinates
+        self._vectorized_normalization(self.blocks)
 
-        # 5. Retrieve mapped test blocks and restore original blocks
-        test_active_blocks = self.retrieve_active_blocks() # Retrieves from current self.blocks (test_blocks)
-        self.blocks = temp_current_blocks # Restore original training blocks
-
-        return test_active_blocks
+        # Retrieve active blocks and restore original blocks
+        active_blocks = self.retrieve_active_blocks()
+        self.blocks = original_blocks
+ 
+        return active_blocks

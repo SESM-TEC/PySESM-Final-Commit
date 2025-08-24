@@ -334,52 +334,73 @@ class AdaptativePartitionManager(BlockManager):
         return test_blocks
 
 
-    def retrieve_test_active_blocks(self, X, y):
+    def _retrieve_blocks_generic(self, X: torch.Tensor, 
+                                 y: torch.Tensor = None, 
+                                 for_inference: bool = False):
+
         """
-        Retrieves active blocks for testing purposes.
+        Generic method to retrieve blocks for both training and inference.
 
         Args:
-            X (torch.Tensor): Test input data of shape (n_samples, n_features).
-            y (torch.Tensor): Test target data of shape (n_samples,).
+            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            y (torch.Tensor, optional): Target data. If None, creates dummy targets.
+            for_inference (bool): If True, clears target data after mapping.
 
         Returns:
-            List[PartitionBlock]: A list of active blocks corresponding to the test data.
+            List[PartitionBlock]: A list of active blocks.
         """
         device = self.device
         X = X.to(device)
-        y = y.to(device).unsqueeze(-1)
 
-        #Configures test data and starts splitting the data without changing the tree
+        # Handle y parameter
+        if y is not None:
+            y = y.to(device)
+            if y.dim() == 1:
+                y = y.unsqueeze(-1)
+        else:
+            # Create dummy y for spatial mapping
+            y = torch.zeros(X.shape[0], 1, device=device)
+
+        # Configure data and start splitting without changing the tree
         self.kdtree.root.Data.test_data=X
         self.kdtree.root.Data.test_y=y
         self.kdtree._splitDataInNodes_test(self.kdtree.root)
               
-        test_blocks=self._create_test_block_structure()
+        blocks_structure=self._create_test_block_structure()
 
-        assert test_blocks.size > 0
-        for block in test_blocks:
+        assert blocks_structure.size > 0
+        for block in blocks_structure:
             assert block.X!=[]
 
-        #Normalizes test data
-        self._vectorized_normalization(test_blocks)
-        
-        # Configure blocks:
-        for index in np.ndindex(self.blocks.shape):
-            block = self.blocks[index]
-            if len(block.y) != 0:
-                block.target = torch.stack([value * block.amplitude for value in block.y])
-                if block.target.dim() == 1:
-                    block.target = block.target.unsqueeze(-1)
-                block.target = block.target.detach()
+        #Normalizes data
+        self._vectorized_normalization(blocks_structure)
 
-        #retrieve_active_test_blocks
-        test_active_blocks = [
-            test_blocks[index]
-            for index in np.ndindex(test_blocks.shape)
-            if test_blocks[index].is_active
+        # Configure blocks
+        if for_inference:
+            # For inference, clear target data (we only needed y for spatial mapping)
+            for index in np.ndindex(blocks_structure.shape):
+                block = blocks_structure[index]
+                if block.is_active:
+                    block.y = []
+                    block.target = None
+        else:
+            # For training/validation, prepare targets
+            for index in np.ndindex(self.blocks.shape):
+                block = self.blocks[index]
+                if len(block.y) != 0:
+                    block.target = torch.stack([value * block.amplitude for value in block.y])
+                    if block.target.dim() == 1:
+                        block.target = block.target.unsqueeze(-1)
+                    block.target = block.target.detach()
+
+        # Get active blocks
+        active_blocks = [
+            blocks_structure[index]
+            for index in np.ndindex(blocks_structure.shape)
+            if blocks_structure[index].is_active
             ]
         
-        #Reconfigure kdtree and blocks to leave them as they were
+        # Reconfigure kdtree and blocks to leave them as they were
         self._map_points()
 
-        return test_active_blocks
+        return active_blocks
