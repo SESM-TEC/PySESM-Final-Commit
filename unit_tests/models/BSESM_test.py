@@ -2,7 +2,6 @@
 
 import logging
 from unittest.mock import MagicMock, call, patch
-from typing import Optional, List
 
 import pytest
 import torch
