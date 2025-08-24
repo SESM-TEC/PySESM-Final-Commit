@@ -304,7 +304,25 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_evaluated_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device) for block in active_blocks]
     mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
 
-    # Initialize model.global_sparse_coding_layer.h for the test
+    # Define a side_effect for mock_dict_partial_fit to simulate its real behavior
+    def simulate_dict_partial_fit_side_effect(X, y, h, log_losses=True):
+        # In a real scenario, partial_fit calls self.forward and assigns self.dictionary
+        # Here we directly call the mocked forward mockeado (which has a return_value configured)
+        # and then we assigned the result to the dictonary attribute of the real instance
+        model.dictionary_layer.dictionary = model.dictionary_layer.forward(X)
+        if log_losses:
+            model.dictionary_layer.losses.append(0.05) # Simulate a dummy loss
+    mock_dict_partial_fit.side_effect = simulate_dict_partial_fit_side_effect
+
+    # Simulate global_sparse_coding_layer.partial_fit updating its internal h.data
+    total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
+    mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
+    def simulate_global_sc_partial_fit_side_effect(y, dictionary, reset_state):
+        model.global_sparse_coding_layer.h.data = mock_optimized_h_mega.clone()
+        model.global_sparse_coding_layer.losses.append(0.01) # Simulate a loss
+    mock_global_sc_partial_fit.side_effect = simulate_global_sc_partial_fit_side_effect
+
+    # Initialize model.global_sparse_coding_layer.h for the test before the call
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
     model.global_sparse_coding_layer.config.n_functions = total_h_elements
     model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device)) # Initialize h correctly
@@ -319,11 +337,11 @@ def test_bsesm_global_train_step_orchestration(
     model.global_sparse_coding_layer.losses = [0.1, 0.2, 0.3] # Add some dummy losses
 
     # Simulate dictionary layer updating its own losses
-    model.dictionary_layer.losses = [0.4, 0.5, 0.6]
+    model.dictionary_layer.losses = [0.4, 0.5]
 
     # Call the method under test
-    model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, epoch=0)
-
+    returned_h_nested = model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, epoch=0)
+    
     # Assertions for dictionary training
     mock_dict_partial_fit.assert_called_once_with(X=X_nested, y=y_nested, h=h_nested_initial)
 
@@ -342,14 +360,12 @@ def test_bsesm_global_train_step_orchestration(
     assert torch.allclose(actual_y_arg, expected_Y_mega), "Y_mega passed to global SC partial_fit is incorrect"
     assert torch.allclose(actual_dictionary_arg, expected_D_mega), "D_mega passed to global SC partial_fit is incorrect"
     
-    # Verify h distribution back to individual blocks
-    current_h_split_sizes = [block.sparse_coding_layer.h.shape[0] for block in active_blocks]
-    split_mock_optimized_h_mega = torch.split(mock_optimized_h_mega, current_h_split_sizes, dim=0)
-
-    for i, block in enumerate(active_blocks):
-        assert torch.allclose(block.sparse_coding_layer.h.data, split_mock_optimized_h_mega[i]), \
-            f"H mismatch for block {i}"
-
+    # Verify that global_sparse_coding_layer.h.data was updated by the mock
+    assert torch.allclose(model.global_sparse_coding_layer.h.data, mock_optimized_h_mega)
+    # Verify that the returned h_nested is correctly updated with mock_optimized_h_mega
+    assert returned_h_nested.is_nested
+    assert torch.allclose(returned_h_nested.values(), mock_optimized_h_mega)
+    
     # Verify that the mocked layers' internal loss lists were updated
     assert len(model.dictionary_layer.losses) > 0, "Dictionary layer losses should be populated"
     assert len(model.global_sparse_coding_layer.losses) > 0, "Global SC layer losses should be populated"
