@@ -306,6 +306,7 @@ def test_bsesm_global_train_step_orchestration(
 
     # Initialize model.global_sparse_coding_layer.h for the test
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
+    model.global_sparse_coding_layer.config.n_functions = total_h_elements
     model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device)) # Initialize h correctly
 
     # Simulate global_sparse_coding_layer.partial_fit output (optimized H_mega)
