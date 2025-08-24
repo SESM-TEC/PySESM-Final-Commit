@@ -1,6 +1,7 @@
 import pytest
 import torch
 import logging
+from pysesm.utils.loggers import setup_logger
 import numpy as np
 from typing import Union, Optional
 
