@@ -387,7 +387,7 @@ class SESM(torch.nn.Module, ABC):
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self._block_train_step(block=block,epoch=permutation)
+            self._block_train_step(block=block,epoch=permutation+epoch)
 
             self.elapsed_time += time.time() - epoch_start_time
             

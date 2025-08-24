@@ -116,7 +116,7 @@ def bsesm_config_fixture():
     )
 
 @pytest.fixture
-def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture, common_evaluation_func):
+def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture): # Removed common_evaluation_func here, it's passed in nested_tensor_data_generator
     # Create a BSESM instance, ensuring evaluation_func is passed correctly
     model = BSESM(
         config=bsesm_config_fixture,
@@ -126,10 +126,11 @@ def sample_bsesm_model(bsesm_config_fixture, device_manager_fixture, common_eval
     return model
 
 @pytest.fixture
-def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture):
+def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture, common_evaluation_func):
     """
-    Generates mock active blocks and corresponding NestedTensor data for tests.
+    Generates active blocks and corresponding NestedTensor data for tests.
     Returns: (X_nested, y_nested, h_nested, active_blocks)
+    The sparse_coding_layer within each PartitionBlock is now a real ISTALayer instance.
     """
     def _generator(num_blocks: int, min_samples_per_block: int, max_samples_per_block: int, random_seed: int = 42):
         torch.manual_seed(random_seed)
@@ -139,7 +140,7 @@ def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture):
         n_features = bsesm_config_fixture.n_features
         n_functions = bsesm_config_fixture.sparse_coding_config.n_functions
 
-        mock_active_blocks = []
+        active_blocks = []
         X_list, y_list, h_list = [], [], []
 
         dummy_space_origin = torch.tensor([-2.0, -2.0], device=device)
@@ -155,28 +156,28 @@ def nested_tensor_data_generator(device_manager_fixture, bsesm_config_fixture):
             block.amplitude = 1.0 # Simple amplitude for testing
             block.positions = list(range(i * min_samples_per_block, i * min_samples_per_block + num_samples)) # Dummy positions
 
-            # Attach a mock sparse_coding_layer with a Parameter 'h'
-            mock_sc_layer = MagicMock(spec=ISTALayer)
-            # Ensure the 'h' attribute is a real Parameter object as expected by code base
-            mock_sc_layer.h = torch.nn.Parameter(torch.randn(n_functions, 1, device=device, dtype=torch.float32))
-            mock_sc_layer.device = device # Important for device assertions
-            mock_sc_layer.losses = [] # Mock losses list
-            mock_sc_layer.config = bsesm_config_fixture.sparse_coding_config # Mock config
-            block.sparse_coding_layer = mock_sc_layer
+            # Create a real ISTALayer instance for the block
+            sparse_coding_layer_instance = ISTALayer(
+                config=bsesm_config_fixture.sparse_coding_config,
+                evaluation_func=common_evaluation_func,
+                logger=logging.getLogger(f"test_istalayer_block_{i}"),
+                device=device
+            )
+            # ISTALayer's __init__ calls setup() which initializes h as a Parameter
+            block.sparse_coding_layer = sparse_coding_layer_instance
             
-            mock_active_blocks.append(block)
+            active_blocks.append(block)
             X_list.append(block.normalized_X)
             y_list.append(block.target)
-            h_list.append(block.sparse_coding_layer.h.detach().clone()) # Detach h for dictionary training
+            h_list.append(block.sparse_coding_layer.h.detach().clone()) # This will now be a real tensor
 
         # Convert to NestedTensors if lists are not empty
         X_nested = torch.nested.nested_tensor(X_list, layout=torch.jagged, device=device) if X_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
         y_nested = torch.nested.nested_tensor(y_list, layout=torch.jagged, device=device) if y_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
         h_nested = torch.nested.nested_tensor(h_list, layout=torch.jagged, device=device) if h_list else torch.nested.nested_tensor([], layout=torch.jagged, device=device)
 
-        return X_nested, y_nested, h_nested, mock_active_blocks
+        return X_nested, y_nested, h_nested, active_blocks
     return _generator
-
 
 # --- Tests for BSESM Class ---
 
@@ -204,7 +205,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
     mock_add_points,
     mock_global_train_step,
     sample_bsesm_model, bsesm_config_fixture, nested_tensor_data_generator,
-    device_manager_fixture
+    device_manager_fixture, common_evaluation_func # Pass common_evaluation_func here
 ):
     """
     Test that partial_fit orchestrates the main model_epochs loop and calls
@@ -222,6 +223,9 @@ def test_bsesm_partial_fit_model_epochs_loop(
     mock_retrieve_active_blocks.return_value = active_blocks
     mock_aggregate_block_data.return_value = (X_nested, y_nested, h_nested)
     
+    # Configure mock_global_train_step to return a valid h_nested (e.g., the input one)
+    mock_global_train_step.return_value = h_nested
+
     # Simulate internal loss updates for logging check
     model.dictionary_layer.losses = [0.5, 0.4, 0.3] * model_epochs # Ensure enough entries
     model.global_sparse_coding_layer.losses = [0.6, 0.5, 0.4] * model_epochs # Ensure enough entries
@@ -234,7 +238,11 @@ def test_bsesm_partial_fit_model_epochs_loop(
 
     # Assertions
     mock_add_points.assert_called_once_with(X_input, y_input)
-    mock_init_sc_per_block.assert_called_once()
+    # The common_evaluation_func needs to be passed to init_sparse_coding_per_block
+    mock_init_sc_per_block.assert_called_once_with(
+        config=bsesm_config_fixture.sparse_coding_config,
+        evaluation_func=model.evaluation_func # Pass model's evaluation_func
+    )
     mock_retrieve_active_blocks.assert_called_once()
     mock_aggregate_block_data.assert_called_once_with(active_blocks)
 
@@ -253,7 +261,12 @@ def test_bsesm_partial_fit_model_epochs_loop(
     # For detailed log checks, a separate test with caplog fixture would be better.
 
     # If sesm_hook is provided, verify it's called
+    # For this to work, model.sesm_hook must be a MagicMock if you want to assert its calls
+    # For simplicity, we are assuming it might be None or a callable.
+    # If the user wants to test the hook calls specifically, they would need to mock it in the test.
+    # Here, we just check if it was called if it was set up.
     if model.sesm_hook:
+        assert isinstance(model.sesm_hook, MagicMock), "sesm_hook must be a MagicMock for assertion"
         assert model.sesm_hook.call_count == model_epochs
         for i in range(model_epochs):
             call_args = model.sesm_hook.call_args_list[i]
@@ -273,7 +286,7 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_partial_fit,
     mock_dict_forward,
     mock_eval_func_bsesm, # This is BSESM.evaluation_func
-    sample_bsesm_model, nested_tensor_data_generator, device_manager_fixture
+    sample_bsesm_model, nested_tensor_data_generator, device_manager_fixture, common_evaluation_func # Pass common_evaluation_func
 ):
     """
     Test the _global_train_step method's orchestration of dictionary and sparse coding
@@ -291,18 +304,16 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_evaluated_list = [torch.randn(block.normalized_X.shape[0], n_functions, device=device) for block in active_blocks]
     mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
 
-    # Simulate that BSESM.partial_fit has already prepared global_sparse_coding_layer
-    # by updating its h.data and potentially setting up its internal state.
-    # We set h.data directly here, as _global_train_step expects it to be ready.
-    model.global_sparse_coding_layer.h.data = h_nested_initial.values().to(device)
-    # For ISTALayer, setup doesn't do much beyond h. For FISTA/ADMM, partial_fit handles reset.
-    
-    # Simulate global_sparse_coding_layer.partial_fit output (optimized H_mega)
+    # Initialize model.global_sparse_coding_layer.h for the test
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
+    model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device)) # Initialize h correctly
+
+    # Simulate global_sparse_coding_layer.partial_fit output (optimized H_mega)
     mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
     mock_global_sc_partial_fit.return_value = None # partial_fit returns None
     
-    # We need to manually set the h.data on the mocked global_sparse_coding_layer for the split to work
+    # We need to manually set the h.data on the GLOBAL sparse_coding_layer for the split to work
+    # This is effectively what the partial_fit of ISTALayer would do.
     model.global_sparse_coding_layer.h.data = mock_optimized_h_mega
     model.global_sparse_coding_layer.losses = [0.1, 0.2, 0.3] # Add some dummy losses
 
@@ -445,12 +456,12 @@ def test_bsesm_predict_workflow(sample_bsesm_model, device_manager_fixture, comm
     )
 
     # 2) Bloques activos reales para este set de test
-    active_blocks = model.partition_manager.retrieve_test_active_blocks(X_test_input, y_test_input)
-    assert isinstance(active_blocks, (list, tuple)) and len(active_blocks) > 0
+    test_active_blocks = model.partition_manager.retrieve_test_active_blocks(X_test_input, y_test_input)
+    assert isinstance(test_active_blocks, (list, tuple)) and len(test_active_blocks) > 0
 
     # 3) Fijar h de cada bloque a un valor fácil de verificar y amplitud = 1.0
     #    h_i = constante = (i+j+1) en cada entrada, con shape (n_functions, 1)
-    for block in active_blocks:
+    for block in test_active_blocks: # Iterate over test_active_blocks here
         i, j = block.block_index
         const_val = float(i + j + 1)
         h_param = torch.nn.Parameter(
@@ -465,7 +476,7 @@ def test_bsesm_predict_workflow(sample_bsesm_model, device_manager_fixture, comm
 
     # 4) Construir y_expected replicando la lógica de predict, pero por bloque
     y_expected = torch.empty_like(y_test_input)
-    for block in active_blocks:
+    for block in test_active_blocks: # Iterate over test_active_blocks here
         X_i = block.normalized_X  # (N_i, n_features)
         h_i = block.sparse_coding_layer.h  # (n_functions, 1)
 
@@ -505,3 +516,4 @@ if __name__ == "__main__":
         print_pytest_instructions()
     except ImportError:
         print("Please run this file using pytest. Example: pytest unit_tests/models/BSESM_test.py")
+
