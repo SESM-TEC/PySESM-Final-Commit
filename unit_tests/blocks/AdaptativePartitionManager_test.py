@@ -297,9 +297,8 @@ def test_retrieve_test_active_blocks(create_manager):
     partitionManager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
 
     Xt = torch.randn(500, n_features)
-    yt = torch.randn(500)
 
-    activeTestBlocks=partitionManager.retrieve_test_active_blocks(Xt,yt)
+    activeTestBlocks=partitionManager.retrieve_inference_blocks(Xt)
 
     X=torch.Tensor()
     for _, block in enumerate(activeTestBlocks):
@@ -323,4 +322,4 @@ def test_retrieve_test_active_blocks(create_manager):
     for block in activeTestBlocks:
         count+=len(block.positions)
     
-    assert count==len(yt)
+    assert count==Xt.shape[0]

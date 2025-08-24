@@ -12,6 +12,8 @@ License:
 from __future__ import annotations
 
 import logging
+import warnings
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
@@ -141,7 +143,7 @@ class SSESM(SESM):
 
             self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, _y: torch.Tensor = None) -> torch.Tensor:
         """
         Predict the output using the trained SSESM model with active sub-blocks.
 
@@ -152,14 +154,21 @@ class SSESM(SESM):
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            y (torch.Tensor): Target values, used to identify active blocks.
+            _y (torch.Tensor):  Deprecated parameter.  No longer needed.
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
-        active_blocks = self.partition_manager.retrieve_test_active_blocks(X, y)
 
-        y_pred_per_block = [0 for _ in range(len(y))]
+        if _y is not None:
+            warnings.warn("Deprecated behaviour: predict does not need y values",
+                          DeprecationWarning, stacklevel=2)
+
+        
+        active_blocks = self.partition_manager.retrieve_inference_blocks(X)
+
+        # Create tensor directly with correct shape and device
+        y_pred = torch.zeros(X.shape[0], 1, dtype=X.dtype, device=X.device)
         
         for block in active_blocks:
             # Use parent's predict with the block's sparse coding h
@@ -167,9 +176,9 @@ class SSESM(SESM):
             
             # Map predictions back to original positions
             for i, pos in enumerate(block.positions):
-                y_pred_per_block[pos] = block_pred[i].item() if block_pred[i].dim() == 0 else block_pred[i].cpu()
+                y_pred[pos, 0] = block_pred[i].item()
 
-        return torch.tensor(y_pred_per_block, dtype=X.dtype)
+        return y_pred
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
@@ -188,7 +197,7 @@ class SSESM(SESM):
                 - time (float): Total elapsed time for training (in minutes).
                 - mse (float): Mean Squared Error between predictions and true target values.
         """
-        y_pred = self.predict(X, y)
+        y_pred = self.predict(X)
         time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.cpu().numpy(), y.cpu().numpy())
         return y_pred, time, mse

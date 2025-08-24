@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
+
 from collections.abc import Callable
 
 from dataclasses import dataclass
@@ -337,34 +339,41 @@ class BSESM(SESM):
         self.partial_fit_count += 1
 
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, _y: torch.Tensor = None) -> torch.Tensor:
         """
         Predict the output using the trained BSESM model with active sub-blocks.
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            y (torch.Tensor): Target values (used to identify active blocks).
+            _y (torch.Tensor): Target values (used to identify active blocks).
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
-        if y.dim() == 1:
-            y = y.unsqueeze(-1)
 
-        test_active_blocks = self.partition_manager.retrieve_test_active_blocks(
-            X, y)
+        if _y is not None:
+            warnings.warn("Deprecated behaviour: predict does not need y values",
+                          DeprecationWarning, stacklevel=2)
+
         
-        if len(test_active_blocks) == 0:
+        active_blocks = self.partition_manager.retrieve_inference_blocks(X)
+        
+        if len(active_blocks) == 0:
             self.logger.warning("No active test blocks found. "
                                 "Returning empty prediction.")
-            return torch.empty_like(y, device=X.device, dtype=X.dtype)
+            return torch.zeros(X.shape[0], 1, device=X.device, dtype=X.dtype)
 
+        # Create final tensor directly with correct shape
+        y_final_predictions = torch.zeros(X.shape[0], 1,
+                                          device=X.device,
+                                          dtype=X.dtype)
+
+        
         # Aggregate test data into a nested_tensor for efficient batch evaluation
-        X_list_test = [block.normalized_X for block in test_active_blocks]
+        X_list_test = [block.normalized_X for block in active_blocks]
         X_nested_test = torch.nested.nested_tensor(
             X_list_test, layout=torch.jagged,
-            device=self.device_manager.get_device(
-                DeviceTarget.DICTIONARY_LAYER))
+            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
 
         with torch.no_grad():
             # Evaluate the dictionary for all test blocks at once -> returns a
@@ -375,30 +384,25 @@ class BSESM(SESM):
             # Perform prediction for each block using its specific evaluated
             # dictionary and learned h
             y_pred_normalized_list = [
-                self.evaluation_func(dict_i, block.sparse_coding_layer.h)
-                for dict_i, block in zip(dict_list_test, test_active_blocks)
+                self.evaluation_func(dict_i, block.sparse_coding_layer.h) \
+                for dict_i, block in zip(dict_list_test, active_blocks)
             ]
 
-        # Denormalize and reconstruct the final output tensor
-        # Ensure y_final_predictions is created with the correct shape and device
-        y_final_predictions = torch.zeros(y.shape[0], device=X.device,
-                                          dtype=X.dtype)
-        
-        for i, block in enumerate(test_active_blocks):
+
+        # Fill predictions directly into final tensor
+        for i, block in enumerate(active_blocks):
             # The y_pred_normalized_list elements are (N_samples_in_block, 1)
-            block_preds_unnormalized = \
-                y_pred_normalized_list[i] / block.amplitude
-            y_final_predictions[block.positions] = \
-                block_preds_unnormalized.squeeze()
-            
-        return y_final_predictions.view_as(y)
+            block_preds_unnormalized = y_pred_normalized_list[i] / block.amplitude
+            y_final_predictions[block.positions, 0] = block_preds_unnormalized[:,0]
+        
+        return y_final_predictions
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
         Evaluate the model's performance on a given dataset using active
         sub-blocks.
         """
-        y_pred = self.predict(X, y)
+        y_pred = self.predict(X)
         current_time = self.elapsed_time / 60
         mse = mean_squared_error(y_pred.cpu().numpy(), y.cpu().numpy())
         return y_pred, current_time, mse

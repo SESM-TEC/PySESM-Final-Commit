@@ -147,7 +147,7 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     model.set_mock_eval_output(block_index_tuple=(1,1), output_value=0.8) # Predicción cruda para bloque (1,1)
 
     # 6. Llamar a predict()
-    y_final_predictions = model.predict(X_test, y_test)
+    y_final_predictions = model.predict(X_test)
 
     # 7. Verificar las predicciones finales
     # Para el primer punto de prueba (mapeado al bloque (0,0)):
@@ -159,7 +159,7 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     #   - Predicción cruda mockeada para este bloque es 0.8.
     #   - Predicción final = PredicciónCruda / Amplitud = 0.8 / 1.0 = 0.8.
 
-    expected_final_predictions = torch.tensor([5.0,0.8], device=device, dtype=torch.float32)
+    expected_final_predictions = torch.tensor([[5.0],[0.8]], device=device, dtype=torch.float32)
 
     assert y_final_predictions.shape == expected_final_predictions.shape
     assert torch.allclose(y_final_predictions, expected_final_predictions, atol=1e-5), \

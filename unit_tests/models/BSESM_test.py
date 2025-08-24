@@ -304,7 +304,7 @@ def test_bsesm_global_train_step_orchestration(
     mock_dict_forward.return_value = torch.nested.nested_tensor(mock_dict_evaluated_list, layout=torch.jagged, device=device)
 
     # Define a side_effect for mock_dict_partial_fit to simulate its real behavior
-    def simulate_dict_partial_fit_side_effect(X, _y, _h, log_losses=True):
+    def simulate_dict_partial_fit_side_effect(X, y=None, h=None, log_losses=None, **kwargs):
         # In a real scenario, partial_fit calls self.forward and assigns self.dictionary
         # Here we directly call the mocked forward mockeado (which has a return_value configured)
         # and then we assigned the result to the dictonary attribute of the real instance
@@ -316,7 +316,7 @@ def test_bsesm_global_train_step_orchestration(
     # Simulate global_sparse_coding_layer.partial_fit updating its internal h.data
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
     mock_optimized_h_mega = torch.randn(total_h_elements, 1, device=device)
-    def simulate_global_sc_partial_fit_side_effect(_y, _dictionary, _reset_state):
+    def simulate_global_sc_partial_fit_side_effect(y=None, dictionary=None, reset_state=None):
         model.global_sparse_coding_layer.h.data = mock_optimized_h_mega.clone()
         model.global_sparse_coding_layer.losses.append(0.01) # Simulate a loss
     mock_global_sc_partial_fit.side_effect = simulate_global_sc_partial_fit_side_effect
@@ -472,7 +472,7 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _device_manager_fixture, _c
     )
 
     # 2) Bloques activos reales para este set de test
-    test_active_blocks = model.partition_manager.retrieve_test_active_blocks(X_test_input, y_test_input)
+    test_active_blocks = model.partition_manager.retrieve_training_blocks(X_test_input, y_test_input)
     assert isinstance(test_active_blocks, (list, tuple)) and len(test_active_blocks) > 0
 
     # 3) Fijar h de cada bloque a un valor fácil de verificar y amplitud = 1.0
@@ -511,7 +511,7 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _device_manager_fixture, _c
             y_expected[original_pos] = y_i[local_idx]
 
     # 5) Llamar a predict (flujo completo real)
-    y_predicted_actual = model.predict(X_test_input, y_test_input)
+    y_predicted_actual = model.predict(X_test_input)
 
     # 6) Asserts básicos de forma y dispositivo
     assert isinstance(y_predicted_actual, torch.Tensor)

@@ -223,9 +223,8 @@ def test_manager_retrieve_test_blocks_normalization_values_conceptual(uniform_ma
         [ 0.5, -1.5], # Para bloque (1,0) conceptual: x en [0,2], y en [-2,0]
         [ 1.5,  0.5]  # Para bloque (1,1) conceptual: x,y en [0,2]
     ], device=device, dtype=torch.float32)
-    y_test = torch.tensor([[0.1], [0.2], [0.3], [0.4]], device=device, dtype=torch.float32)
 
-    test_active_blocks = manager.retrieve_test_active_blocks(X_test, y_test)
+    test_active_blocks = manager.retrieve_inference_blocks(X_test)
     assert len(test_active_blocks) == 4
 
     expected_conceptual_origins_and_points = {

@@ -356,9 +356,8 @@ def test_retrieve_test_active_blocks_isolation_old(create_manager):
 
     # Test data to be mapped into the test blocks
     X_test = torch.tensor([[0.15, 0.15], [0.25, 0.25], [0.7, 0.7]], device='cpu', dtype=torch.float32)
-    y_test = torch.tensor([[3.0], [4.0], [5.0]], device='cpu', dtype=torch.float32)
 
-    test_active_blocks = manager.retrieve_test_active_blocks(X_test, y_test)
+    test_active_blocks = manager.retrieve_inference_blocks(X_test)
 
     # 1. Assert original manager's blocks array reference is unchanged
     assert manager.blocks is original_blocks_ref
@@ -379,7 +378,7 @@ def test_retrieve_test_active_blocks_isolation_old(create_manager):
     assert torch.allclose(test_block_0_0.X[0], X_test[0])
     assert torch.allclose(test_block_0_0.X[1], X_test[1])
     assert test_block_0_0.normalized_X is not None
-    assert test_block_0_0.target is not None
+    # assert test_block_0_0.target is not None
 
     # 5. Assert test blocks point to the *original* sparse_coding_layer instances
     if original_sc_layer_ref:
@@ -455,7 +454,7 @@ def test_retrieve_test_active_blocks_isolation(create_manager):
     test_X = torch.tensor([[0.15, 0.15], [0.25, 0.25], [0.7, 0.7]], device='cpu', dtype=torch.float32)
     test_y = torch.tensor([[3.0], [4.0], [5.0]], device='cpu', dtype=torch.float32)
 
-    test_active_blocks = manager.retrieve_test_active_blocks(test_X, test_y)
+    test_active_blocks = manager.retrieve_training_blocks(test_X, test_y)
 
     # 1. Assert original manager's blocks array reference is unchanged
     assert manager.blocks is original_blocks_ref
