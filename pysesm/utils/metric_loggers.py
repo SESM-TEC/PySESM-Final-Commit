@@ -1,28 +1,30 @@
 from __future__ import annotations
 
+import logging
 import wandb
 
 
-def log_to_console(layer_name: str, info):
+
+def log_to_console(layer_name: str, info: str):
     """
     Handles logging to console
     
     Args:
         layer_name (str): Name of the layer being logged
-        info: Dictionary of metrics to log
+        info (str): Dictionary of metrics to log
     """
     log_message = f"{layer_name} - " + ", ".join(f"{k}: {v}" for k, v in info.items())
     print(log_message)
 
-def log_to_WB(layer_name, info, logger=None, project_name=None):
+def log_to_WB(layer_name: str, info: str, logger: logging.Logger=None, project_name: str=None):
     """
     Generic logging hook that can output to logger and/or wandb
     
     Args:
-        layer_name: Name of the layer being logged
-        info: Dictionary of metrics to log
-        logger: Logger instance from setup_logger()
-        project_name: Name of the project in Weights & Biases
+        layer_name (str): Name of the layer being logged
+        info (str): Dictionary of metrics to log
+        logger (logging.Logger): Logger instance from setup_logger()
+        project_name (str): Name of the project in Weights & Biases
     """
     # Console output
     log_message = f"{layer_name} - " + ", ".join(f"{k}: {v}" for k, v in info.items())

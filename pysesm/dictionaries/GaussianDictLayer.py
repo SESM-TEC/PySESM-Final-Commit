@@ -33,7 +33,7 @@ class GaussianDictLayer(DictBaseLayer):
     """Dictionary layer using Gaussian basis functions"""
     
     CONFIG_CLASS = GaussianDictConfig
-    
+
     def __init__(
         self,
         config: GaussianDictConfig,
@@ -93,20 +93,20 @@ class GaussianDictLayer(DictBaseLayer):
         if self.config.split_mu_rho:
             # Training mu (mean) parameters
             if self.config.mu_epochs > 0:
-                for epoch in range(self.config.mu_epochs):
-                    loss = self._train_epoch(X=X, y=y, h=h, 
-                                             log_losses=log_losses, mu_flag=True, rho_flag=False)
+                for _ in range(self.config.mu_epochs):
+                    self._train_epoch(X=X, y=y, h=h, 
+                                      log_losses=log_losses, mu_flag=True, rho_flag=False)
 
             # Training rho (covariance) parameters
             if self.config.rho_epochs > 0:
-                for epoch in range(self.config.rho_epochs):
-                    loss = self._train_epoch(X=X, y=y, h=h, 
-                                             log_losses=log_losses, mu_flag=False, rho_flag=True)
+                for _ in range(self.config.rho_epochs):
+                    self._train_epoch(X=X, y=y, h=h, 
+                                      log_losses=log_losses, mu_flag=False, rho_flag=True)
         else:
             # Joint training of all parameters
-            for epoch in range(self.config.epochs):
-                loss = self._train_epoch(X=X, y=y, h=h, 
-                                         log_losses=log_losses, mu_flag=True, rho_flag=True)
+            for _ in range(self.config.epochs):
+                self._train_epoch(X=X, y=y, h=h, 
+                                  log_losses=log_losses, mu_flag=True, rho_flag=True)
 
     # --- Override _add_hook_info to provide mu/rho specific info ---
     def _add_hook_info(self, hook_info: dict, **eval_kwargs):

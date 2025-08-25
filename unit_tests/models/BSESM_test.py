@@ -248,7 +248,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
     # Verify _global_train_step is called correct number of times with correct arguments
     assert mock_global_train_step.call_count == model_epochs
     for i in range(model_epochs):
-        mock_global_train_step.assert_any_call(X_nested, y_nested, h_nested, active_blocks, i)
+        mock_global_train_step.assert_any_call(X_nested, y_nested, h_nested, i)
     
     # Verify elapsed_time and partial_fit_count are updated
     assert model.elapsed_time > initial_elapsed_time
@@ -339,7 +339,10 @@ def test_bsesm_global_train_step_orchestration(
     model.dictionary_layer.losses = [0.4, 0.5]
 
     # Call the method under test
-    returned_h_nested = model._global_train_step(X_nested, y_nested, h_nested_initial, active_blocks, epoch=0)
+    returned_h_nested = model._global_train_step(X_nested=X_nested,
+                                                 y_nested=y_nested,
+                                                 h_nested=h_nested_initial,
+                                                 epoch=0)
     
     # Assertions for dictionary training
     mock_dict_partial_fit.assert_called_once_with(X=X_nested, y=y_nested, h=h_nested_initial)

@@ -32,7 +32,7 @@ def setup_logger(name: str = 'pysesm', level: int = logging.INFO,
     Returns:
         logging.Logger: Configured logger instance.
     """
-    global _configured_loggers
+    # global _configured_loggers
 
     logger = logging.getLogger(name)
     logger.setLevel(level)  
@@ -70,7 +70,7 @@ def setup_logger(name: str = 'pysesm', level: int = logging.INFO,
             except Exception as e:
                 # Loggear una advertencia si no se puede crear el archivo de log
                 # Usamos el logger root temporalmente ya que nuestro logger aún no está completamente configurado
-                root_logger.warning(f"Could not set up file handler for '{log_file}': {e}")
+                root_logger.warning("Could not set up file handler for %s: %s",log_file, e)
         
         
         # Opcional: Desactivar la propagación al logger root

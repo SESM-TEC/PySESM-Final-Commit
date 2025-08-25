@@ -8,14 +8,21 @@ from pysesm.utils_dataset.mesh_generation import generate_mu, generate_mesh_samp
 
 def generate_gaussian_dataset(
     n_samples: int,
-    means: list[tuple[float, float]] = [(1, 1), (1, -1), (-1, -1)],
-    variances: list[float] = [0.15, 0.5, 0.75],
-    weights: list[float] = [1.25, 0.5, 0.75],
-    limits: tuple[float, float] = (-2, 2),
+    means: list[tuple[float, float]] = None,
+    variances: list[float] = None,
+    weights: list[float] = None,
+    limits: tuple[float, float] = None,
     mesh_divisions: int = 50
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Create a dataset from a weighted mixture of gaussians with customizable parameters.
+
+    There are three fixed gaussians, from which data is sampled.
+
+    The generated dictionaries hold the column vectors you would use with plot
+    functions, whereas the X_train, X_test and their corresponding y values hold
+    the data as you need for training.
+
 
     Args:
         n_samples (int): Number of random samples to generate for training
@@ -34,6 +41,20 @@ def generate_gaussian_dataset(
             - X_test (torch.Tensor): Test input features
             - y_test (torch.Tensor): Test target values
     """
+
+    # Safe default values of mutable types:
+    if means is None:
+        means = [(1, 1), (1, -1), (-1, -1)]
+
+    if variances is None:
+        variances = [0.15, 0.5, 0.75]
+
+    if weights is None:
+        weights = [1.25, 0.5, 0.75]
+
+    if limits is None:
+        limits = (-2, 2)
+
     # Validate input lengths
     if not (len(means) == len(variances) == len(weights)):
         raise ValueError("means, variances and weights must have the same length")
@@ -67,7 +88,7 @@ def generate_gaussian_dataset(
 def generate_custom_function_dataset(
     n_samples: int,
     function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    function_params: dict = {},
+    function_params: dict = None,
     limits: tuple[float, float] = (-2, 2),
     mesh_divisions: int = 50
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
@@ -84,7 +105,14 @@ def generate_custom_function_dataset(
     Returns:
         tuple: Train and test datasets (dicts and tensors).
     """
+
+    if function_params is None:
+        function_params = {}
+
     low_lim, high_lim = limits
+
+
+
 
     # Generate mesh grid
     x_lin = torch.linspace(low_lim, high_lim, mesh_divisions)
@@ -111,7 +139,7 @@ def generate_custom_nd_function_dataset(
     n_samples: int,
     n_dimensions: int,
     function: Callable[[torch.Tensor], torch.Tensor],
-    function_params: dict = {},
+    function_params: dict = None,
     limits: tuple[float, float] = (-2.0, 2.0),
     mesh_divisions: int = 50
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
@@ -129,6 +157,10 @@ def generate_custom_nd_function_dataset(
     Returns:
         tuple: Train and test datasets (dicts and tensors).
     """
+
+    if function_params is None:
+        function_params = {}
+
     low_lim, high_lim = limits
 
     # Generate mesh grid for test data

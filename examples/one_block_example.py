@@ -316,7 +316,12 @@ try:
 
     logging.info("Model: %s, MSE Value = %.6f, time = %.6f", model.__class__.__name__, mse_value, time)
 
-    plot_surface(testDataset, X_train, y_train, y_predicted, model, experiment["hyp_set"])
+    plot_surface(test_dataset=testDataset,
+                 X_train=X_train,
+                 y_train=y_train,
+                 y_pred=y_predicted,
+                 model=model,
+                 hypset=experiment["hyp_set"])
 
     plt.show(block=True)
 

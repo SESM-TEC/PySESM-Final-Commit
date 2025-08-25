@@ -179,7 +179,6 @@ class BSESM(SESM):
                            X_nested: TensorBatch,
                            y_nested: TensorBatch,
                            h_nested: TensorBatch,
-                           active_blocks: list[PartitionBlock],
                            epoch: int):
         """
         Performs a single global training step for the BSESM model.
@@ -190,7 +189,6 @@ class BSESM(SESM):
             X_nested (TensorBatch): Aggregated normalized input features for all active blocks.
             y_nested (TensorBatch): Aggregated target values for all active blocks.
             h_nested (TensorBatch): Aggregated sparse coding vectors for all active blocks.
-            active_blocks (List[PartitionBlock]): List of PartitionBlock objects currently active.
             epoch (int): The current SESM model epoch.
 
         Returns:
@@ -296,7 +294,7 @@ class BSESM(SESM):
             epoch_start_time = time.time()
 
             # Perform a single global training step and get updated h_nested
-            h_nested = self._global_train_step(X_nested, y_nested, h_nested, active_blocks, epoch)
+            h_nested = self._global_train_step(X_nested, y_nested, h_nested, epoch)
 
             self.elapsed_time += time.time() - epoch_start_time
 
@@ -339,19 +337,19 @@ class BSESM(SESM):
         self.partial_fit_count += 1
 
 
-    def predict(self, X: torch.Tensor, _y: torch.Tensor = None) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
         """
         Predict the output using the trained BSESM model with active sub-blocks.
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            _y (torch.Tensor): Target values (used to identify active blocks).
+            y (torch.Tensor): Target values (used to identify active blocks).
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
 
-        if _y is not None:
+        if y is not None:
             warnings.warn("Deprecated behaviour: predict does not need y values",
                           DeprecationWarning, stacklevel=2)
 

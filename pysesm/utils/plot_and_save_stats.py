@@ -2,29 +2,34 @@ import csv
 import os
 
 import numpy as np
-import plotly.express as px
 import pandas as pd
-import plotly.graph_objects as go
+import torch
+
+import plotly.express as px
 
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-
-import torch
 
 from pysesm.models.SESM import SESM
 
-def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngroup: str = "sesm"):
+def plot_surface(test_dataset: dict,
+                 X_train: torch.Tensor,
+                 y_train: torch.Tensor,
+                 y_pred: torch.Tensor,
+                 model: SESM, 
+                 *,
+                 hypset: int,
+                 dfngroup: str = "sesm"):
     """
     Plots multiple subplots including loss curves, sampled data, original function, and surrogate model surface.
 
     Args:
-    - train_dataset (dict): A dictionary containing the training dataset.
-    - test_dataset (dict): A dictionary containing the test dataset.
+    - test_dataset (dict): A dictionary containing the test dataset, with ground-truth "Z".
     - X_train (torch.Tensor): The input data points for training.
     - y_train (torch.Tensor): The target values for training.
-    - Z (torch.Tensor): The predicted values (surface) from the surrogate model.
+    - y_pred (torch.Tensor): The predicted values (surface) from the surrogate model.
     - model(SESM): trained model
     - hypset(int): The hyperparameter set identifier.
+    - dfngroup(str): Descriptive name for the function group.
     """
     
     # Matplotlib subplots (no interactivas)
@@ -37,11 +42,11 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngrou
     ax1.set_ylabel("ISTA loss")
     ax1.set_title("ISTA Loss (Model epochs)")
 
-    ax5 = fig.add_subplot(232)
-    ax5.scatter(range(len(model.dictionary_layer_losses)), model.dictionary_layer_losses)
-    ax5.set_xlabel("Total epochs")
-    ax5.set_ylabel("Dictionary loss")
-    ax5.set_title("Dictionary Loss (Model epochs)")
+    ax2 = fig.add_subplot(232)
+    ax2.scatter(range(len(model.dictionary_layer_losses)), model.dictionary_layer_losses)
+    ax2.set_xlabel("Total epochs")
+    ax2.set_ylabel("Dictionary loss")
+    ax2.set_title("Dictionary Loss (Model epochs)")
 
     # Modificación para mostrar puntos por bloque con colores diferentes
     ax3 = fig.add_subplot(233)
@@ -52,17 +57,17 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngrou
         active_blocks = model.partition_manager.retrieve_active_blocks()
         
         # Generar colores únicos para cada bloque
-        colors = cm.tab10(np.linspace(0, 1, len(active_blocks)))
-        
+        colors = plt.get_cmap('tab10')(np.linspace(0, 1, len(active_blocks)))
+
         # Iterar sobre los bloques y plotear sus puntos
         for i, block in enumerate(active_blocks):
             if len(block.X) > 0:  # Solo si el bloque tiene puntos
                 # Usar las coordenadas originales (sin normalizar)
                 block_X = torch.stack(block.X).detach().cpu().numpy()
                 ax3.scatter(block_X[:, 0], block_X[:, 1], 
-                           c=[colors[i]], 
-                           label=f'Block {i}',
-                           alpha=0.7)
+                            c=[colors[i]], 
+                            label=f'Block {i}',
+                            alpha=0.7)
         
         ax3.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         ax3.set_title("Sampled positions by block")
@@ -97,21 +102,29 @@ def plot_surface(test_dataset, X_train, y_train, Z, model: SESM, hypset, dfngrou
     ax4.set_title(f"Ground truth - {hypset}/{dfngroup}")
 
     # Matplotlib para "Surrogate Model" (estática)
-    Z_pred = Z.clone().reshape(N, N).detach().numpy()
-    ax2 = fig.add_subplot(235, projection="3d")
-    ax2.scatter(X, Y, Z_pred, c='0.4',marker='.',label='Predicted')
-    ax2.scatter(X_train[:,0],X_train[:,1], y_train,c='r',marker='x',label='Train')
-    ax2.set_xlabel('x_1')
-    ax2.set_ylabel('x_2')
-    ax2.set_zlabel('y')
-    ax2.legend()
+    Z_pred = y_pred.detach().clone().reshape(N, N).numpy()
+    ax5 = fig.add_subplot(235, projection="3d")
+    ax5.scatter(X, Y, Z_pred, c='0.4',marker='.',label='Predicted')
+    ax5.scatter(X_train[:,0],X_train[:,1], y_train,c='r',marker='x',label='Train')
+    ax5.set_xlabel('x_1')
+    ax5.set_ylabel('x_2')
+    ax5.set_zlabel('y')
+    ax5.legend()
 
-    ax2.set_title(f"Surrogate Model - {hypset}/{dfngroup}")
+    ax5.set_title(f"Surrogate Model - {hypset}/{dfngroup}")
 
     plt.tight_layout()
     return fig
 
-def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hypset):
+def save_surface(test_dataset: dict,
+                 X_train: torch.Tensor,
+                 y_train: torch.Tensor,
+                 y_pred: torch.Tensor,
+                 folder_name: str,
+                 model: SESM,
+                 *,
+                 hypset: int,
+                 dfngroup: str = "sesm"):
     """
     Saves the plot results as subplots including loss curves, sampled data, original function, and surrogate model surface.
 
@@ -127,51 +140,19 @@ def save_surface(test_dataset, X_train, y_train, Z, folder_name, model: SESM, hy
     """
     # Asegurarse de que el directorio exista
     os.makedirs(f"{folder_name}/plots", exist_ok=True)
-    os.makedirs(f"{folder_name}/stats", exist_ok=True)
 
     # Matplotlib subplots (no interactivas)
-    fig = plot_surface(test_dataset,X_train,y_train,Z,model,hypset)
+    fig = plot_surface(test_dataset=test_dataset,
+                       X_train=X_train,
+                       y_train=y_train,
+                       y_pred=y_pred,
+                       model=model,
+                       hypset=hypset,
+                       dfngroup=dfngroup)
 
     plt.savefig(f"{folder_name}/plots/{dfngroup}.{1}_static.png")
     plt.close(fig)
 
-    # Plotly para la gráfica interactiva de la "Original Function"
-    fig_original = go.Figure(
-        data=[go.Surface(z=Z_test, x=X, y=Y, colorscale="Viridis")]
-    )
-    fig_original.add_scatter3d(
-        x=X_train[:, 0],
-        y=X_train[:, 1],
-        z=y_train,
-        mode="markers",
-        marker=dict(size=5, color="red"),
-    )
-    fig_original.update_layout(
-        title=f"Original Function - {hypset}/{dfngroup}",
-        scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
-    )
-    fig_original.write_html(
-        f"{folder_name}/plots/{dfngroup}.{1}_original.html"
-    )
-
-    # Plotly para la gráfica interactiva del "Surrogate Model"
-    fig_surrogate = go.Figure(
-        data=[go.Surface(z=Z_pred, x=X, y=Y, colorscale="Viridis")]
-    )
-    fig_surrogate.add_scatter3d(
-        x=X_train[:, 0],
-        y=X_train[:, 1],
-        z=y_train,
-        mode="markers",
-        marker=dict(size=5, color="red"),
-    )
-    fig_surrogate.update_layout(
-        title=f"Surrogate Model - {hypset}/{dfngroup}",
-        scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
-    )
-    fig_surrogate.write_html(
-        f"{folder_name}/plots/{dfngroup}.{1}_surrogate.html"
-    )
 
 
 def plot_stats(directory, num_files):
@@ -241,7 +222,7 @@ def save_results(data, fngroup):
     average_mse = np.mean(mse_values)
     std_mse = np.std(mse_values)
 
-    with open(f"results_{fngroup}.csv", mode="w", newline="") as file:
+    with open(f"results_{fngroup}.csv", mode="w", newline="", encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow(["Repetion", "Time (min)", "MSE"])
         writer.writerows(data)

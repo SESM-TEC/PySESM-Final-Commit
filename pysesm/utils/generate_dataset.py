@@ -1,6 +1,9 @@
-from pysesm.utils.design_matrices import *
-from pysesm.utils.gaussian_covariance_density import *
-from pysesm.utils.mesh_generation import *
+
+import torch
+
+from pysesm.utils.design_matrices import create_design_matrix_test, create_design_matrix_train
+from pysesm.utils.gaussian_covariance_density import generate_nondiag_covariance_matrices
+from pysesm.utils.mesh_generation import generate_mu, generate_mesh_samples, generate_random_samples
 
 
 def generate_gaussian_dataset(experiment_config: dict):
@@ -10,7 +13,7 @@ def generate_gaussian_dataset(experiment_config: dict):
     and the covariances are fixed to diagonal matrices with variances 0.15, 0.2 and 0.3.
 
     Args:
-        experiment_data (dict): Configuration dictionary containing experiment parameters.
+        experiment_config (dict): Configuration dictionary containing experiment parameters.
             Required keys:
                 n_samples (int): Number of samples to generate
     
@@ -27,7 +30,7 @@ def generate_gaussian_dataset(experiment_config: dict):
         KeyError: If any required keys are missing from experiment_data
     """
     # Non-diagonal convariance matrices (ignored for now)
-    sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
+    # sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
 
     # Diagonal covariance matrices
     sigma1_d = 0.15 * torch.eye(2)
@@ -58,7 +61,6 @@ def generate_gaussian_dataset(experiment_config: dict):
     )
 
     # Dataset
-    data = []
     trainDataset = {"X": xx_r.ravel(), "Y": yy_r.ravel(), "Z": zz_r.ravel()}
     testDataset = {"X": xx.ravel(), "Y": yy.ravel(), "Z": zz.ravel()}
     # Crear la matriz de diseño
@@ -75,7 +77,7 @@ def generate_one_gaussian_dataset(experiment_config: dict):
     and the covariance is fixed too.
 
     Args:
-        experiment_data (dict): Configuration dictionary containing experiment parameters.
+        experiment_config (dict): Configuration dictionary containing experiment parameters.
             Required keys:
                 n_samples (int): Number of samples to generate
     
@@ -92,7 +94,7 @@ def generate_one_gaussian_dataset(experiment_config: dict):
         KeyError: If any required keys are missing from experiment_data
     """
     # Non-diagonal convariance matrices (ignored for now)
-    sigma1, sigma2, sigma3 = generate_nondiag_covariance_matrices()
+    sigma1, _, _ = generate_nondiag_covariance_matrices()
 
     # Define gaussian centers as tensors
     mu1 = generate_mu( 1,  1)
@@ -115,8 +117,7 @@ def generate_one_gaussian_dataset(experiment_config: dict):
       sigma_list, mu_list, weights_list, 
     )
 
-    # Dataset
-    data = []
+    # Dataset    
     trainDataset = {"X": xx_r.ravel(), "Y": yy_r.ravel(), "Z": zz_r.ravel()}
     testDataset = {"X": xx.ravel(), "Y": yy.ravel(), "Z": zz.ravel()}
     # Crear la matriz de diseño

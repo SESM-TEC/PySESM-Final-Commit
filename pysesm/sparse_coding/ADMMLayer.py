@@ -76,6 +76,10 @@ class ADMMLayer(SparseCodingBaseLayer):
 
     CONFIG_CLASS = ADMMConfig
     
+    h : torch.nn.Parameter
+    z : torch.Tensor
+    u : torch.Tensor
+
     def __init__(
             self,
             config: ADMMConfig,
@@ -357,7 +361,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             if self.parameter_hook is not None:
                 # Create info dictionary with relevant iteration data
                 hook_info = {
-                    'h': self.h.detach().clone(),
+                    'h': self.h.detach().clone(), # pylint: disable=not-callable
                     'z': self.z.detach().clone(),
                     'u': self.u.detach().clone(),
                     'loss': loss.item(),
@@ -415,6 +419,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
+            reset_state (bool): Reset state of the sparse coding layer
         """
         epochs=self.config.epochs
 

@@ -148,6 +148,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
             y (torch.Tensor): Target/ground truth vector
             dictionary (torch.Tensor): Dictionary matrix for prediction
             log_losses (bool): If True, logs the computed losses
+            reset_state (bool): Reset layer state if True
             
         Returns:
             None

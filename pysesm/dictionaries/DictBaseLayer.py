@@ -37,6 +37,8 @@ class DictBaseLayer(torch.nn.Module, ABC):
     # Each subclass must define this to specify which config type it expects
     CONFIG_CLASS: type[DictConfig] = DictConfig
     
+    theta_params: torch.nn.Parameter
+
     def __init__(
         self,
         config: DictConfig,
@@ -152,7 +154,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
                                                            lr=self.config.alpha)
             
     def _train_epoch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
-                    log_losses: bool, **eval_kwargs):
+                    log_losses: bool, **eval_kwargs) -> None:
         """
         Perform a single training epoch with batch input support.
         
@@ -197,8 +199,6 @@ class DictBaseLayer(torch.nn.Module, ABC):
             # Subclasses can add more specific info to hook_info
             self._add_hook_info(hook_info, **eval_kwargs)
             self.parameter_hook(hook_info)
-        
-        return loss
 
     def _calculate_batch_loss(self, y_pred: TensorBatch,
                                y: TensorBatch) -> torch.Tensor:

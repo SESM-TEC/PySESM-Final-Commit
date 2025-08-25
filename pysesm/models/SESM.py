@@ -314,7 +314,7 @@ class SESM(torch.nn.Module, ABC):
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self._train_step(X, y, self.sparse_coding_layer)
+            self._train_step(X, y, self.sparse_coding_layer, epoch)
 
             epoch_end_time = time.time()
             self.elapsed_time += epoch_end_time - epoch_start_time
@@ -360,10 +360,8 @@ class SESM(torch.nn.Module, ABC):
                 - sparse_coding_layer: The block's dedicated sparse coding layer
                 - h: Initial sparse vector for this block
                 - amplitude: Scaling factor for this block
+            permutation (int): the number of permutation this training belongs to.
 
-        Returns:
-            None
-            
         Note:
             This method modifies the dictionary_layer parameters and the block's
             sparse_coding_layer.h in place.
@@ -438,7 +436,9 @@ class SESM(torch.nn.Module, ABC):
             
             y (torch.Tensor): Target data of shape (n_samples,) or (n_samples, 1).
 
-            sparsecoding (SparseCodingBaseLayer): The sparse coding layer responsible for
+            sparsecoding (SparseCodingBaseLayer): The sparse coding layer responsible for.
+            
+            epoch (int): number of epoch this training step belongs to.
         """
         # Step 1: Optimize dictionary with fixed h
         # Detach h to prevent gradient flow during dictionary optimization

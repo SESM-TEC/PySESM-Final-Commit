@@ -1,20 +1,23 @@
-import torch
-import pytest
 import logging
+
+import pytest
 import numpy as np
 from scipy.stats import multivariate_normal
+import torch
+
+# For debuggin and understanding >>>
+import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
 
 # Adjust imports based on new directory structure
 from pysesm.dictionaries.GaussianDictLayer import GaussianDictLayer, GaussianDictConfig
-from pysesm.functions.GaussianFunction import GaussianFunction # Still used for comparison/true function
-from pysesm.sparse_coding.ISTALayer import ISTAConfig # For parameter_hook
+#from pysesm.functions.GaussianFunction import GaussianFunction # Still used for comparison/true function
+#from pysesm.sparse_coding.ISTALayer import ISTAConfig # For parameter_hook
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.device_manager.DeviceManager import DeviceManager # For DeviceTargetEnum
 from pysesm.base_types import TensorBatch
 
-# For debuggin and understanding >>>
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+
 
 DEBUG_VISUALIZATION = False
 
@@ -37,7 +40,7 @@ def show_data(X,y,c,marker,label,ax=None):
 
 # --- Fixtures for common setup ---
 @pytest.fixture(scope="module")
-def common_logger():
+def _common_logger():
     logger = logging.getLogger('test_gaussian_dict_layer')
     logger.setLevel(logging.INFO) # Set to INFO or DEBUG to see detailed logs during tests
     if not logger.handlers: # Prevent adding handlers multiple times in pytest
@@ -48,11 +51,11 @@ def common_logger():
     return logger
 
 @pytest.fixture(scope="module")
-def common_device():
+def _common_device():
     return torch.device('cpu')
 
 @pytest.fixture(scope="module")
-def common_evaluation_func():
+def _common_evaluation_func():
     # Helper to ensure 'h' is a column vector (N_functions, 1) if it's 1D,
     # or (..., N_functions, 1) if it's already batched.
     def _ensure_h_column_vector(h_input: torch.Tensor) -> torch.Tensor:
@@ -95,19 +98,19 @@ def common_evaluation_func():
     return _eval_func_impl  # Return the actual callable function.
 
 @pytest.fixture(scope="module")
-def common_device_manager(common_logger):
+def _common_device_manager(_common_logger):
     device_map = {
         DeviceTarget.GLOBAL: "cpu",
         DeviceTarget.SPARSE_CODING_LAYER: "cpu",
         DeviceTarget.DICTIONARY_LAYER: "cpu",
         DeviceTarget.PARTITION_MANAGER: "cpu"
     }
-    return DeviceManager(common_logger, default_device="cpu", device_map=device_map)
+    return DeviceManager(_common_logger, default_device="cpu", device_map=device_map)
 
 
 # --- Ported Test Cases ---
 
-def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_evaluation_func, common_device_manager):
+def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
     """Test GaussianDictLayer's ability to find correct mean with fixed covariance."""
 
     seed_value = 42  # Puedes elegir cualquier entero
@@ -118,7 +121,7 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     n_functions = 1
     
     n_samples = 500
-    X = torch.rand(n_samples, n_features, device=common_device) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
+    X = torch.rand(n_samples, n_features, device=_common_device) * 4 - 2  # Uniform in [-2, 2] x [-2, 2]
     
     true_mean = np.array([0.5, -0.3])
     fixed_cov = 0.5 * np.eye(n_features)
@@ -126,7 +129,7 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     # Calculate true unnormalized Gaussian values
     gaussian_values = multivariate_normal.pdf(X.cpu().numpy(), mean=true_mean, cov=fixed_cov)
     peak_value = multivariate_normal.pdf(true_mean, mean=true_mean, cov=fixed_cov)
-    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=common_device).reshape(-1, 1)
+    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=_common_device).reshape(-1, 1)
     
     if DEBUG_VISUALIZATION:
         ax = show_data(X.cpu().numpy(), y.cpu().numpy(), c='0.4', marker='.', label="ground truth")
@@ -156,14 +159,14 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
         config=dict_config,
         n_features=n_features,
         n_functions=n_functions,
-        evaluation_func=common_evaluation_func,
-        logger=common_logger,
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger,
         parameter_hook=parameter_tracker,
-        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER) # Pass via device manager
+        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER) # Pass via device manager
     )
     
     # Initialize h to [1] since we only have one Gaussian
-    h = torch.ones((1, 1), dtype=torch.float32, device=common_device).detach()
+    h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
     
     dict_layer.partial_fit(
         X=X,
@@ -176,7 +179,7 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     if DEBUG_VISUALIZATION:
         adapted_values = multivariate_normal.pdf(X.cpu().numpy(), mean=learned_mean, cov=fixed_cov)
         adapted_peak = multivariate_normal.pdf(learned_mean, mean=learned_mean, cov=fixed_cov)
-        adapted_y = adapted_values / peak_value
+        adapted_y = adapted_values / adapted_peak
         show_data(X.cpu().numpy(), adapted_y, c='r', marker='.', label="final adaption", ax=ax)
 
         mu_points = np.array([entry['mu'].flatten() for entry in mu_history])
@@ -188,20 +191,20 @@ def test_gaussian_dict_layer_find_mu_only(common_logger, common_device, common_e
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
 
 
-def test_gaussian_dict_layer_find_diagonal_covariance(common_logger, common_device, common_evaluation_func, common_device_manager):
+def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
     """Test GaussianDictLayer's ability to find diagonal covariance with fixed mean."""
     n_features = 2
     n_functions = 1
     
     n_samples = 500 # Increased samples for better learning
-    X = torch.rand(n_samples, n_features, device=common_device) * 4 - 2
+    X = torch.rand(n_samples, n_features, device=_common_device) * 4 - 2
     
     fixed_mean = np.array([0.0, 0.0])
     true_cov = np.array([[2.0, 0.0], [0.0, 0.5]])
     
     gaussian_values = multivariate_normal.pdf(X.cpu().numpy(), mean=fixed_mean, cov=true_cov)
     peak_value = multivariate_normal.pdf(fixed_mean, mean=fixed_mean, cov=true_cov)
-    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=common_device).reshape(-1, 1)
+    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=_common_device).reshape(-1, 1)
     
     # Define GaussianDictConfig for this test
     dict_config = GaussianDictConfig(
@@ -218,12 +221,12 @@ def test_gaussian_dict_layer_find_diagonal_covariance(common_logger, common_devi
         config=dict_config,
         n_features=n_features,
         n_functions=n_functions,
-        evaluation_func=common_evaluation_func,
-        logger=common_logger,
-        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger,
+        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
     )
     
-    h = torch.ones((1, 1), dtype=torch.float32, device=common_device).detach()
+    h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
     
     dict_layer.partial_fit(
         X=X,
@@ -235,7 +238,7 @@ def test_gaussian_dict_layer_find_diagonal_covariance(common_logger, common_devi
     )
     
     rho = dict_layer.theta_params[:-n_features, 0].detach() # Access parameters directly
-    A = torch.zeros(n_features, n_features, device=common_device)
+    A = torch.zeros(n_features, n_features, device=_common_device)
     indices = torch.triu_indices(n_features, n_features)
     A[indices[0], indices[1]] = rho
     learned_G = torch.matmul(A.T, A)
@@ -257,20 +260,20 @@ def test_gaussian_dict_layer_find_diagonal_covariance(common_logger, common_devi
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
 
 
-def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_device, common_evaluation_func, common_device_manager):
+def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
     """Test GaussianDictLayer's ability to find non-diagonal covariance with fixed mean."""
     n_features = 2
     n_functions = 1
     
     n_samples = 500 # Increased samples for better learning
-    X = torch.rand(n_samples, n_features, device=common_device) * 4 - 2
+    X = torch.rand(n_samples, n_features, device=_common_device) * 4 - 2
     
     fixed_mean = np.array([0.0, 0.0])
     true_cov = np.array([[2.0, 0.5], [0.5, 1.0]])
     
     gaussian_values = multivariate_normal.pdf(X.cpu().numpy(), mean=fixed_mean, cov=true_cov)
     peak_value = multivariate_normal.pdf(fixed_mean, mean=fixed_mean, cov=true_cov)
-    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=common_device).reshape(-1, 1)
+    y = torch.tensor(gaussian_values / peak_value, dtype=torch.float32, device=_common_device).reshape(-1, 1)
     
     # Define GaussianDictConfig for this test
     dict_config = GaussianDictConfig(
@@ -287,12 +290,12 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
         config=dict_config,
         n_features=n_features,
         n_functions=n_functions,
-        evaluation_func=common_evaluation_func,
-        logger=common_logger,
-        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger,
+        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
     )
     
-    h = torch.ones((1, 1), dtype=torch.float32, device=common_device).detach()
+    h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
     
     dict_layer.partial_fit(
         X=X,
@@ -302,13 +305,13 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
     )
     
     rho = dict_layer.theta_params[:-n_features, 0].detach()
-    A = torch.zeros(n_features, n_features, device=common_device)
+    A = torch.zeros(n_features, n_features, device=_common_device)
     indices = torch.triu_indices(n_features, n_features)
     A[indices[0], indices[1]] = rho
     learned_G = torch.matmul(A.T, A)
     
     learned_G_np = learned_G.cpu().numpy()
-    learned_cov_np = np.linalg.inv(learned_G_np)
+    # learned_cov_np = np.linalg.inv(learned_G_np)
 
     # The actual values of the learned covariance might be scaled versions of `true_cov`
     # because `GaussianFunction` is unnormalized. The key is the *shape* and *relative values*.
@@ -340,9 +343,9 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(common_logger, common_
 
 
 # --- New Test Cases for TensorBatch and Gradients ---
-def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
-                                                  common_evaluation_func,
-                                                  common_device_manager):
+def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device,
+                                                  _common_evaluation_func,
+                                                  _common_device_manager):
     """
     Test training GaussianDictLayer with a 3D Tensor input (batch, N, F),
     verifying loss decrease and selective gradient zeroing.
@@ -355,13 +358,13 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
 
     # Create dummy 3D input data (batch, n_samples, n_features)
     X_batch = torch.randn(batch_size, n_samples_per_batch, n_features,
-                          device=common_device, requires_grad=False)
+                          device=_common_device, requires_grad=False)
     # Create dummy 3D target data (batch, n_samples, 1)
     y_batch = torch.randn(batch_size, n_samples_per_batch, 1,
-                          device=common_device, requires_grad=False)
+                          device=_common_device, requires_grad=False)
     # Create dummy 3D sparse code (batch, n_functions, 1)
     h_batch = torch.randn(batch_size, n_functions, 1,
-                          device=common_device, requires_grad=False)
+                          device=_common_device, requires_grad=False)
 
     dict_config = GaussianDictConfig(
         epochs=epochs_to_run,
@@ -377,16 +380,16 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
         config=dict_config,
         n_features=n_features,
         n_functions=n_functions,
-        evaluation_func=common_evaluation_func,
-        logger=common_logger,
-        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger,
+        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
     )
 
-    initial_loss = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
-                                           mu_flag=True,rho_flag=True)
+    dict_layer._train_epoch(X=X_batch, y=y_batch, h=h_batch, log_losses=False,
+                            mu_flag=True,rho_flag=True)
 
     dict_layer.partial_fit(X_batch, y_batch, h_batch)
-
+    initial_loss = dict_layer.losses[0]
     final_loss = dict_layer.losses[-1]
 
     assert final_loss < initial_loss, "Loss should decrease during training."
@@ -396,8 +399,8 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
     # Test selective gradient zeroing by checking initial gradients
     # Run one epoch where only mu is trained, then check rho grads
     dict_layer.optimizer.zero_grad()
-    loss_mu_only = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
-                                           mu_flag=True, rho_flag=False)
+    dict_layer._train_epoch(X=X_batch, y=y_batch, h=h_batch, log_losses=False,
+                            mu_flag=True, rho_flag=False)
     
     mu_grads_mu_only = dict_layer.theta_params.grad[-n_features:, :]
     rho_grads_mu_only = dict_layer.theta_params.grad[:-n_features, :]
@@ -407,8 +410,8 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
 
     # Run one epoch where only rho is trained, then check mu grads
     dict_layer.optimizer.zero_grad()
-    loss_rho_only = dict_layer._train_epoch(X_batch, y_batch, h_batch, False,
-                                            mu_flag=False, rho_flag=True)
+    dict_layer._train_epoch(X=X_batch, y=y_batch, h=h_batch, log_losses=False,
+                            mu_flag=False, rho_flag=True)
     
     mu_grads_rho_only = dict_layer.theta_params.grad[-n_features:, :]
     rho_grads_rho_only = dict_layer.theta_params.grad[:-n_features, :]
@@ -419,9 +422,9 @@ def test_gaussian_dict_layer_train_with_3d_tensor(common_logger, common_device,
 
 @pytest.mark.filterwarnings("ignore:There is a performance drop.*:UserWarning")
 @pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
-def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_device,
-                                                      common_evaluation_func,
-                                                      common_device_manager):
+def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_device,
+                                                      _common_evaluation_func,
+                                                      _common_device_manager):
     """
     Test training GaussianDictLayer with a nested_tensor input,
     verifying loss decrease and selective gradient zeroing.
@@ -432,11 +435,11 @@ def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_devi
     epochs_to_run = 100
 
     # Create lists of 2D tensors for nested_tensor input
-    X_list = [torch.randn(ns, n_features, device=common_device, requires_grad=False)
+    X_list = [torch.randn(ns, n_features, device=_common_device, requires_grad=False)
               for ns in samples_per_batch]
-    y_list = [torch.randn(ns, 1, device=common_device, requires_grad=False)
+    y_list = [torch.randn(ns, 1, device=_common_device, requires_grad=False)
               for ns in samples_per_batch]
-    h_list = [torch.randn(n_functions, 1, device=common_device, requires_grad=False)
+    h_list = [torch.randn(n_functions, 1, device=_common_device, requires_grad=False)
               for _ in samples_per_batch] # h is per-function for each block
 
     X_nested = torch.nested.nested_tensor(X_list, layout=torch.jagged)
@@ -457,16 +460,16 @@ def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_devi
         config=dict_config,
         n_features=n_features,
         n_functions=n_functions,
-        evaluation_func=common_evaluation_func,
-        logger=common_logger,
-        device=common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger,
+        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
     )
 
-    initial_loss = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
-                                           mu_flag=True,rho_flag=True)
+    dict_layer._train_epoch(X=X_nested, y=y_nested, h=h_nested, log_losses=False,
+                            mu_flag=True,rho_flag=True)
 
     dict_layer.partial_fit(X_nested, y_nested, h_nested)
-
+    initial_loss = dict_layer.losses[0]
     final_loss = dict_layer.losses[-1]
 
     assert final_loss < initial_loss, "Loss should decrease during training."
@@ -475,8 +478,8 @@ def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_devi
 
     # Test selective gradient zeroing with nested tensor input
     dict_layer.optimizer.zero_grad()
-    loss_mu_only = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
-                                           mu_flag=True, rho_flag=False)
+    dict_layer._train_epoch(X=X_nested, y=y_nested, h=h_nested, log_losses=False,
+                            mu_flag=True, rho_flag=False)
     
     mu_grads_mu_only = dict_layer.theta_params.grad[-n_features:, :]
     rho_grads_mu_only = dict_layer.theta_params.grad[:-n_features, :]
@@ -485,8 +488,8 @@ def test_gaussian_dict_layer_train_with_nested_tensor(common_logger, common_devi
     assert torch.all(rho_grads_mu_only == 0), "Rho grads should be zero (mu_flag=True)"
 
     dict_layer.optimizer.zero_grad()
-    loss_rho_only = dict_layer._train_epoch(X_nested, y_nested, h_nested, False,
-                                            mu_flag=False, rho_flag=True)
+    dict_layer._train_epoch(X=X_nested, y=y_nested, h=h_nested, log_losses=False,
+                            mu_flag=False, rho_flag=True)
     
     mu_grads_rho_only = dict_layer.theta_params.grad[-n_features:, :]
     rho_grads_rho_only = dict_layer.theta_params.grad[:-n_features, :]

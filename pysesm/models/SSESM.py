@@ -114,8 +114,6 @@ class SSESM(SESM):
             y (torch.Tensor): Target values.
             *_: Additional unused positional arguments.
 
-        Returns:
-            None
         """
         # Ensure y is 2D
         if y.dim() == 1:
@@ -143,7 +141,7 @@ class SSESM(SESM):
 
             self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
 
-    def predict(self, X: torch.Tensor, _y: torch.Tensor = None) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
         """
         Predict the output using the trained SSESM model with active sub-blocks.
 
@@ -154,13 +152,13 @@ class SSESM(SESM):
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            _y (torch.Tensor):  Deprecated parameter.  No longer needed.
+            y (torch.Tensor):  Deprecated parameter.  No longer needed.
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
 
-        if _y is not None:
+        if y is not None:
             warnings.warn("Deprecated behaviour: predict does not need y values",
                           DeprecationWarning, stacklevel=2)
 
