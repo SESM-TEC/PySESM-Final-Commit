@@ -188,6 +188,11 @@ partition_config = UniformPartitionConfig(
     activity_threshold=0,
     overlap_ratio=0.25
 )
+# partition_config = AdaptativePartitionConfig(
+#         maxNodeSize=251,
+#         maxSplitsBeforeRestart=5,
+#         overlap_ratio=0.1)
+
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
@@ -195,7 +200,8 @@ ssesm_config = SSESMConfig(
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=100
+    log_interval=100,
+    permutation_times=1
 )
 
 bsesm_config = BSESMConfig(
