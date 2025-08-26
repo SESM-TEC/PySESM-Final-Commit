@@ -1,58 +1,53 @@
-from model import NN
+from .model import NN
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 
-from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
 
-# CREAR DATASET
-def f(x, y):
-    pi = np.pi
-    return torch.sin(pi*x)/pi*x - torch.sin(pi*y)/pi*y
-n_samples = 100
-mesh_divisions = 50
-train_data, xtrain, ytrain, test_data, xtest, ytest = generate_custom_function_dataset(
-    n_samples=n_samples,
-    function=f,
-    mesh_divisions=mesh_divisions
-)
+def train_nn(train_data: dict, 
+             test_data: dict, 
+             epochs: int = 500, 
+             lr: float = 0.01, 
+             hidden_dim: int = 16):
 
-# CREAR MODELO
-model = NN(input_dim=2, hidden_dim=16)
+    # CREAR MODELO
+    model = NN(hidden_dim=hidden_dim)
 
-# ENTRENAMIENTO
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
-num_epochs = 500
-print("Iniciando el entrenamiento (sin DataLoader)...")
+    # PREPARAR DATOS
+    xtrain, ytrain, xtest, ytest = model.prepare_dataset(train_data, test_data)
 
-for epoch in range(num_epochs):
-    model.train()
-    # 1. Vaciar los gradientes
-    optimizer.zero_grad()
-    # 2. Forward pass: pasar el tensor completo
-    # Asegúrate de que ytrain tenga la forma correcta [n_samples, 1]
-    predictions = model(xtrain)
-    # 3. Calcular la pérdida
-    loss = criterion(predictions, ytrain.unsqueeze(1))
-    # 4. Backward pass y actualización de pesos
-    loss.backward()
-    optimizer.step()
-    # Evaluación (opcional pero recomendado)
-    model.eval()
-    with torch.no_grad():
-        test_loss = criterion(model(xtest), ytest.unsqueeze(1))
-    
-    if (epoch + 1) % 10 == 0:
-        print(f"Epoch [{epoch+1}/{num_epochs}], "
-              f"Pérdida de entrenamiento: {loss.item():.4f}, "
-              f"Pérdida de prueba: {test_loss.item():.4f}")
+    # ENTRENAMIENTO
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    print("Iniciando el entrenamiento...")
 
-print("\n¡Entrenamiento finalizado!")
-print(f"Pérdida de prueba final: {test_loss.item():.4f}")
+    for epoch in range(epochs):
+        model.train()
+        # 1. Vaciar los gradientes
+        optimizer.zero_grad()
+        # 2. Forward pass: pasar el tensor completo
+        # Asegúrate de que ytrain tenga la forma correcta [n_samples, 1]
+        predictions = model(xtrain)
+        # 3. Calcular la pérdida
 
-# GUARDAR MODELO
-path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\nn_model.pth"
-model.save(path)
+        loss = criterion(predictions, ytrain.unsqueeze(1))
+        # 4. Backward pass y actualización de pesos
+        loss.backward()
+        optimizer.step()
+        # Evaluación (opcional pero recomendado)
+        model.eval()
+        with torch.no_grad():
+            test_loss = criterion(model(xtest), ytest.unsqueeze(1))
+        
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch [{epoch+1}/{epochs}], "
+                f"Pérdida de entrenamiento: {loss.item():.4f}, "
+                f"Pérdida de prueba: {test_loss.item():.4f}")
+
+    print("\n¡Entrenamiento finalizado!")
+    print(f"Pérdida de prueba final: {test_loss.item():.4f}")
+
+    # GUARDAR MODELO
+    path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\nn_model.pth"
+    model.save(path)

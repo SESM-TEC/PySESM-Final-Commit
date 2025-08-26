@@ -28,3 +28,13 @@ class SVR:
     def load(self, path: str = 'svr_model.joblib'):
         self.model = joblib.load(path)
         print(f"Modelo cargado exitosamente desde '{path}'")
+
+    def prepare_dataset(self, train_data, test_data):
+        
+        xtrain = torch.stack([train_data["X"], train_data["Y"]], dim=1)
+        ytrain = train_data["Z"]
+
+        xtest = torch.stack([test_data["X"], test_data["Y"]], dim=1)
+        ytest = test_data["Z"]
+
+        return xtrain, ytrain, xtest, ytest

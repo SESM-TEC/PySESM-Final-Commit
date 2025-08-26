@@ -1,5 +1,4 @@
 """ANN para regresion"""
-import numpy as np
 import torch.nn as nn
 import torch
 
@@ -15,7 +14,10 @@ class NN(nn.Module):
             nn.Linear(hidden_dim, output_dim)
         )
 
-    def forward(self, x: torch.Tensor) -> np.ndarray:
+    def forward(self, x: torch.Tensor):
+        return self.layers(x)
+    
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
         predictions = self.layers(x)
         predictions = predictions.detach().cpu().numpy().squeeze()
         return predictions
@@ -28,3 +30,13 @@ class NN(nn.Module):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.load_state_dict(torch.load(path, map_location=device))
         return self
+
+    def prepare_dataset(self, train_data: dict = None, test_data: dict = None):
+        
+        xtrain = torch.stack([train_data["X"], train_data["Y"]], dim=1)
+        ytrain = train_data["Z"]
+        
+        xtest = torch.stack([test_data["X"], test_data["Y"]], dim=1)
+        ytest = test_data["Z"]
+
+        return xtrain, ytrain, xtest, ytest
