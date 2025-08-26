@@ -1,4 +1,4 @@
-from model import NN  
+from model import SVR
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,26 +6,27 @@ import torch
 
 from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
 
-#CREAR DATASET
+# CREAR DATASET
 def f(x, y):
     pi = np.pi
     return torch.sin(pi*x)/pi*x - torch.sin(pi*y)/pi*y
+n_samples = 100
+mesh_divisions = 50
 train_data, xtrain, ytrain, test_data, xtest, ytest = generate_custom_function_dataset(
-    n_samples=200,
+    n_samples=n_samples,
     function=f,
-    mesh_divisions=50
+    mesh_divisions=mesh_divisions
 )
 
-# PREDICCION
-model = NN()
-model_path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\regression_nn_model.pth"
-model.load(model_path)
-ypred = model.forward(xtest)
+model = SVR(kernel='rbf', C=100, gamma=.1, epsilon=.1)
+path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\SVR\svr_model.pth"
+model.load(path)
+ypred = model.predict(xtest)
 
 
 # VISUALIZACION
 fig = plt.figure(figsize=(10, 5))
-fig.suptitle("Regression with NN", fontsize=16)
+fig.suptitle("Regression with SVR", fontsize=16)
 
 ax1 = fig.add_subplot(121, projection='3d')
 ax1.scatter(test_data["X"], test_data["Y"], test_data["Z"], c=test_data["Z"], s=10)

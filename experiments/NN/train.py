@@ -1,14 +1,16 @@
-from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
-from model import RegressionNN
+from model import NN
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
+
+from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
 
 # CREAR DATASET
 def f(x, y):
-    return x**2 - y**2
-
+    pi = np.pi
+    return torch.sin(pi*x)/pi*x - torch.sin(pi*y)/pi*y
 n_samples = 100
 mesh_divisions = 50
 train_data, xtrain, ytrain, test_data, xtest, ytest = generate_custom_function_dataset(
@@ -18,12 +20,12 @@ train_data, xtrain, ytrain, test_data, xtest, ytest = generate_custom_function_d
 )
 
 # CREAR MODELO
-model = RegressionNN(input_dim=2, hidden_dim=16)
+model = NN(input_dim=2, hidden_dim=16)
 
 # ENTRENAMIENTO
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
-num_epochs = 100
+num_epochs = 500
 print("Iniciando el entrenamiento (sin DataLoader)...")
 
 for epoch in range(num_epochs):
@@ -52,5 +54,5 @@ print("\n¡Entrenamiento finalizado!")
 print(f"Pérdida de prueba final: {test_loss.item():.4f}")
 
 # GUARDAR MODELO
-model_path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\regression_nn_model.pth"
-model.save_model(model_path)
+path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\nn_model.pth"
+model.save(path)
