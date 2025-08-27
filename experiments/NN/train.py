@@ -49,5 +49,5 @@ def train_nn(train_data: dict,
     print(f"Pérdida de prueba final: {test_loss.item():.4f}")
 
     # GUARDAR MODELO
-    path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\NN\nn_model.pth"
+    path = r"./NN/nn_model.pth"
     model.save(path)

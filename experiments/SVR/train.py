@@ -11,7 +11,7 @@ def train_svr(train_data, test_data, kernel='rbf', C=100, gamma=.1, epsilon=.1):
     model.fit(xtrain, ytrain)
 
     # GUARDAR MODELO
-    path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\SVR\svr_model.pth"
+    path = r"./SVR/svr_model.pth"
     model.save(path)
     
 

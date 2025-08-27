@@ -10,7 +10,7 @@ def test_svr(train_data: dict,
     model = SVR(kernel=kernel, C=C, gamma=gamma, epsilon=epsilon)
     _, _, xtest, _ = model.prepare_dataset(train_data , test_data)
 
-    path = r"C:\Users\Lenovo Yoga\Desktop\SEMESTRE_II_2025\ASISTENCIA\PySESM\experiments\SVR\svr_model.pth"
+    path = r"./SVR/svr_model.pth"
     model.load(path)
 
     ypred = model.predict(xtest)
