@@ -12,6 +12,7 @@ import logging
 import torch
 
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
@@ -27,8 +28,7 @@ from pysesm.utils.plot_and_save_stats import plot_surface
 #from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
 #from pysesm.device_manager.DeviceManager import DeviceManager
-from mpl_toolkits.mplot3d import Axes3D
-
+from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper, CrossEntropyLossWrapper
 
 
 class KLDivLossWrapper(torch.nn.Module):
