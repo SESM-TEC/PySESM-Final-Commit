@@ -23,11 +23,11 @@ class SVR:
 
     def save(self, path: str = 'svr_model.joblib'):
         joblib.dump(self.model, path)
-        print(f"Modelo guardado exitosamente en '{path}'")
+        print(f"Model saved {path}")
 
     def load(self, path: str = 'svr_model.joblib'):
         self.model = joblib.load(path)
-        print(f"Modelo cargado exitosamente desde '{path}'")
+        print(f"Model loaded'{path}'")
 
     def prepare_dataset(self, train_data, test_data):
         

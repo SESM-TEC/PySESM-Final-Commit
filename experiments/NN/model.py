@@ -8,9 +8,9 @@ class NN(nn.Module):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Sigmoid(), 
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Sigmoid(), 
             nn.Linear(hidden_dim, output_dim)
         )
 
@@ -24,11 +24,12 @@ class NN(nn.Module):
     
     def save(self, path: str):
         torch.save(self.state_dict(), path)
-        print(f"Modelo guardado en {path}")
+        print(f"Model saved as {path}")
 
     def load(self, path: str) -> 'NN':
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.load_state_dict(torch.load(path, map_location=device))
+        print(f"Model loaded {path}")
         return self
 
     def prepare_dataset(self, train_data: dict = None, test_data: dict = None):
