@@ -2,12 +2,12 @@ import os
 import torch
 import numpy as np
 import wandb
-from prepare_all import test_all, train_all
+from prepare_all import EXPERIMENT
 
 from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper, CrossEntropyLossWrapper
 
-from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
@@ -24,7 +24,6 @@ def main():
     en una tarea de regresión. Genera un conjunto de datos personalizado,
     entrena ambos modelos y registra las métricas de rendimiento en W&B.
     """
-    logger = setup_logger(level=logging.DEBUG)
 
     # 1. Configuración del Experimento y del Dataset
     # ----------------------------------------------------
@@ -34,7 +33,7 @@ def main():
         return torch.sin(pi * x) / (pi * x) - torch.sin(pi * y) / (pi * y)
 
     # Parámetros del experimento
-    n_samples=100
+    n_samples=500
     dataset_config = {
         "n_samples": n_samples,
         "function": custom_function,
@@ -55,7 +54,7 @@ def main():
     }
 
     sparse_coding_config = ISTAConfig(
-        epochs=500,
+        epochs=200,
         alpha=0.10,
         lambd=0.00001,
         step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
@@ -87,7 +86,7 @@ def main():
 
     ssesm_config = SSESMConfig(
         n_features = 2,
-        model_epochs = 2000,
+        model_epochs = 100,
         sparse_coding_config = sparse_coding_config,
         dict_config = dict_config,
         partition_config = partition_config,
@@ -109,17 +108,7 @@ def main():
         }
     }
 
-    SESM_model=SSESM(**experiment1, logger=logger)
     num_runs = 1 # Aumentar el número de corridas para un análisis estadístico más robusto
-
-    # 2. Configuración e Inicio de la Sesión en Weights & Biases
-    # ----------------------------------------------------
-    # Usa una variable de entorno para mayor seguridad, en lugar de una clave hardcodeada
-    wandb_api_key = os.getenv("WANDB_API_KEY") 
-    if wandb_api_key:
-        wandb.login(key=wandb_api_key)
-    else:
-        print("Advertencia: No se encontró la variable de entorno WANDB_API_KEY. El registro no funcionará.")
 
     wandb.init(
         project="PySESM_experiments",
@@ -142,17 +131,19 @@ def main():
 
     for i in range(num_runs):
         print(f"--- Corriendo experimento {i + 1}/{num_runs} ---")
+
+        experiment = EXPERIMENT(svr_config, nn_config, experiment1)
         
         # Generar un nuevo dataset en cada corrida para validar la robustez
         train_data, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)
         
         # Entrenar y evaluar los modelos
-        train_all(train_data, test_data, svr_config, nn_config)
+        experiment.train_all(train_data, test_data)
         
         # El flag de plot solo se activa en la última iteración
         plot_flag = (i == num_runs - 1)
 
-        metrics = test_all(train_data, test_data, SESM_model, plot_flag=plot_flag, nn_config=nn_config)
+        metrics = experiment.test_all(train_data, test_data, plot_flag)
         
         # Almacenar las métricas en un diccionario para un análisis posterior
         for key in all_metrics.keys():
