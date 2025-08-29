@@ -29,12 +29,18 @@ class SVR:
         self.model = joblib.load(path)
         print(f"Model loaded'{path}'")
 
-    def prepare_dataset(self, train_data, test_data):
-        
-        xtrain = torch.stack([train_data["X"], train_data["Y"]], dim=1)
-        ytrain = train_data["Z"]
+    def train(self, xtrain, ytrain):
+        self.fit(xtrain, ytrain)
 
-        xtest = torch.stack([test_data["X"], test_data["Y"]], dim=1)
-        ytest = test_data["Z"]
+        # GUARDAR MODELO
+        path = "svr_model.pth"
+        self.save(path)
 
-        return xtrain, ytrain, xtest, ytest
+    def test(self, xtest):
+
+        path = "svr_model.pth"
+        self.load(path)
+
+        ypred = self.predict(xtest)
+
+        return ypred

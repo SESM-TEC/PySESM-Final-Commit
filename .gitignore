@@ -168,4 +168,4 @@ wandb/
 *~
 
 #Pytorch models
-.pth
+*.pth

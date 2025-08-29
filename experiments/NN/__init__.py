@@ -1,1 +1,1 @@
-from .train import train_nn
+from .model import NN
