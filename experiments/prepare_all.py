@@ -18,6 +18,7 @@ def prepare_dataset(train_data: dict = None, test_data: dict = None):
 
     return xtrain, ytrain, xtest, ytest
 
+
 def train_all(
         train_data, 
         test_data, 
@@ -26,37 +27,34 @@ def train_all(
     # ENTRENAMIENTO
     xtrain, ytrain, xtest, ytest = prepare_dataset(train_data, test_data)
 
-    SVR_model = SVR(kernel = svr_config["kernel"], 
-                    C = svr_config["C"], 
-                    gamma = svr_config["gamma"], 
-                    epsilon = svr_config["epsilon"])
-    SVR_model.train(xtrain, ytrain)
-
+    SVR_model = SVR(svr_config)
     nn_model = NN(nn_config)
+
+    SVR_model.train(xtrain, ytrain)
     nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
 
-def test_all(train_data, test_data, SESM_model: SSESM, nn_config, plot_flag=False):
-    
+
+def test_all(train_data, test_data, SESM_model: SSESM, plot_flag=False, nn_config: dict = None):
+
     xtrain, ytrain, xtest, ytest = prepare_dataset(train_data, test_data)
     
-    SVR_model=SVR()
-    nn_model=NN(nn_config)
+    SVR_model = SVR()
+    nn_model = NN(nn_config)
     SESM_model.partial_fit(xtrain, ytrain)
 
     svr_pred = SVR_model.test(xtest)
     nn_pred = nn_model.test(xtest)
     SESM_pred, _, SESM_mse = SESM_model.performance_stats(xtest, ytest)
 
-    y_true = test_data["Z"]
-    
     metrics = {
-        "SVR_MSE": mean_squared_error(y_true, svr_pred),
-        "SVR_MAE": mean_absolute_error(y_true, svr_pred),
-        "NN_MSE": mean_squared_error(y_true, nn_pred),
-        "NN_MAE": mean_absolute_error(y_true, nn_pred),
+        "SVR_MSE": mean_squared_error(ytest, svr_pred),
+        "SVR_MAE": mean_absolute_error(ytest, svr_pred),
+        "NN_MSE": mean_squared_error(ytest, nn_pred),
+        "NN_MAE": mean_absolute_error(ytest, nn_pred),
         "SESM_MSE": SESM_mse,
-        "SESM_MAE":mean_absolute_error(y_true, SESM_pred)
+        "SESM_MAE":mean_absolute_error(ytest, SESM_pred)
     }
+
     if plot_flag:
         SESM_pred=SESM_pred.detach().cpu().numpy().squeeze()
         fig = comparative_plot(svr_pred, nn_pred, SESM_pred, test_data)
@@ -95,7 +93,7 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, test_data):
         ax.set_zlabel('Z', fontsize=4, labelpad=-14)
 
         for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
-            axis.set_tick_params(labelsize=4, pad=-5)
+            axis.set_tick_params(labelsize=4, pad=-5) # Numeros de los ejes
 
         ax.xaxis.set_major_locator(MultipleLocator(1))
         ax.yaxis.set_major_locator(MultipleLocator(1))

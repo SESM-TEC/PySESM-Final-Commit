@@ -2,19 +2,24 @@
 import torch.nn as nn
 import torch
 import torch.optim as optim
+from sklearn.preprocessing import StandardScaler
 
 
 class NN(nn.Module):
-    def __init__(self, nn_config, input_dim: int = 2, hidden_dim: int = 16, output_dim: int = 1 ):
+    def __init__(self, nn_config: dict = None):
         super().__init__()
-        self.nn_config=nn_config
-        hidden_dim=nn_config["hidden_dim"]
+        self.scaler = StandardScaler()
+
+        self.epochs = nn_config["epochs"]
+        self.lr = nn_config["lr"]
+        hidden_dim = nn_config["hidden_dim"]
+
         self.layers = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(2, hidden_dim),
             nn.Sigmoid(), 
             nn.Linear(hidden_dim, hidden_dim),
             nn.Sigmoid(), 
-            nn.Linear(hidden_dim, output_dim)
+            nn.Linear(hidden_dim, 1)
         )
 
     def forward(self, x: torch.Tensor):
@@ -29,23 +34,28 @@ class NN(nn.Module):
         torch.save(self.state_dict(), path)
         print(f"Model saved as {path}")
 
-    def load(self, path: str) -> 'NN':
+    def load(self, path: str = 'nn_model.pth') -> 'NN':
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.load_state_dict(torch.load(path, map_location=device))
         print(f"Model loaded {path}")
         return self
 
+
+    def normalize(self, xtrain, xtest) -> torch.Tensor:
+        xtrain_np = xtrain.numpy()
+        xtest_np = xtest.numpy()
+        xtrain_norm = self.scaler.fit_transform(xtrain_np)
+        xtest_norm = self.scaler.transform(xtest_np)
+        return torch.tensor(xtrain_norm, dtype=torch.float32), torch.tensor(xtest_norm, dtype=torch.float32)
+
+
     def train_for_experiment(self, xtrain, ytrain, xtest, ytest):
-
-        epochs = self.nn_config["epochs"]
-        lr = self.nn_config["lr"]
-
         # ENTRENAMIENTO
         criterion = nn.MSELoss()
-        optimizer = optim.Adam(self.parameters(), lr=lr)
+        optimizer = optim.Adam(self.parameters(), lr=self.lr)
         print("Iniciando el entrenamiento...")
 
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             self.train()
 
             # 1. Vaciar los gradientes
@@ -67,7 +77,7 @@ class NN(nn.Module):
                 test_loss = criterion(self(xtest), ytest.unsqueeze(1))
             
             if (epoch + 1) % 10 == 0:
-                print(f"Epoch [{epoch+1}/{epochs}], "
+                print(f"Epoch [{epoch+1}/{self.epochs}], "
                     f"mse_train: {loss.item():.4f}, "
                     f"mse_val: {test_loss.item():.4f}")
 

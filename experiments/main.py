@@ -110,7 +110,7 @@ def main():
     }
 
     SESM_model=SSESM(**experiment1, logger=logger)
-    num_runs = 6 # Aumentar el número de corridas para un análisis estadístico más robusto
+    num_runs = 1 # Aumentar el número de corridas para un análisis estadístico más robusto
 
     # 2. Configuración e Inicio de la Sesión en Weights & Biases
     # ----------------------------------------------------
@@ -152,7 +152,7 @@ def main():
         # El flag de plot solo se activa en la última iteración
         plot_flag = (i == num_runs - 1)
 
-        metrics = test_all(train_data, test_data, SESM_model, nn_config, plot_flag=plot_flag)
+        metrics = test_all(train_data, test_data, SESM_model, plot_flag=plot_flag, nn_config=nn_config)
         
         # Almacenar las métricas en un diccionario para un análisis posterior
         for key in all_metrics.keys():
