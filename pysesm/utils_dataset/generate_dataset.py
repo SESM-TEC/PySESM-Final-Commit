@@ -13,7 +13,7 @@ def generate_gaussian_dataset(
     weights: list[float] = None,
     limits: tuple[float, float] = None,
     mesh_divisions: int = 50
-) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
+) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
     """
     Create a dataset from a weighted mixture of gaussians with customizable parameters.
 
@@ -40,6 +40,9 @@ def generate_gaussian_dataset(
             - testDataset: The test dataset
             - X_test (torch.Tensor): Test input features
             - y_test (torch.Tensor): Test target values
+            - mu_list (list[torch.Tensor]): List of mean vectors for the ground truth gaussians.
+            - sigma_list (list[torch.Tensor]): List of covariance matrices for the ground truth gaussians.
+
     """
 
     # Safe default values of mutable types:
@@ -83,7 +86,7 @@ def generate_gaussian_dataset(
     X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, n_samples)
     X_test, y_test = create_design_matrix_test(xx, yy, zz)
     
-    return trainDataset, X_train, y_train, testDataset, X_test, y_test
+    return trainDataset, X_train, y_train, testDataset, X_test, y_test, mu_list, sigma_list
 
 def generate_custom_function_dataset(
     n_samples: int,

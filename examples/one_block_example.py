@@ -10,8 +10,11 @@ License:
 
 import logging
 import torch
+import numpy as np
+
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 
 from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
@@ -122,6 +125,91 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
         return js_divergence
 
+class VisualizerHook:
+    """
+    Clase que actúa como un hook para visualizar el estado del diccionario Gaussiano
+    y los vectores h, comparándolos con el ground truth.
+    """
+    def __init__(self, model: SESM, ax: plt.Axes, X_train: torch.Tensor,
+                 ground_truth_mu: list, ground_truth_sigma: list):
+        self.model = model
+        self.ax = ax
+        self.X_train = X_train.detach().cpu()
+        self.ground_truth_mu = [mu.cpu() for mu in ground_truth_mu]
+        self.ground_truth_sigma = [s.cpu() for s in ground_truth_sigma]
+        self.fig = ax.get_figure()
+
+    def _draw_ellipse(self, mu, Sigma, color, linestyle, alpha_fill):
+        """Helper para dibujar una elipse a partir de mu y Sigma."""
+        eigenvalues, eigenvectors = torch.linalg.eigh(Sigma)
+        
+        # El eigenvector del mayor eigenvalor (último, ya que vienen ordenados) define la orientación.
+        v_max = eigenvectors[:, -1]
+        angle = np.degrees(np.arctan2(v_max[1], v_max[0]))
+        
+        # El ancho y alto son 2 desviaciones estándar (sqrt(eigenvalor)) * 2
+        width, height = 4 * torch.sqrt(eigenvalues)
+        
+        ellipse = Ellipse(xy=mu, width=width, height=height, angle=angle,
+                          facecolor=color, edgecolor=color, alpha=alpha_fill,
+                          linestyle=linestyle, linewidth=2)
+        self.ax.add_patch(ellipse)
+
+    def __call__(self, info: dict):
+        epoch = info.get('model_epoch', 0)
+        log_interval = self.model.config.log_interval
+        total_epochs = self.model.config.model_epochs
+
+        # Actualizar en la primera, última y cada 'log_interval' épocas
+        if not (epoch == 0 or (epoch + 1) % log_interval == 0 or epoch == total_epochs - 1):
+            return
+
+        params = info['dictionary_params'].detach().cpu()
+        h_per_block = info.get('h_per_block', [self.model.partition_manager.retrieve_active_blocks()[0].sparse_coding_layer.h])
+        h_magnitudes = torch.abs(h_per_block[0]).detach().cpu().numpy().flatten()
+        
+        n_features = self.model.n_features
+        n_functions = self.model.n_functions
+        num_rho_params = n_features * (n_features + 1) // 2
+        rho_params = params[:num_rho_params, :]
+        mu_params = params[-n_features:, :]
+
+        self.ax.cla()
+        self.ax.scatter(self.X_train[:, 0], self.X_train[:, 1], c='gray', alpha=0.1, s=10, label='Train Data')
+
+        # Dibujar el ground truth
+        for mu_gt, sigma_gt in zip(self.ground_truth_mu, self.ground_truth_sigma):
+            self._draw_ellipse(mu_gt, sigma_gt, 'green', '--', 0.1)
+
+        # Dibujar el diccionario aprendido
+        for i in range(n_functions):
+            mu = mu_params[:, i]
+            rho = rho_params[:, i]
+            
+            A = torch.zeros(n_features, n_features)
+            indices = torch.triu_indices(n_features, n_features)
+            A[indices[0], indices[1]] = rho
+            G = A.T @ A
+            
+            try:
+                Sigma = torch.linalg.inv(G)
+            except torch.linalg.LinAlgError:
+                Sigma = torch.eye(n_features)
+            
+            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05) # Elipses del diccionario con relleno muy tenue
+            
+            # El tamaño del centro de la gaussiana representa la magnitud de h
+            self.ax.scatter(mu[0], mu[1], s=800 * h_magnitudes[i] + 5, c='red', 
+                           alpha=0.7, edgecolors='black', zorder=10)
+
+        self.ax.set_title(f'Dictionary State at Epoch {epoch + 1}')
+        self.ax.set_xlabel('Feature 1'); self.ax.set_ylabel('Feature 2')
+        self.ax.set_xlim(-2.5, 2.5); self.ax.set_ylim(-2.5, 2.5)
+        self.ax.grid(True, linestyle='--', alpha=0.5)
+        self.ax.set_aspect('equal', adjustable='box')
+        
+        plt.pause(0.01)
+    
 # LOGGER INSTANCE
 logger = setup_logger(level=logging.DEBUG)
 
@@ -140,7 +228,7 @@ device_map = {
 sparse_coding_config = ISTAConfig(
     epochs=50,
     alpha=0.10,
-    lambd=0.00001,
+    lambd=0.001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
     power_iterations=10,
     n_functions=n_functions,
@@ -196,7 +284,7 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 7500,
+    model_epochs = 3500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
@@ -296,10 +384,15 @@ def show_all_h(model: SESM, logger: logging.Logger, threshold: float = 1e-6):
 
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test = generate_gaussian_dataset(n_samples=experiment["n_samples"])
+trainDataset, X_train, y_train, testDataset, X_test, y_test,gt_mu , gt_sigma = generate_gaussian_dataset(n_samples=experiment["n_samples"])
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)
+
+
+# Preparar la figura para el hook de visualización
+fig_hook, ax_hook = plt.subplots(figsize=(10, 8))
+plt.ion() # Activar modo interactivo
 
 # RESULTS FOLDER NAME CREATION
 folder_name = f"results_one_block_{experiment['hyp_set']}"
@@ -310,7 +403,10 @@ if which_sesm=="bsesm":
 else:
     model = SSESM(**experiment,logger=logger)
 
-
+# Crear e instalar el hook DESPUÉS de instanciar el modelo
+visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma)
+model.sesm_hook = visual_hook
+    
 try:
     # TRAIN AND TEST THE ALL MODELS
     logging.info("Training model %s", model.__class__.__name__)
@@ -329,9 +425,12 @@ try:
                  model=model,
                  hypset=experiment["hyp_set"])
 
+    plt.ioff()
     plt.show(block=True)
 
+    
 except KeyboardInterrupt:
     print("\nShutting down...")
     plt.close('all')
     exit(0)
+
