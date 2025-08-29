@@ -64,14 +64,12 @@ def comparative_plot( svr_pred, nn_pred, SESM_pred, train_data, test_data):
 
 class EXPERIMENT:
     def __init__(self, svr_config: dict, nn_config: dict, experiment1: dict):
-        self.svr_config = svr_config
-        self.nn_config = nn_config
-        self.experiment1 = experiment1
+
         logger = setup_logger(level=logging.DEBUG)
 
-        self.SESM_model=SSESM(**self.experiment1, logger=logger)
-        self.SVR_model = SVR(svr_config)
-        self.nn_model = NN(nn_config)
+        self.SESM_model=SSESM(**experiment1, logger=logger)
+        self.SVR_model = SVR(**svr_config)
+        self.nn_model = NN(**nn_config)
 
 
 

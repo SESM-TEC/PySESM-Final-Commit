@@ -6,14 +6,12 @@ from sklearn.preprocessing import StandardScaler
 
 
 class NN(nn.Module):
-    def __init__(self, nn_config: dict = None):
+    def __init__(self, epochs, lr, hidden_dim):
         super().__init__()
         self.scaler = StandardScaler()
-
-        self.epochs = nn_config["epochs"]
-        self.lr = nn_config["lr"]
-        hidden_dim = nn_config["hidden_dim"]
-
+  
+        self.epochs = epochs
+        self.lr = lr
         self.layers = nn.Sequential(
             nn.Linear(2, hidden_dim),
             nn.Tanh(), 
@@ -53,7 +51,7 @@ class NN(nn.Module):
         # ENTRENAMIENTO
         criterion = nn.MSELoss()
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        print("Iniciando el entrenamiento...")
+        print("\n Training NN...")
 
         for epoch in range(self.epochs):
             self.train()
@@ -76,7 +74,7 @@ class NN(nn.Module):
             with torch.no_grad():
                 test_loss = criterion(self(xtest), ytest.unsqueeze(1))
             
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{self.epochs}], "
                     f"mse_train: {loss.item():.4f}, "
                     f"mse_val: {test_loss.item():.4f}")

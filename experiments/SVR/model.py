@@ -7,16 +7,17 @@ class SVR:
     """
     Una clase para encapsular un modelo Support Vector Regression (SVR) de scikit-learn.
     """
-    def __init__(self, svr_config: dict = None):
-        if svr_config:
-            self.model = svr(
-                kernel = svr_config["kernel"], 
-                C = svr_config["C"], 
-                gamma = svr_config["gamma"], 
-                epsilon = svr_config["epsilon"]) 
+    def __init__(self, kernel, C, gamma, epsilon):
+        
+        self.model = svr(
+            kernel = kernel, 
+            C = C, 
+            gamma = gamma, 
+            epsilon = epsilon) 
+
 
     def fit(self, X: torch.tensor, y: torch.tensor):
-        print("Training SVR...")
+        print("\n Training SVR...")
         X = X.detach().cpu().numpy()
         y = y.detach().cpu().numpy()
         self.model.fit(X, y)
@@ -28,7 +29,7 @@ class SVR:
 
     def save(self, path: str = 'svr_model.joblib'):
         joblib.dump(self.model, path)
-        print(f"Model saved {path}")
+        print(f"Model saved as {path}")
 
     def load(self, path: str = 'svr_model.joblib'):
         self.model = joblib.load(path)
