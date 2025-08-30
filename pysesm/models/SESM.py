@@ -471,7 +471,8 @@ class SESM(torch.nn.Module, ABC):
                 'sparse_coding_losses': sparsecoding.losses[-sparsecoding.config.epochs:],
                 'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
                 'h': sparsecoding.h.detach().clone(),
-                'dictionary_params': self.dictionary_layer.theta_params.detach().clone()
+                'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
+                'model_epoch': epoch
             }
             self.sesm_hook(hook_info)
             

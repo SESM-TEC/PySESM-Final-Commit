@@ -130,11 +130,11 @@ class VisualizerHook:
     Clase que actúa como un hook para visualizar el estado del diccionario Gaussiano
     y los vectores h, comparándolos con el ground truth.
     """
-    def __init__(self, model: SESM, ax: plt.Axes, X_train: torch.Tensor,
+    def __init__(self, model_: SESM, ax: plt.Axes, X_train_: torch.Tensor,
                  ground_truth_mu: list, ground_truth_sigma: list):
-        self.model = model
+        self.model = model_
         self.ax = ax
-        self.X_train = X_train.detach().cpu()
+        self.X_train = X_train_.detach().cpu()
         self.ground_truth_mu = [mu.cpu() for mu in ground_truth_mu]
         self.ground_truth_sigma = [s.cpu() for s in ground_truth_sigma]
         self.fig = ax.get_figure()
@@ -214,7 +214,7 @@ class VisualizerHook:
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 10
+n_functions = 100
 n_features = 2
 
 # Device configuration
@@ -226,8 +226,8 @@ device_map = {
 }
 
 sparse_coding_config = ISTAConfig(
-    epochs=50,
-    alpha=0.10,
+    epochs=100,
+    alpha=0.15,
     lambd=0.001,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
     power_iterations=10,
@@ -258,7 +258,7 @@ sparse_coding_config = ISTAConfig(
 #     criterion = torch.nn.MSELoss()
 # )
 dict_config = GaussianDictConfig(
-    epochs = 4,
+    epochs = 50,
     alpha = 0.01,
     # criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
@@ -266,7 +266,7 @@ dict_config = GaussianDictConfig(
     optimizer_factory = lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
     mu_epochs = 10,
     rho_epochs = 10,
-    split_mu_rho = True,
+    split_mu_rho = False,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
 )
@@ -284,7 +284,7 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 3500,
+    model_epochs = 10000,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
