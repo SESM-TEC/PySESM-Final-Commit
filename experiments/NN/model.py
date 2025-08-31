@@ -23,23 +23,23 @@ class NN(nn.Module):
     def forward(self, x: torch.Tensor):
         return self.layers(x)
     
-def predict(self, x: torch.Tensor) -> torch.Tensor:
-    # 1. Convertir el tensor de PyTorch a un array de NumPy
-    x_np = x.detach().cpu().numpy()
-    
-    # 2. Normalizar el array de NumPy, capturando el resultado
-    x_normalized_np = self.scaler.transform(x_np)
-    
-    # 3. Convertir el array de NumPy normalizado de nuevo a un tensor de PyTorch
-    x_normalized_tensor = torch.from_numpy(x_normalized_np).float()
-    
-    # 4. Pasar el tensor normalizado a la red neuronal para la predicción
-    predictions = self.layers(x_normalized_tensor)
-    
-    # 5. El resto del código es correcto para la salida
-    predictions = predictions.detach().cpu().numpy().squeeze()
-    return predictions
-
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
+        # 1. Convertir el tensor de PyTorch a un array de NumPy
+        x_np = x.detach().cpu().numpy()
+        
+        # 2. Normalizar el array de NumPy, capturando el resultado
+        x_normalized_np = self.scaler.transform(x_np)
+        
+        # 3. Convertir el array de NumPy normalizado de nuevo a un tensor de PyTorch
+        x_normalized_tensor = torch.from_numpy(x_normalized_np).float()
+        
+        # 4. Pasar el tensor normalizado a la red neuronal para la predicción
+        predictions = self.layers(x_normalized_tensor)
+        
+        # 5. El resto del código es correcto para la salida
+        predictions = predictions.detach().cpu().numpy().squeeze()
+        return predictions
+        
     def save(self, path: str):
         torch.save(self.state_dict(), path)
         print(f"Model saved as {path}")
