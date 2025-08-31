@@ -3,12 +3,13 @@ import joblib
 from sklearn.svm import SVR as svr
 import torch
 
+
 class SVR:
     """
     Una clase para encapsular un modelo Support Vector Regression (SVR) de scikit-learn.
     """
     def __init__(self, kernel, C, gamma, epsilon):
-        
+
         self.model = svr(
             kernel = kernel, 
             C = C, 
