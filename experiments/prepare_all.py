@@ -77,7 +77,7 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
 
     # 3. Agregar el quinto plot en 2D
     ax5.set_title( f"{len(train_data['X'])} Samples of training", fontsize=10, pad = 0)
-    ax5.contourf(xi, yi, zi, alpha = .95, cmap='viridis') 
+    img = ax5.imshow(zi, extent=[xi.min(), xi.max(), yi.min(), yi.max()], origin='lower', cmap='viridis')
     ax5.scatter(train_data["X"], train_data["Y"], s=1, alpha=1, c='red')
     ax5.set_xlabel('X', fontsize=5)
     ax5.set_ylabel('Z', fontsize=5)
