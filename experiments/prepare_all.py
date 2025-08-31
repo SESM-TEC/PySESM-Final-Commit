@@ -4,6 +4,8 @@ from NN.model import NN
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+import numpy as np
+from scipy.interpolate import griddata
 import torch
 import wandb
 from pysesm.models.SSESM import SSESM
@@ -21,22 +23,27 @@ def prepare_dataset(train_data: dict = None, test_data: dict = None):
     return xtrain, ytrain, xtest, ytest
 
 
-def comparative_plot( svr_pred, nn_pred, SESM_pred, train_data, test_data):
+def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
     """
     Visualiza en 3D la superficie de los datos de prueba, SVR, NN y SESM.
     """
+    # 1. Ajustar la grilla para incluir un quinto plot
     fig, axes = plt.subplots(
-        nrows=2, ncols=2, figsize=(8, 8), 
+        nrows=2, ncols=3, figsize=(12, 8), 
         subplot_kw={'projection': '3d'}, dpi=100
     )
     
-    # Flatten axes for easier iteration
-    axes = axes.flatten()
+    # Reajustar la proyección del quinto eje
+    axes[1,2].remove() # Eliminar el último subplot 3D de la grilla
+    ax5 = fig.add_subplot(2, 3, 6) # Agregar un nuevo subplot 2D en su lugar
 
+    # Flatten axes for easier iteration
+    axes_3d = fig.get_axes()[:4]
+    
     titles = ["Ground truth", "SVR predictions", "NN predictions", "SESM predictions"]
     predictions = [test_data["Z"], svr_pred, nn_pred, SESM_pred]
 
-    for ax, title, pred in zip(axes, titles, predictions):
+    for ax, title, pred in zip(axes_3d, titles, predictions):
 
         ax.scatter(test_data["X"], test_data["Y"], pred, s=.5, c=test_data["Z"], alpha = .6)
         ax.scatter(train_data["X"], train_data["Y"], train_data["Z"], s=2, c='r', marker = 'x')
@@ -54,11 +61,37 @@ def comparative_plot( svr_pred, nn_pred, SESM_pred, train_data, test_data):
         ax.set_aspect('equal', adjustable='box')
         ax.grid(True)
     
+
+
+
+
+    # Preparar los datos para el plot de contornos
+    points = np.column_stack((test_data["X"], test_data["Y"]))
+    values = test_data["Z"]
+    
+    xi = np.linspace(min(test_data["X"]), max(test_data["X"]), 100)
+    yi = np.linspace(min(test_data["Y"]), max(test_data["Y"]), 100)
+    
+    xi, yi = np.meshgrid(xi, yi)
+    zi = griddata(points, values, (xi, yi), method='linear')
+
+    # 3. Agregar el quinto plot en 2D
+    ax5.set_title( f"{len(train_data['X'])} Samples of training", fontsize=10, pad = 0)
+    ax5.contourf(xi, yi, zi, alpha = .95, cmap='viridis') 
+    ax5.scatter(train_data["X"], train_data["Y"], s=1, alpha=1, c='red')
+    ax5.set_xlabel('X', fontsize=5)
+    ax5.set_ylabel('Z', fontsize=5)
+    ax5.set_aspect('equal')
+    ax5.grid(False)
+
+
+
+
+
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
     plt.tight_layout() 
     plt.show()
     return fig
-
 
 
 

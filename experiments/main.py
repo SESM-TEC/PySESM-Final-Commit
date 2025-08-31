@@ -108,7 +108,7 @@ def main():
         }
     }
 
-    num_runs = 10 # Aumentar el número de corridas para un análisis estadístico más robusto
+    num_runs = 1 # Aumentar el número de corridas para un análisis estadístico más robusto
 
     wandb.init(
         project="PySESM_experiments",
