@@ -55,7 +55,7 @@ def main():
 
     sparse_coding_config = ISTAConfig(
         epochs=200,
-        alpha=0.10,
+        alpha=0.1,
         lambd=0.00001,
         step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
         power_iterations=10,
@@ -64,7 +64,7 @@ def main():
     )
 
     dict_config = GaussianDictConfig(
-        epochs = 4,
+        epochs = 40,
         alpha = 0.01,
         # criterion = torch.nn.MSELoss(),
         # criterion = KLDivLossWrapper(),
@@ -81,12 +81,12 @@ def main():
         T=1,
         initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
         activity_threshold=0,
-        overlap_ratio=0.25
+        overlap_ratio=0.1
     )
 
     ssesm_config = SSESMConfig(
         n_features = 2,
-        model_epochs = 100,
+        model_epochs = 500,
         sparse_coding_config = sparse_coding_config,
         dict_config = dict_config,
         partition_config = partition_config,
@@ -108,6 +108,9 @@ def main():
         }
     }
 
+    pce_config = {
+        "order": 3
+    }
     num_runs = 1 # Aumentar el número de corridas para un análisis estadístico más robusto
 
     wandb.init(
@@ -132,7 +135,7 @@ def main():
     for i in range(num_runs):
         print(f"--- Corriendo experimento {i + 1}/{num_runs} ---")
 
-        experiment = EXPERIMENT(svr_config, nn_config, experiment1)
+        experiment = EXPERIMENT(svr_config, nn_config, experiment1, pce_config)
         
         # Generar un nuevo dataset en cada corrida para validar la robustez
         train_data, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)

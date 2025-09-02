@@ -1,5 +1,6 @@
 from SVR.model import SVR
 from NN.model import NN
+from PCE.model import PCE
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -19,11 +20,9 @@ def prepare_dataset(train_data: dict = None, test_data: dict = None):
     
     xtest = torch.stack([test_data["X"], test_data["Y"]], dim=1)
     ytest = test_data["Z"]
-
     return xtrain, ytrain, xtest, ytest
 
-
-def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
+def comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_data):
     """
     Visualiza en 3D la superficie de los datos de prueba, SVR, NN y SESM.
     """
@@ -38,15 +37,16 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
     ax5 = fig.add_subplot(2, 3, 6) # Agregar un nuevo subplot 2D en su lugar
 
     # Flatten axes for easier iteration
-    axes_3d = fig.get_axes()[:4]
+    axes_3d = fig.get_axes()[:5]
     
-    titles = ["Ground truth", "SVR predictions", "NN predictions", "SESM predictions"]
-    predictions = [test_data["Z"], svr_pred, nn_pred, SESM_pred]
+    titles = ["Ground truth", "SVR predictions", "NN predictions", "SESM predictions", "PCE predictions"]
+    predictions = [test_data["Z"], svr_pred, nn_pred, SESM_pred, pce_pred]
 
     for ax, title, pred in zip(axes_3d, titles, predictions):
 
-        ax.scatter(test_data["X"], test_data["Y"], pred, s=.5, c=test_data["Z"], alpha = .6)
-        ax.scatter(train_data["X"], train_data["Y"], train_data["Z"], s=2, c='r', marker = 'x')
+        ax.scatter(test_data["X"], test_data["Y"], pred, s=.5, c="0.4", alpha = .6, marker=".", label="Predicted")
+        ax.scatter(train_data["X"], train_data["Y"], train_data["Z"], s=2, c='r', marker = 'x', label="Train")
+        ax.legend()
         ax.set_title(title, fontsize=10, pad = -10)
         ax.set_xlabel('X', fontsize=5, labelpad=-12)
         ax.set_ylabel('Y', fontsize=5, labelpad=-12)
@@ -61,10 +61,6 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
         ax.set_aspect('equal', adjustable='box')
         ax.grid(True)
     
-
-
-
-
     # Preparar los datos para el plot de contornos
     points = np.column_stack((test_data["X"], test_data["Y"]))
     values = test_data["Z"]
@@ -84,10 +80,6 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
     ax5.set_aspect('equal')
     ax5.grid(False)
 
-
-
-
-
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
     plt.tight_layout() 
     plt.show()
@@ -96,14 +88,14 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data):
 
 
 class EXPERIMENT:
-    def __init__(self, svr_config: dict, nn_config: dict, experiment1: dict):
+    def __init__(self, svr_config: dict, nn_config: dict, experiment1: dict, pce_config: dict):
 
         logger = setup_logger(level=logging.DEBUG)
 
         self.SESM_model=SSESM(**experiment1, logger=logger)
         self.SVR_model = SVR(**svr_config)
         self.nn_model = NN(**nn_config)
-
+        self.PCE=PCE(**pce_config)
 
 
     def train_all(
@@ -116,16 +108,18 @@ class EXPERIMENT:
         self.SVR_model.train(xtrain, ytrain)
         self.nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
         self.SESM_model.partial_fit(xtrain, ytrain)
-
+        self.PCE.train(xtrain, ytrain)
 
 
     def test_all(self, train_data, test_data, plot_flag=False):
 
         _, _, xtest, ytest = prepare_dataset(train_data, test_data)
         
+
         svr_pred = self.SVR_model.test(xtest)
         nn_pred = self.nn_model.test(xtest)
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
+        pce_pred=self.PCE.test(xtest)
 
         metrics = {
             "SVR_MSE": mean_squared_error(ytest, svr_pred),
@@ -133,13 +127,19 @@ class EXPERIMENT:
             "NN_MSE": mean_squared_error(ytest, nn_pred),
             "NN_MAE": mean_absolute_error(ytest, nn_pred),
             "SESM_MSE": SESM_mse,
-            "SESM_MAE":mean_absolute_error(ytest, SESM_pred)
+            "SESM_MAE":mean_absolute_error(ytest, SESM_pred),
+            "PCE_MSE": mean_squared_error(ytest, pce_pred),
+            "PCE_MAE": mean_absolute_error(ytest, pce_pred)
         }
         if plot_flag:
             SESM_pred=SESM_pred.detach().cpu().numpy().squeeze()
-            fig = comparative_plot(svr_pred, nn_pred, SESM_pred, train_data, test_data)
+            print("AQUIII", nn_pred.size, pce_pred.size)
+            fig = comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_data)
             wandb.log({"comparative_plot": wandb.Image(fig)})
         return metrics
+
+
+
 
 
 
