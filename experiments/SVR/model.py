@@ -40,19 +40,8 @@ class SVR:
         print("\n Training SVR...")
         self.model.fit(xtrain, ytrain)
         print(f"Número de vectores de soporte: {len(self.model.support_vectors_)}")
-        
-        # GUARDAR MODELO
-        path = "svr_model.pth"
-        self.save(path)
-
-
-
-
 
     def test(self, xtest):
-
-        path = "svr_model.pth"
-        self.load(path)
 
         ypred = self.predict(xtest)
 

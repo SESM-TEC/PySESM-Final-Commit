@@ -1,6 +1,6 @@
 from SVR.model import SVR
 from NN.model import NN
-from PCE.model import PCE
+from PF.model import PF
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -39,7 +39,7 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_da
     # Flatten axes for easier iteration
     axes_3d = fig.get_axes()[:5]
     
-    titles = ["Ground truth", "SVR predictions", "NN predictions", "SESM predictions", "PCE predictions"]
+    titles = ["Ground truth", "SVR predictions", "NN predictions", "SESM predictions", "PF predictions"]
     predictions = [test_data["Z"], svr_pred, nn_pred, SESM_pred, pce_pred]
 
     for ax, title, pred in zip(axes_3d, titles, predictions):
@@ -95,7 +95,7 @@ class EXPERIMENT:
         self.SESM_model=SSESM(**experiment1, logger=logger)
         self.SVR_model = SVR(**svr_config)
         self.nn_model = NN(**nn_config)
-        self.PCE=PCE(**pce_config)
+        self.PF=PF(**pce_config)
 
 
     def train_all(
@@ -108,7 +108,7 @@ class EXPERIMENT:
         self.SVR_model.train(xtrain, ytrain)
         self.nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
         self.SESM_model.partial_fit(xtrain, ytrain)
-        self.PCE.train(xtrain, ytrain)
+        self.PF.train(xtrain, ytrain)
 
 
     def test_all(self, train_data, test_data, plot_flag=False):
@@ -119,7 +119,7 @@ class EXPERIMENT:
         svr_pred = self.SVR_model.test(xtest)
         nn_pred = self.nn_model.test(xtest)
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
-        pce_pred=self.PCE.test(xtest)
+        pce_pred=self.PF.test(xtest)
 
         metrics = {
             "SVR_MSE": mean_squared_error(ytest, svr_pred),
