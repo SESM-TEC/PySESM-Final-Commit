@@ -73,7 +73,7 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_da
 
     # 3. Agregar el quinto plot en 2D
     ax5.set_title( f"{len(train_data['X'])} Samples of training", fontsize=10, pad = 0)
-    img = ax5.imshow(zi, extent=[xi.min(), xi.max(), yi.min(), yi.max()], origin='lower', cmap='viridis')
+    ax5.imshow(zi, extent=[xi.min(), xi.max(), yi.min(), yi.max()], origin='lower', cmap='viridis')
     ax5.scatter(train_data["X"], train_data["Y"], s=1, alpha=1, c='red')
     ax5.set_xlabel('X', fontsize=5)
     ax5.set_ylabel('Z', fontsize=5)
@@ -86,6 +86,48 @@ def comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_da
     return fig
 
 
+def plot_caja_bigote(metricas: dict):
+    """
+    Crea un conjunto de boxplots para cada métrica en un diccionario.
+    Cada subplot representa una métrica (ej. MSE_NN) y contiene múltiples
+    cajas, donde cada caja corresponde a un vector de resultados de entrenamientos.
+
+    Args:
+        metricas (dict): Diccionario donde las claves son los nombres de las métricas
+                         y los valores son listas de vectores.
+                         Ej: {'MSE_NN': [vector_chunk1, vector_chunk2, ...]}
+    """
+    ancho = len(metricas) // 2
+    alto = 2
+    fig, axes = plt.subplots(nrows=alto, ncols=ancho, figsize=(16, 8))
+    
+    # El método axes.flatten() es útil para trabajar con una matriz de ejes
+    axes = axes.flatten()
+    # 2. Iterar sobre el diccionario usando enumerate para obtener un índice
+    for i, (nombre_metrica, datos_metrica) in enumerate(metricas.items()):
+        
+        # 3. Crear el boxplot para los datos de la métrica actual
+        # `datos_metrica` es una lista de vectores, perfecta para boxplot
+        axes[i].boxplot(datos_metrica)
+        
+        # Nombrar cada bigote segun la cantidad de muestras de entrenamiento
+        n_chunks = len(datos_metrica)
+        labels = [f'Chunk {j+1}' for j in range(n_chunks)]
+        axes[i].set_xticklabels(labels)
+        
+        # 4. Configurar el título y las etiquetas de los ejes
+        axes[i].set_title(nombre_metrica)
+        axes[i].set_ylabel(nombre_metrica)
+        axes[i].set_xlabel('Training samples')
+        axes[i].grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+    #TODO: SE DEBE RETORNAR LA IMAGEN PARA LOGGEARLA EN WANDB
+    #return fig
+
+
+
 
 class EXPERIMENT:
     def __init__(self, svr_config: dict, nn_config: dict, experiment1: dict, pce_config: dict):
@@ -96,6 +138,19 @@ class EXPERIMENT:
         self.SVR_model = SVR(**svr_config)
         self.nn_model = NN(**nn_config)
         self.PF=PF(**pce_config)
+
+        #TODO: PARA BOXPLOT, DENTRO DE CADA VECTOR IRIAN N_CUNCKS VECTORES, Y CADA VECTOR CONTENDRIA LOS MSE O MAE DE UNA CIERTA CANTIDAD DE ENTRENAMIENTOS
+        self.metrics = {
+            'MSE_NN': [],
+            'MSE_SVR': [],
+            'MSE_PF': [],
+            'MSE_SESM': [],
+
+            'MAE_NN': [],
+            'MAE_SVR': [],
+            'MAE_PF': [],
+            'MAE_SESM':[]
+        }
 
 
     def train_all(
@@ -115,7 +170,7 @@ class EXPERIMENT:
 
         _, _, xtest, ytest = prepare_dataset(train_data, test_data)
         
-
+ 
         svr_pred = self.SVR_model.test(xtest)
         nn_pred = self.nn_model.test(xtest)
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
