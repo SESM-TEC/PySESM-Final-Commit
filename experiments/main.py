@@ -63,7 +63,7 @@ def main():
     )
 
     ssesm_config = SSESMConfig(
-        n_features=2, model_epochs=500,
+        n_features=2, model_epochs=200,
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config, partition_config=partition_config,
         log_interval=100, permutation_times=1
@@ -115,31 +115,61 @@ def main():
     )
 
     # Diccionario de métricas por chunk
-    all_metrics = { "NN_MAE": [], "NN_MSE": [], "SVR_MAE": [], "SVR_MSE": [], "SESM_MAE": [], "SESM_MSE": [] }
+    all_metrics = { 
+        "NN_MAE": [], 
+        "NN_MSE": [], 
+        "SVR_MAE": [], 
+        "SVR_MSE": [], 
+        "SESM_MAE": [], 
+        "SESM_MSE": [],
+        "PCE_MAE": [],
+        "PCE_MSE": []
+    }
+    num_runs_per_chunk = 15  # Define cuántos entrenamientos por chunk quieres
 
     # 2. Entrenamiento y test por chunk
     for i, train_data in enumerate(train_chunks):
         print(f"--- Chunk {i + 1}/{num_runs} con {len(train_data)} muestras ---")
 
-        experiment = EXPERIMENT(svr_config, nn_config, experiment1, pce_config)
+        # Listas temporales para almacenar las métricas de este chunk
+        chunk_metrics = { 
+            "NN_MAE": [],
+            "NN_MSE": [],
+            "SVR_MAE": [],
+            "SVR_MSE": [],
+            "SESM_MAE": [],
+            "SESM_MSE": [],
+            "PCE_MAE": [],
+            "PCE_MSE": []
+        }
 
-        # 1) Entrenar con el chunk
-        experiment.train_all(train_data, test_data)
+        # Bucle para correr múltiples experimentos en el mismo chunk
+        for j in range(num_runs_per_chunk):
+            print(f"--- Entrenando y testeando run {j + 1}/{num_runs_per_chunk} en el chunk {i + 1} ---")
+            
+            experiment = EXPERIMENT(svr_config, nn_config, experiment1, pce_config)
 
-        # 2) Testear con el mismo chunk
-        metrics = experiment.test_all(train_data, test_data, plot_flag=False)
+            # 1) Entrenar con el chunk
+            experiment.train_all(train_data, test_data)
 
-        # Guardar métricas
+            # 2) Testear con el mismo chunk
+            metrics = experiment.test_all(train_data, test_data, plot_flag=False)
+
+            # Guardar métricas de esta corrida en las listas temporales
+            for key in chunk_metrics.keys():
+                chunk_metrics[key].append(metrics[key])
+
+        # Después de todas las corridas de este chunk, añadir los resultados a las listas principales
         for key in all_metrics.keys():
-            all_metrics[key].append(metrics[key])
+            all_metrics[key].append(chunk_metrics[key])
 
-        # Registrar métricas de esta corrida en wandb
-        wandb.log({f"{key}_chunk{i+1}": metrics[key] for key in all_metrics.keys()})
+        # Registrar métricas promedio del chunk en wandb (opcional)
+        # avg_metrics = {key: sum(chunk_metrics[key])/len(chunk_metrics[key]) for key in chunk_metrics.keys()}
+        # wandb.log({f"{key}_avg_chunk{i+1}": avg_metrics[key] for key in avg_metrics.keys()})
+    experiment.plot_caja_bigote(all_metrics)
 
-    wandb.finish()
-    print("Experimento completado. Métricas por chunk registradas en Weights & Biases.")
-
-
+wandb.finish()
+print("Experimento completado. Métricas para boxplots listas.")
 
 if __name__ == "__main__":
     main()
