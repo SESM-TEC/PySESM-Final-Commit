@@ -11,7 +11,9 @@ License:
 import logging
 import torch
 import numpy as np
-
+import imageio
+from pathlib import Path
+import datetime
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -127,30 +129,34 @@ class JensenShannonLossWrapper(torch.nn.Module):
 
 class VisualizerHook:
     """
-    Hook class to visualize the state of the Gaussian dictionary and h-vectors,
-    comparing them against the ground truth during training.
+    Hook class to visualize the state of the Gaussian dictionary,
+    save frames, and compile them into a video.
     """
-    def __init__(self, model_: SESM, ax: plt.Axes, X_train_: torch.Tensor,
-                 ground_truth_mu: list, ground_truth_sigma: list):
-        self.model = model_
+    def __init__(self, model: SESM, ax: plt.Axes, X_train: torch.Tensor,
+                 gt_mu: list, gt_sigma: list, output_dir: str = "animation_frames"):
+        self.model = model
         self.ax = ax
-        self.X_train = X_train_.detach().cpu()
-        self.ground_truth_mu = [mu.cpu() for mu in ground_truth_mu]
-        self.ground_truth_sigma = [s.cpu() for s in ground_truth_sigma]
+        self.X_train = X_train.detach().cpu()
+        self.ground_truth_mu = [mu.cpu() for mu in gt_mu]
+        self.ground_truth_sigma = [s.cpu() for s in gt_sigma]
         self.fig = ax.get_figure()
+        
+        # --- New attributes for video creation ---
+        # Create a unique directory for this run to store frames
+        run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.frames_path = Path(output_dir) / f"run_{run_timestamp}"
+        self.frames_path.mkdir(parents=True, exist_ok=True)
+        
+        self.frame_files = []
+        self.frame_count = 0
+        logger.info(f"Animation frames will be saved to: {self.frames_path.resolve()}")
 
     def _draw_ellipse(self, mu, Sigma, color, linestyle, alpha_fill):
-        """Helper to draw an ellipse from a mean and covariance matrix."""
+        # (Esta función no cambia)
         eigenvalues, eigenvectors = torch.linalg.eigh(Sigma)
-        
-        # The eigenvector of the largest eigenvalue (last one, since
-        # they are sorted) defines the orientation.
         v_max = eigenvectors[:, -1]
         angle = np.degrees(np.arctan2(v_max[1], v_max[0]))
-
-        # The width and height are 2 standard deviations (sqrt(eigenvalue)) * 2
         width, height = 4 * torch.sqrt(eigenvalues)
-        
         ellipse = Ellipse(xy=mu, width=width, height=height, angle=angle,
                           facecolor=color, edgecolor=color, alpha=alpha_fill,
                           linestyle=linestyle, linewidth=2)
@@ -161,10 +167,10 @@ class VisualizerHook:
         log_interval = self.model.config.log_interval
         total_epochs = self.model.config.model_epochs
 
-        # Update on the first, last, and every 'log_interval' epochs        
         if not (epoch == 0 or (epoch + 1) % log_interval == 0 or epoch == total_epochs - 1):
             return
 
+        # (Toda la lógica de extracción de datos y dibujo es la misma que antes)
         params = info['dictionary_params'].detach().cpu()
         h_per_block = info.get('h_per_block', [self.model.partition_manager.retrieve_active_blocks()[0].sparse_coding_layer.h])
         h_magnitudes = torch.abs(h_per_block[0]).detach().cpu().numpy().flatten()
@@ -177,29 +183,21 @@ class VisualizerHook:
 
         self.ax.cla()
         self.ax.scatter(self.X_train[:, 0], self.X_train[:, 1], c='gray', alpha=0.1, s=10, label='Train Data')
-
-        # Draw the ground truth ellipses
         for mu_gt, sigma_gt in zip(self.ground_truth_mu, self.ground_truth_sigma):
             self._draw_ellipse(mu_gt, sigma_gt, 'green', '--', 0.1)
 
-        # Draw the learned dictionary ellipses
         for i in range(n_functions):
             mu = mu_params[:, i]
             rho = rho_params[:, i]
-            
             A = torch.zeros(n_features, n_features)
             indices = torch.triu_indices(n_features, n_features)
             A[indices[0], indices[1]] = rho
             G = A.T @ A
-            
             try:
                 Sigma = torch.linalg.inv(G)
             except torch.linalg.LinAlgError:
                 Sigma = torch.eye(n_features)
-            
-            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05) # Dictionary ellipses with faint fill
-            
-            # The size of the Gaussian center represents the magnitude of h
+            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05)
             self.ax.scatter(mu[0], mu[1], s=800 * h_magnitudes[i] + 5, c='red', 
                            alpha=0.7, edgecolors='black', zorder=10)
 
@@ -210,12 +208,51 @@ class VisualizerHook:
         self.ax.set_aspect('equal', adjustable='box')
         
         plt.pause(0.01)
+
+        # --- New: Save the current figure as a frame ---
+        frame_filename = self.frames_path / f"frame_{self.frame_count:04d}.png"
+        self.fig.savefig(frame_filename, dpi=150, bbox_inches='tight')
+        self.frame_files.append(frame_filename)
+        self.frame_count += 1
+
+    def create_video(self, video_name="dictionary_evolution.mp4", fps=10):
+        """Compiles the saved frames into a video and cleans up the files."""
+        if not self.frame_files:
+            logger.warning("No frames were saved, skipping video creation.")
+            return
+
+        # Find an available filename to avoid overwriting
+        output_path = Path(video_name)
+        stem = output_path.stem
+        suffix = output_path.suffix
+        counter = 1
+        while output_path.exists():
+            new_name = f"{stem}_{counter}{suffix}"
+            output_path = Path(new_name)
+            counter += 1
+
+        logger.info(f"Creating video '{output_path}' from {len(self.frame_files)} frames...")        
+        
+        # Use imageio to create the video
+        with imageio.get_writer(output_path, fps=fps) as writer:
+            for filename in self.frame_files:
+                image = imageio.imread(filename)
+                writer.append_data(image)
+        
+        logger.info(f"Video saved successfully to '{output_path.resolve()}'!")
+        
+        # --- Cleanup: Remove temporary frame files and directory ---
+        logger.info("Cleaning up temporary frame files...")
+        for filename in self.frame_files:
+            filename.unlink()
+        self.frames_path.rmdir()
+        logger.info("Cleanup complete.")
     
 # LOGGER INSTANCE
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 50
+n_functions = 10
 n_features = 2
 
 # Device configuration
@@ -270,8 +307,8 @@ dict_config = GaussianDictConfig(
     split_mu_rho = False,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
-    # regularization_func = GaussianDictLayer.electrostatic_regularization, 
-    regularization_func = GaussianDictLayer.gram_regularization, # or None
+    regularization_func = GaussianDictLayer.electrostatic_regularization, 
+    #regularization_func = GaussianDictLayer.gram_regularization, # or None
     regularization_gamma = 0.01 
 )
 partition_config = UniformPartitionConfig(
@@ -435,6 +472,11 @@ try:
     
 except KeyboardInterrupt:
     print("\nShutting down...")
+
+finally:
+    if 'visual_hook' in locals() and visual_hook is not None:
+        visual_hook.create_video()
     plt.close('all')
-    exit(0)
+    if 'model' not in locals(): # if the script was interrupted before model creation
+        exit(0)
 
