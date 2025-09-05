@@ -42,7 +42,7 @@ class NN(nn.Module):
         
     def save(self, path: str):
         torch.save(self.state_dict(), path)
-        print(f"Model saved as {path}")
+        print(f"Model saved as {path} \n")
 
     def load(self, path: str = 'nn_model.pth') -> 'NN':
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
