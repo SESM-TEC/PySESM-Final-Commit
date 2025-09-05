@@ -29,18 +29,12 @@ def main():
         pi = np.pi
         return torch.sin(pi * x) / (pi * x) - torch.sin(pi * y) / (pi * y)
 
-    n_samples = 10  # tamaño de cada chunk
-    total_samples = 100  # total de muestras a generar
 
-    dataset_config = {
-        "n_samples": total_samples,
-        "function": custom_function,
-        "mesh_divisions": 70
-    }
 
     svr_config = {"kernel": 'rbf', "C": 0.1, "gamma": 'auto', "epsilon": 0.1}
     nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16}
-
+    pf_config = {"order": 5, "alpha": 0.01}
+    
     sparse_coding_config = ISTAConfig(
         epochs=200, alpha=0.1, lambd=0.00001,
         step_size_method=StepSizeMethod.FROBENIUS,
@@ -69,6 +63,8 @@ def main():
         log_interval=100, permutation_times=1
     )
 
+    #TODO: el diccionario experiment1 está pidiendo n_samples, pero n_samples es un valor que variaa a lo largo del experimento
+    n_samples = 16  
     experiment1 = {
         "config": ssesm_config, "hyp_set": 1, "n_samples": n_samples,
         "seed": 45, "iter": 0,
@@ -80,89 +76,75 @@ def main():
         }
     }
 
-    pf_config = {"order": 5, "alpha": 0.01}
 
-    # Generar dataset completo una vez
-    # Generar dataset completo una vez
-    full_train, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)
 
-    # full_train is a dict with keys "X","Y","Z"
-    X_full = full_train["X"]
-    Y_full = full_train["Y"]
-    Z_full = full_train["Z"]
-
-    num_runs = 1
-
-    # 1) Crear chunks con tamaño creciente logarítmicamente (no solapados)
-    train_chunks = []
-    start = 0
-    i = 1
-    while start < len(X_full):
-        # evita tamaños 0 si n_samples es pequeño
-        chunk_size = max(1, int(np.log(i + 1) * n_samples))  # escala log
-        end = min(start + chunk_size, len(X_full))
-
-        chunk = {
-            "X": X_full[start:end],
-            "Y": Y_full[start:end],
-            "Z": Z_full[start:end],
-        }
-        train_chunks.append(chunk)
-
-        start = end
-        i += 1
-
-    print(f"Created {len(train_chunks)} chunks — sizes:", [len(c["X"]) for c in train_chunks])
-
+     # 3) Estructura de métricas: para CADA métrica -> lista de tamaño num_chunks,
+    #     y cada elemento es una lista donde iremos agregando los valores de CADA run.
+    all_metrics = { 
+        "NN_MAE": [], "NN_MSE": [], 
+        "SVR_MAE": [], "SVR_MSE": [], 
+        "SESM_MAE": [], "SESM_MSE": [],
+        "PF_MAE": [], "PF_MSE": []
+    }
+    num_runs_per_set = 20  # Define cuántos entrenamientos por chunk quieres
+    n_samples = [4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    
     # 2) Inicializar Weights & Biases una sola vez (registraremos por run y chunk)
     wandb.init(
         project="PySESM_experiments",
         config={
-            "dataset_config": dataset_config,
             "svr_config": svr_config,
             "nn_config": nn_config,
             "SESM_config": ssesm_config,
-            "num_runs": num_runs,  # número de corridas completas
-            "num_chunks": len(train_chunks),
-        },
+            "PF_config": pf_config,
+            "num_runs_per_set": num_runs_per_set
+        }
     )
 
-    # 3) Estructura de métricas: para CADA métrica -> lista de tamaño num_chunks,
-    #     y cada elemento es una lista donde iremos agregando los valores de CADA run.
-    metric_keys = [
-        "NN_MAE", "NN_MSE",
-        "SVR_MAE", "SVR_MSE",
-        "SESM_MAE", "SESM_MSE",
-        "PCE_MAE", "PCE_MSE"
-    ]
-    all_metrics = {k: [[] for _ in range(len(train_chunks))] for k in metric_keys}
+    for n in n_samples: # los valores del vector n_samples
+        print(f"--- Entrenando con {n} muestras ---")
 
-    # 4) Bucle de corridas completas
-    for run in range(num_runs):
-        print(f"\n=== Run {run+1}/{num_runs} ===")
+        # Listas temporales para almacenar las métricas de este chunk
+        chunk_metrics = { 
+            "NN_MAE": [], "NN_MSE": [],
+            "SVR_MAE": [], "SVR_MSE": [],
+            "SESM_MAE": [], "SESM_MSE": [],
+            "PF_MAE": [], "PF_MSE": []
+        }
 
-        # Entrenamiento y test por chunk (UNA vez por chunk y por run)
-        for ci, train_data in enumerate(train_chunks):
-            print(f"--- Run {run+1}, Chunk {ci+1}/{len(train_chunks)} con {len(train_data['X'])} muestras ---")
+        # Bucle para correr múltiples experimentos en el mismo chunk
+        for j in range(num_runs_per_set):
+            print(f"--- Entrenamiento numero {j} con {n} muestras ---")
 
+            #Se genera un nuevo dataset con n muestras
+            dataset_config = { "n_samples": n, "function": custom_function}
+            train_data, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)
+
+            
             experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
 
-            # Entrenar con el chunk
+            # 1) Entrenar con el chunk
             experiment.train_all(train_data, test_data)
 
-            # Testear con el mismo chunk
+            # 2) Testear con el mismo chunk
             metrics = experiment.test_all(train_data, test_data, plot_flag=False)
 
-            # Acumular: por métrica -> en la lista del chunk correspondiente
-            for k in metric_keys:
-                all_metrics[k][ci].append(metrics[k])
+            # Guardar métricas de esta corrida en las listas temporales
+            for key in chunk_metrics.keys():
+                chunk_metrics[key].append(metrics[key])
 
-            # Log en wandb con etiquetas de run y chunk
-            wandb.log({f"{k}_run{run+1}_chunk{ci+1}": metrics[k] for k in metric_keys})
+        # Después de todas las corridas de este chunk, añadir los resultados a las listas principales
+        for key in all_metrics.keys():
+            all_metrics[key].append(chunk_metrics[key])
+
+
+
+
+
 
     # 5) Boxplots con la misma API que tenías (lista-de-listas por métrica)
     #    Usamos el último 'experiment' creado; si prefieres, llama al método desde otro objeto.
-    experiment.plot_caja_bigote(all_metrics)
+    experiment.plot_caja_bigote(all_metrics, n_samples)
 
     wandb.finish()
     print("Experimento completado. Métricas para boxplots listas.")

@@ -101,18 +101,7 @@ class EXPERIMENT:
         self.nn_model = NN(**nn_config)
         self.PF=PF(**pce_config)
 
-        #TODO: PARA BOXPLOT, DENTRO DE CADA VECTOR IRIAN N_CUNCKS VECTORES, Y CADA VECTOR CONTENDRIA LOS MSE O MAE DE UNA CIERTA CANTIDAD DE ENTRENAMIENTOS
-        self.metrics = {
-            'MSE_NN': [],
-            'MSE_SVR': [],
-            'MSE_PF': [],
-            'MSE_SESM': [],
 
-            'MAE_NN': [],
-            'MAE_SVR': [],
-            'MAE_PF': [],
-            'MAE_SESM':[]
-        }
 
 
     def train_all(
@@ -136,7 +125,7 @@ class EXPERIMENT:
         svr_pred = self.SVR_model.test(xtest)
         nn_pred = self.nn_model.test(xtest)
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
-        pce_pred=self.PF.test(xtest)
+        pf_pred=self.PF.test(xtest)
 
         metrics = {
             "SVR_MSE": mean_squared_error(ytest, svr_pred),
@@ -145,19 +134,19 @@ class EXPERIMENT:
             "NN_MAE": mean_absolute_error(ytest, nn_pred),
             "SESM_MSE": SESM_mse,
             "SESM_MAE":mean_absolute_error(ytest, SESM_pred),
-            "PCE_MSE": mean_squared_error(ytest, pce_pred),
-            "PCE_MAE": mean_absolute_error(ytest, pce_pred)
+            "PF_MSE": mean_squared_error(ytest, pf_pred),
+            "PF_MAE": mean_absolute_error(ytest, pf_pred)
         }
         if plot_flag:
             SESM_pred=SESM_pred.detach().cpu().numpy().squeeze()
-            print("AQUIII", nn_pred.size, pce_pred.size)
-            fig = comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_data)
+            print("AQUIII", nn_pred.size, pf_pred.size)
+            fig = comparative_plot(svr_pred, nn_pred, SESM_pred, pf_pred, train_data, test_data)
             wandb.log({"comparative_plot": wandb.Image(fig)})
         return metrics
         
 
 
-    def plot_caja_bigote(self, metricas: dict):
+    def plot_caja_bigote(self, metricas: dict, n_samples: list):
         """
         Crea un conjunto de boxplots para cada métrica en un diccionario.
         Cada subplot representa una métrica (ej. MSE_NN) y contiene múltiples
@@ -167,6 +156,7 @@ class EXPERIMENT:
             metricas (dict): Diccionario donde las claves son los nombres de las métricas
                             y los valores son listas de vectores.
                             Ej: {'MSE_NN': [vector_chunk1, vector_chunk2, ...]}
+            n_samples (list): Lista con el número de muestras usadas. Ej: [8, 16, 32, ...]
         """
         ancho = len(metricas) // 2
         alto = 2
@@ -176,22 +166,26 @@ class EXPERIMENT:
         axes = axes.flatten()
         # 2. Iterar sobre el diccionario usando enumerate para obtener un índice
         for i, (nombre_metrica, datos_metrica) in enumerate(metricas.items()):
-            
+                
             # 3. Crear el boxplot para los datos de la métrica actual
             # `datos_metrica` es una lista de vectores, perfecta para boxplot
-            axes[i].boxplot(datos_metrica)
+            box = axes[i].boxplot(datos_metrica, patch_artist = True)
             
-            # Nombrar cada bigote segun la cantidad de muestras de entrenamiento
-            n_chunks = len(datos_metrica)
-            labels = [f'{j+1}' for j in range(n_chunks)]
-            axes[i].set_xticklabels(labels)
+            for patch in box['boxes']:
+                patch.set_facecolor('lightgreen')
+            for median in box['medians']:
+                median.set(color='red', linewidth=2)
             
             # 4. Configurar el título y las etiquetas de los ejes
+            axes[i].spines['top'].set_visible(False)
+            axes[i].spines['right'].set_visible(False)
+            axes[i].set_xticklabels(n_samples)
             axes[i].set_title(nombre_metrica)
             axes[i].set_ylabel(nombre_metrica)
-            axes[i].set_xlabel('Chuck subset')
-            axes[i].grid(True)
+            axes[i].set_xlabel('Training samples')
+            axes[i].yaxis.grid(True, alpha=0.7)
         
+            
         plt.tight_layout()
         wandb.log({"Boxplots": wandb.Image(fig)})
 

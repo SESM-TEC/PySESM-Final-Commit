@@ -26,19 +26,29 @@ def plot_caja_bigote(metricas: dict):
         
         # 3. Crear el boxplot para los datos de la métrica actual
         # `datos_metrica` es una lista de vectores, perfecta para boxplot
-        axes[i].boxplot(datos_metrica)
+        box = axes[i].boxplot(datos_metrica, patch_artist = True)
         
         # Opcional: Establecer etiquetas para las cajas.
         # Si las cajas representan "chunks", puedes nombrarlas así.
         n_chunks = len(datos_metrica)
         labels = [f'Chunk {j+1}' for j in range(n_chunks)]
         axes[i].set_xticklabels(labels)
+
+        for patch in box['boxes']:
+            patch.set_facecolor('lightgreen')
+            #patch.set_edgecolor('green')
+        for median in box['medians']:
+            median.set(color='red', linewidth=3)
         
         # 4. Configurar el título y las etiquetas de los ejes
+        
+        axes[i].spines['top'].set_visible(False)
+        axes[i].spines['right'].set_visible(False)
+
         axes[i].set_title(nombre_metrica)
         axes[i].set_ylabel(nombre_metrica)
         axes[i].set_xlabel('Training samples')
-        axes[i].grid(True)
+        axes[i].yaxis.grid(True, alpha=0.7)
     
     plt.tight_layout()
     plt.show()
