@@ -80,7 +80,7 @@ def main():
         }
     }
 
-    pce_config = {"order": 5, "alpha": 0.01}
+    pf_config = {"order": 5, "alpha": 0.01}
 
     # Generar dataset completo una vez
     # Generar dataset completo una vez
@@ -91,17 +91,25 @@ def main():
     Y_full = full_train["Y"]
     Z_full = full_train["Z"]
 
-    # Particionar en chunks de n_samples (la última chunk puede ser más pequeña si hay resto)
-    num_runs = int(np.ceil(len(X_full) / n_samples))
+    # Crear chunks con tamaño creciente logarítmicamente
     train_chunks = []
-    for i in range(num_runs):
-        start = i * n_samples
-        end = min((i + 1) * n_samples, len(X_full))
-        chunk = {"X": X_full[start:end], "Y": Y_full[start:end], "Z": Z_full[start:end]}
+    start = 0
+    i = 1
+    while start < len(X_full):
+        chunk_size = int(np.log(i + 1) * n_samples)  # escala con log
+        end = min(start + chunk_size, len(X_full))
+
+        chunk = {
+            "X": X_full[start:end],
+            "Y": Y_full[start:end],
+            "Z": Z_full[start:end],
+        }
         train_chunks.append(chunk)
 
-    print(f"Created {len(train_chunks)} chunks — sizes:", [len(c["X"]) for c in train_chunks])
+        start = end
+        i += 1
 
+    print(f"Created {len(train_chunks)} chunks — sizes:", [len(c["X"]) for c in train_chunks])
 
     wandb.init(
         project="PySESM_experiments",
@@ -110,23 +118,30 @@ def main():
             "svr_config": svr_config,
             "nn_config": nn_config,
             "SESM_config": ssesm_config,
-            "num_runs": num_runs
-        }
+            "num_runs": len(train_chunks),
+        },
     )
 
     # Diccionario de métricas por chunk
-    all_metrics = { "NN_MAE": [], "NN_MSE": [], "SVR_MAE": [], "SVR_MSE": [], "SESM_MAE": [], "SESM_MSE": [] }
+    all_metrics = {
+        "NN_MAE": [],
+        "NN_MSE": [],
+        "SVR_MAE": [],
+        "SVR_MSE": [],
+        "SESM_MAE": [],
+        "SESM_MSE": [],
+    }
 
-    # 2. Entrenamiento y test por chunk
+    # Entrenamiento y test por chunk (cada chunk una sola vez)
     for i, train_data in enumerate(train_chunks):
-        print(f"--- Chunk {i + 1}/{num_runs} con {len(train_data)} muestras ---")
+        print(f"--- Chunk {i + 1}/{len(train_chunks)} con {len(train_data['X'])} muestras ---")
 
-        experiment = EXPERIMENT(svr_config, nn_config, experiment1, pce_config)
+        experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
 
-        # 1) Entrenar con el chunk
+        # Entrenar con el chunk
         experiment.train_all(train_data, test_data)
 
-        # 2) Testear con el mismo chunk
+        # Testear con el mismo chunk
         metrics = experiment.test_all(train_data, test_data, plot_flag=False)
 
         # Guardar métricas
@@ -138,6 +153,7 @@ def main():
 
     wandb.finish()
     print("Experimento completado. Métricas por chunk registradas en Weights & Biases.")
+
 
 
 
