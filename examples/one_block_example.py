@@ -22,7 +22,7 @@ from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 #from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme, StepSizeMethod
 #from pysesm.sparse_coding import ADMMConfig
-from pysesm.dictionaries import GaussianDictConfig
+from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
@@ -127,8 +127,8 @@ class JensenShannonLossWrapper(torch.nn.Module):
 
 class VisualizerHook:
     """
-    Clase que actúa como un hook para visualizar el estado del diccionario Gaussiano
-    y los vectores h, comparándolos con el ground truth.
+    Hook class to visualize the state of the Gaussian dictionary and h-vectors,
+    comparing them against the ground truth during training.
     """
     def __init__(self, model_: SESM, ax: plt.Axes, X_train_: torch.Tensor,
                  ground_truth_mu: list, ground_truth_sigma: list):
@@ -140,14 +140,15 @@ class VisualizerHook:
         self.fig = ax.get_figure()
 
     def _draw_ellipse(self, mu, Sigma, color, linestyle, alpha_fill):
-        """Helper para dibujar una elipse a partir de mu y Sigma."""
+        """Helper to draw an ellipse from a mean and covariance matrix."""
         eigenvalues, eigenvectors = torch.linalg.eigh(Sigma)
         
-        # El eigenvector del mayor eigenvalor (último, ya que vienen ordenados) define la orientación.
+        # The eigenvector of the largest eigenvalue (last one, since
+        # they are sorted) defines the orientation.
         v_max = eigenvectors[:, -1]
         angle = np.degrees(np.arctan2(v_max[1], v_max[0]))
-        
-        # El ancho y alto son 2 desviaciones estándar (sqrt(eigenvalor)) * 2
+
+        # The width and height are 2 standard deviations (sqrt(eigenvalue)) * 2
         width, height = 4 * torch.sqrt(eigenvalues)
         
         ellipse = Ellipse(xy=mu, width=width, height=height, angle=angle,
@@ -160,7 +161,7 @@ class VisualizerHook:
         log_interval = self.model.config.log_interval
         total_epochs = self.model.config.model_epochs
 
-        # Actualizar en la primera, última y cada 'log_interval' épocas
+        # Update on the first, last, and every 'log_interval' epochs        
         if not (epoch == 0 or (epoch + 1) % log_interval == 0 or epoch == total_epochs - 1):
             return
 
@@ -177,11 +178,11 @@ class VisualizerHook:
         self.ax.cla()
         self.ax.scatter(self.X_train[:, 0], self.X_train[:, 1], c='gray', alpha=0.1, s=10, label='Train Data')
 
-        # Dibujar el ground truth
+        # Draw the ground truth ellipses
         for mu_gt, sigma_gt in zip(self.ground_truth_mu, self.ground_truth_sigma):
             self._draw_ellipse(mu_gt, sigma_gt, 'green', '--', 0.1)
 
-        # Dibujar el diccionario aprendido
+        # Draw the learned dictionary ellipses
         for i in range(n_functions):
             mu = mu_params[:, i]
             rho = rho_params[:, i]
@@ -196,9 +197,9 @@ class VisualizerHook:
             except torch.linalg.LinAlgError:
                 Sigma = torch.eye(n_features)
             
-            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05) # Elipses del diccionario con relleno muy tenue
+            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05) # Dictionary ellipses with faint fill
             
-            # El tamaño del centro de la gaussiana representa la magnitud de h
+            # The size of the Gaussian center represents the magnitude of h
             self.ax.scatter(mu[0], mu[1], s=800 * h_magnitudes[i] + 5, c='red', 
                            alpha=0.7, edgecolors='black', zorder=10)
 
@@ -214,7 +215,7 @@ class VisualizerHook:
 logger = setup_logger(level=logging.DEBUG)
 
 # SESM CONFIGURATION
-n_functions = 100
+n_functions = 50
 n_features = 2
 
 # Device configuration
@@ -269,6 +270,9 @@ dict_config = GaussianDictConfig(
     split_mu_rho = False,
     eig_range = [0.05, 0.2],
     mu_range = [-2.0, 2.0],
+    # regularization_func = GaussianDictLayer.electrostatic_regularization, 
+    regularization_func = GaussianDictLayer.gram_regularization, # or None
+    regularization_gamma = 0.01 
 )
 partition_config = UniformPartitionConfig(
     T=1,
@@ -384,7 +388,7 @@ def show_all_h(model: SESM, logger: logging.Logger, threshold: float = 1e-6):
 
 
 # DATA GENERATION
-trainDataset, X_train, y_train, testDataset, X_test, y_test,gt_mu , gt_sigma = generate_gaussian_dataset(n_samples=experiment["n_samples"])
+trainDataset, X_train, y_train, testDataset, X_test, y_test, gt_mu , gt_sigma = generate_gaussian_dataset(n_samples=experiment["n_samples"])
 
 # ax = show_data(X_train,y_train,'r','x','Training')
 # show_data(X_test,y_test,'0.4','.','Test',ax)

@@ -123,3 +123,47 @@ class GaussianDictLayer(DictBaseLayer):
         # Add flags from eval_kwargs to indicate which parameters are being optimized in this epoch
         hook_info['mu_flag'] = eval_kwargs.get('mu_flag', False)
         hook_info['rho_flag'] = eval_kwargs.get('rho_flag', False)
+
+    @staticmethod
+    def gram_regularization(layer: "GaussianDictLayer") -> torch.Tensor:
+        """Penalizes the dictionary's coherence using the Gram matrix."""
+        if layer.dictionary is None:
+            return torch.tensor(0.0, device=layer.device)
+        
+        # Normalize the dictionary's columns (words) to L2 norm = 1
+        D_norm = torch.nn.functional.normalize(layer.dictionary, p=2, dim=0)
+        
+        # Calculate the Gram matrix: G = D_norm^T * D_norm
+        G = D_norm.T @ D_norm
+        
+        # The goal is for G to be the identity matrix. Penalize the difference.
+        identity = torch.eye(G.shape[0], device=layer.device)
+        return torch.norm(G - identity, p='fro')**2
+
+    @staticmethod
+    def electrostatic_regularization(layer: "GaussianDictLayer") -> torch.Tensor:
+        """Penalizes the closeness of Gaussian means using an efficient proxy."""
+        n_features = layer.n_features
+        n_functions = layer.n_functions
+        epsilon = 1e-8
+        
+        num_rho_params = n_features * (n_features + 1) // 2
+        rho = layer.theta_params[:num_rho_params, :]
+        mu = layer.theta_params[-n_features:, :]
+
+        # The "charge" is inversely proportional to the "precision," which is
+        # the sum of the squares of the rho parameters (a proxy for trace(G)).
+        trace_G = torch.sum(rho**2, dim=0)
+        charges = 1.0 / (trace_G + epsilon)
+
+        # Calculate all pairwise distances in a vectorized way
+        mu_t = mu.T # Shape: (n_functions, n_features)
+        diffs = mu_t.unsqueeze(1) - mu_t.unsqueeze(0) # Shape: (n_func, n_func, n_feat)
+        dist_sq = torch.sum(diffs**2, dim=-1) # Shape: (n_func, n_func)
+        
+        # Calculate charge products and the potential energy
+        charge_prods = charges.unsqueeze(1) * charges.unsqueeze(0)
+        potential_matrix = charge_prods / (dist_sq + epsilon)
+        
+        # Sum only the upper triangle to avoid double-counting pairs
+        return torch.triu(potential_matrix, diagonal=1).sum()

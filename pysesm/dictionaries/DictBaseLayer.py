@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from collections.abc import Callable, Iterator
 import logging
+from typing import Optional
 
 import torch
 from pysesm.base_types import BaseConfig, TensorBatch
@@ -22,6 +23,9 @@ class DictConfig(BaseConfig):
     epochs: int
     alpha: float
     criterion: torch.nn.Module | None = None
+    # Custom regularization function that takes the layer instance as input
+    regularization_func: Optional[Callable[[DictBaseLayer], torch.Tensor]] = None
+    regularization_gamma: float = 0.01
     optimizer_factory: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] | None = None
 
 
@@ -180,21 +184,30 @@ class DictBaseLayer(torch.nn.Module, ABC):
         h_detached = self._detach_tensor_batch(h)
         y_pred = self.evaluation_func(self.dictionary, h_detached)
         
-        # Handle loss calculation for TensorBatch outputs
-        loss = self._calculate_batch_loss(y_pred, y)
+        loss_recon = self._calculate_batch_loss(y_pred, y)
 
-        loss.backward(retain_graph=False)
+        # Calculate regularization loss if a function was provided
+        loss_reg = torch.tensor(0.0, device=self.device)
+        if self.config.regularization_func is not None:
+            loss_reg = self.config.regularization_func(self)
+
+        # Total loss
+        total_loss = loss_recon + self.config.regularization_gamma * loss_reg
+
+        total_loss.backward(retain_graph=False)
         self.optimizer.step()
         
         if log_losses:
-            self.losses.append(loss.item())
+            self.losses.append(total_loss.item())
         
         # Call parameter hook if provided
         if self.parameter_hook is not None:
             hook_info = {
                 'epoch': len(self.losses),
                 'theta_params': self.theta_params.clone().detach(),
-                'loss': loss.item()
+                'loss': total_loss.item(),
+                'loss_reconstruction': loss_recon.item(),
+                'loss_regularization': loss_reg.item()
             }
             # Subclasses can add more specific info to hook_info
             self._add_hook_info(hook_info, **eval_kwargs)
