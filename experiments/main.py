@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import joblib
 import wandb
 from prepare_all import EXPERIMENT
 
@@ -63,7 +64,7 @@ def main():
         log_interval=100, permutation_times=1
     )
 
-    #TODO: el diccionario experiment1 está pidiendo n_samples, pero n_samples es un valor que variaa a lo largo del experimento
+    #TODO: el diccionario experiment1 está pidiendo n_samples, pero n_samples es un valor que varia a lo largo del experimento
     n_samples = 16  
     experiment1 = {
         "config": ssesm_config, "hyp_set": 1, "n_samples": n_samples,
@@ -78,18 +79,26 @@ def main():
 
 
 
-     # 3) Estructura de métricas: para CADA métrica -> lista de tamaño num_chunks,
-    #     y cada elemento es una lista donde iremos agregando los valores de CADA run.
-    all_metrics = { 
-        "NN_MAE": [], "NN_MSE": [], 
-        "SVR_MAE": [], "SVR_MSE": [], 
-        "SESM_MAE": [], "SESM_MSE": [],
-        "PF_MAE": [], "PF_MSE": []
-    }
-    num_runs_per_set = 20  # Define cuántos entrenamientos por chunk quieres
-    n_samples = [4, 8, 16, 32, 64, 128, 256, 512, 1024]
-    
-    # 2) Inicializar Weights & Biases una sola vez (registraremos por run y chunk)
+    # Definir las métricas y tiempos una sola vez
+    METRICS = ["NN_MAE", "NN_MSE", "SVR_MAE", "SVR_MSE", 
+            "SESM_MAE", "SESM_MSE", "PF_MAE", "PF_MSE"]
+
+    TIMES = ["svr_time", "nn_time", "sesm_time", "pf_time"]
+
+
+    def init_dict(keys):
+        """Inicializa un diccionario con listas vacías por clave."""
+        return {key: [] for key in keys}
+
+
+    # 1) Diccionarios principales
+    all_metrics = init_dict(METRICS)
+    all_times   = init_dict(TIMES)
+
+    num_runs_per_set = 20
+    n_samples = [8, 16, 32, 64, 128, 256, 512, 1024]
+
+    # 2) Inicializar Weights & Biases una sola vez
     wandb.init(
         project="PySESM_experiments",
         config={
@@ -101,50 +110,39 @@ def main():
         }
     )
 
-    for n in n_samples: # los valores del vector n_samples
-        print(f"--- Entrenando con {n} muestras ---")
+    for n in n_samples:
 
-        # Listas temporales para almacenar las métricas de este chunk
-        chunk_metrics = { 
-            "NN_MAE": [], "NN_MSE": [],
-            "SVR_MAE": [], "SVR_MSE": [],
-            "SESM_MAE": [], "SESM_MSE": [],
-            "PF_MAE": [], "PF_MSE": []
-        }
+        # Diccionarios temporales para este chunk
+        chunk_metrics = init_dict(METRICS)
+        chunk_times   = init_dict(TIMES)
 
-        # Bucle para correr múltiples experimentos en el mismo chunk
         for j in range(num_runs_per_set):
-            print(f"--- Entrenamiento numero {j} con {n} muestras ---")
+            print(f"--- Entrenamiento número {j} con {n} muestras ---")
 
-            #Se genera un nuevo dataset con n muestras
-            dataset_config = { "n_samples": n, "function": custom_function}
+            # Generar dataset
+            dataset_config = {"n_samples": n, "function": custom_function}
             train_data, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)
 
-            
+            # Crear experimento y entrenar
             experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
-
-            # 1) Entrenar con el chunk
-            experiment.train_all(train_data, test_data)
-
-            # 2) Testear con el mismo chunk
+            times = experiment.train_all(train_data, test_data)
             metrics = experiment.test_all(train_data, test_data, plot_flag=False)
 
-            # Guardar métricas de esta corrida en las listas temporales
-            for key in chunk_metrics.keys():
+            # Guardar resultados
+            for key in METRICS:
                 chunk_metrics[key].append(metrics[key])
+            for key in TIMES:
+                chunk_times[key].append(times[key])
 
-        # Después de todas las corridas de este chunk, añadir los resultados a las listas principales
-        for key in all_metrics.keys():
+        # Guardar resultados finales del chunk
+        for key in METRICS:
             all_metrics[key].append(chunk_metrics[key])
+        for key in TIMES:
+            all_times[key].append(chunk_times[key])
 
-
-
-
-
-
-    # 5) Boxplots con la misma API que tenías (lista-de-listas por métrica)
-    #    Usamos el último 'experiment' creado; si prefieres, llama al método desde otro objeto.
-    experiment.plot_caja_bigote(all_metrics, n_samples)
+    joblib.dump(all_metrics, "./plots/all_metrics.joblib")
+    joblib.dump(all_times, "./plots/all_times.joblib")
+    joblib.dump(n_samples, "./plots/n_samples.joblib")
 
     wandb.finish()
     print("Experimento completado. Métricas para boxplots listas.")

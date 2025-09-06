@@ -111,10 +111,19 @@ class EXPERIMENT:
         # ENTRENAMIENTO
         xtrain, ytrain, xtest, ytest = prepare_dataset(train_data, test_data)
 
-        self.SVR_model.train(xtrain, ytrain)
-        self.nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
-        self.SESM_model.partial_fit(xtrain, ytrain)
-        self.PF.train(xtrain, ytrain)
+        svr_time = self.SVR_model.train(xtrain, ytrain)
+        nn_time = self.nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
+        pf_time = self.PF.train(xtrain, ytrain)
+        sesm_time = self.SESM_model.partial_fit(xtrain, ytrain)
+
+        times = {
+            "svr_time": svr_time,
+            "nn_time": nn_time,
+            "pf_time": pf_time,
+            "sesm_time": sesm_time
+        }
+        return times
+        
 
 
     def test_all(self, train_data, test_data, plot_flag=False):
@@ -144,50 +153,6 @@ class EXPERIMENT:
             wandb.log({"comparative_plot": wandb.Image(fig)})
         return metrics
         
-
-
-    def plot_caja_bigote(self, metricas: dict, n_samples: list):
-        """
-        Crea un conjunto de boxplots para cada métrica en un diccionario.
-        Cada subplot representa una métrica (ej. MSE_NN) y contiene múltiples
-        cajas, donde cada caja corresponde a un vector de resultados de entrenamientos.
-
-        Args:
-            metricas (dict): Diccionario donde las claves son los nombres de las métricas
-                            y los valores son listas de vectores.
-                            Ej: {'MSE_NN': [vector_chunk1, vector_chunk2, ...]}
-            n_samples (list): Lista con el número de muestras usadas. Ej: [8, 16, 32, ...]
-        """
-        ancho = len(metricas) // 2
-        alto = 2
-        fig, axes = plt.subplots(nrows=alto, ncols=ancho, figsize=(16, 8), dpi=300)
-        
-        # El método axes.flatten() es útil para trabajar con una matriz de ejes
-        axes = axes.flatten()
-        # 2. Iterar sobre el diccionario usando enumerate para obtener un índice
-        for i, (nombre_metrica, datos_metrica) in enumerate(metricas.items()):
-                
-            # 3. Crear el boxplot para los datos de la métrica actual
-            # `datos_metrica` es una lista de vectores, perfecta para boxplot
-            box = axes[i].boxplot(datos_metrica, patch_artist = True)
-            
-            for patch in box['boxes']:
-                patch.set_facecolor('lightgreen')
-            for median in box['medians']:
-                median.set(color='red', linewidth=2)
-            
-            # 4. Configurar el título y las etiquetas de los ejes
-            axes[i].spines['top'].set_visible(False)
-            axes[i].spines['right'].set_visible(False)
-            axes[i].set_xticklabels(n_samples)
-            axes[i].set_title(nombre_metrica)
-            axes[i].set_ylabel(nombre_metrica)
-            axes[i].set_xlabel('Training samples')
-            axes[i].yaxis.grid(True, alpha=0.7)
-        
-            
-        plt.tight_layout()
-        wandb.log({"Boxplots": wandb.Image(fig)})
 
 
 

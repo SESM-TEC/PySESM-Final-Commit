@@ -2,6 +2,7 @@ import numpy as np
 import joblib
 from sklearn.svm import SVR as svr
 import torch
+import time
 from sklearn.preprocessing import StandardScaler
 
 
@@ -38,8 +39,13 @@ class SVR:
     def train(self, xtrain, ytrain):
         xtrain = self.scaler.fit_transform(xtrain)
         print("\n Training SVR...")
+
+        start_time = time.time()
         self.model.fit(xtrain, ytrain)
+        end_time = time.time()
         print(f"Número de vectores de soporte: {len(self.model.support_vectors_)}")
+        
+        return end_time - start_time
 
     def test(self, xtest):
 

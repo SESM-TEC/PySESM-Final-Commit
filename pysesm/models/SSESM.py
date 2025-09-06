@@ -20,6 +20,7 @@ from sklearn.metrics import mean_squared_error
 
 import numpy as np
 import torch
+import time
 
 from ..models.SESM import SESM, SESMConfig
 from ..device_manager.DeviceManager import DeviceManager
@@ -115,6 +116,7 @@ class SSESM(SESM):
             *_: Additional unused positional arguments.
 
         """
+        start_time = time.time()
         # Ensure y is 2D
         if y.dim() == 1:
             y = y.unsqueeze(-1)
@@ -140,6 +142,9 @@ class SSESM(SESM):
                 )
 
             self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
+            
+        end_time = time.time()
+        return end_time - start_time
 
     def predict(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
         """

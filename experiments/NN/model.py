@@ -2,6 +2,7 @@
 import torch.nn as nn
 import torch
 import torch.optim as optim
+import time
 from sklearn.preprocessing import StandardScaler
 
 
@@ -65,6 +66,7 @@ class NN(nn.Module):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
         print("\n Training NN...")
 
+        start_time = time.time()
         for epoch in range(self.epochs):
             self.train()
 
@@ -90,10 +92,14 @@ class NN(nn.Module):
                 print(f"Epoch [{epoch+1}/{self.epochs}], "
                     f"mse_train: {loss.item():.4f}, "
                     f"mse_val: {test_loss.item():.4f}")
+        end_time = time.time()
+
 
         # GUARDAR MODELO
         path = "nn_model.pth"
         self.save(path)
+
+        return end_time - start_time
 
     def test(self, xtest):
         model_path = "nn_model.pth"

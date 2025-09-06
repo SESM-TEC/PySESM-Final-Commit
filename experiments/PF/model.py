@@ -1,6 +1,7 @@
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import Lasso
+import time
 
 class PF():
     def __init__(self, order: int=3, alpha: float=0.01, include_bias: bool = False, max_iter:int=10000):
@@ -10,7 +11,12 @@ class PF():
         ])
 
     def train(self, X_train, y_train):
+
+        start_time = time.time()
         self.poly_lasso.fit(X_train, y_train)
+        end_time = time.time()
+        
+        return end_time - start_time
 
     def test(self, X_test):
         y_pred = self.poly_lasso.predict(X_test)
