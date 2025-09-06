@@ -11,7 +11,7 @@ License:
 import logging
 import torch
 import numpy as np
-import imageio
+import imageio.v2 as imageio
 from pathlib import Path
 import datetime
 
@@ -209,9 +209,28 @@ class VisualizerHook:
         
         plt.pause(0.01)
 
-        # --- New: Save the current figure as a frame ---
+        # --- Save the current figure as a frame ---       
         frame_filename = self.frames_path / f"frame_{self.frame_count:04d}.png"
-        self.fig.savefig(frame_filename, dpi=150, bbox_inches='tight')
+
+
+        # Calcular tamaño para que sea divisible por 16
+        # Ejemplo: 1280x960 (ambos divisibles por 16)
+        target_width, target_height = 1280, 960
+        dpi = 150
+        fig_width = target_width / dpi  # ≈ 8.89 pulgadas
+        fig_height = target_height / dpi  # ≈ 6.67 pulgadas
+
+        
+        # Fijar el tamaño de la figura si no está ya fijado
+        self.fig.set_size_inches(fig_width, fig_height)  # Tamaño fijo en pulgadas
+    
+        # Guardar con parámetros fijos para mantener tamaño consistente
+        self.fig.savefig(frame_filename, 
+                         dpi=dpi, 
+                         # bbox_inches='tight', 
+                         # pad_inches=0.1,  # Padding fijo
+                         facecolor='white')  # Color de fondo consistente
+    
         self.frame_files.append(frame_filename)
         self.frame_count += 1
 
@@ -236,7 +255,7 @@ class VisualizerHook:
         # Use imageio to create the video
         with imageio.get_writer(output_path, fps=fps) as writer:
             for filename in self.frame_files:
-                image = imageio.imread(filename)
+                image = imageio.imread(str(filename))
                 writer.append_data(image)
         
         logger.info(f"Video saved successfully to '{output_path.resolve()}'!")
@@ -259,7 +278,7 @@ n_features = 2
 device_map = {
     DeviceTarget.GLOBAL: "cpu",
     DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-    DeviceTarget.DICTIONARY_LAYER: "cpu",
+    DeviceTarget.DICTIONARY_LAYER: "cuda",
     DeviceTarget.PARTITION_MANAGER: "cpu"
 }
 
@@ -325,11 +344,11 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 10000,
+    model_epochs = 150,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=100,
+    log_interval=25,
     permutation_times=1
 )
 
@@ -465,18 +484,13 @@ try:
                  y_pred=y_predicted,
                  model=model,
                  hypset=experiment["hyp_set"])
-
-    plt.ioff()
-    plt.show(block=True)
-
     
 except KeyboardInterrupt:
-    print("\nShutting down...")
-
+    print("\nAborting training and creating video from captured frames...")
+    
 finally:
     if 'visual_hook' in locals() and visual_hook is not None:
         visual_hook.create_video()
-    plt.close('all')
-    if 'model' not in locals(): # if the script was interrupted before model creation
-        exit(0)
 
+print("\nDisplaying final plots. Close all plot windows to exit.")
+plt.show(block=True)
