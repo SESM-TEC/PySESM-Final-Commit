@@ -14,12 +14,12 @@ from pysesm.utils.loggers import setup_logger
 import logging
 
 def prepare_dataset(train_data: dict = None, test_data: dict = None):
-        
-    xtrain = torch.stack([train_data["X"], train_data["Y"]], dim=1)
+    xtrain = train_data["X"]  
     ytrain = train_data["Z"]
-    
-    xtest = torch.stack([test_data["X"], test_data["Y"]], dim=1)
+
+    xtest = test_data["X"]
     ytest = test_data["Z"]
+
     return xtrain, ytrain, xtest, ytest
 
 def comparative_plot(svr_pred, nn_pred, SESM_pred, pce_pred, train_data, test_data):

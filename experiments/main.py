@@ -5,7 +5,7 @@ import joblib
 import wandb
 from prepare_all import EXPERIMENT
 
-from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset
+from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset, generate_custom_nd_function_dataset
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper, CrossEntropyLossWrapper
 
 from pysesm.models.SSESM import SSESMConfig
@@ -26,14 +26,20 @@ def main():
     """
 
     # 1. Configuración del experimento y dataset
-    def custom_function(x, y):
+    def sinc_function(X):
+        x, y = X[:, 0], X[:, 1]
         pi = np.pi
         return torch.sin(pi * x) / (pi * x) - torch.sin(pi * y) / (pi * y)
-
-
+    
+    def sinc_3d_function(X):
+        x, y, z = X[:, 0], X[:, 1], X[:, 2]
+        pi = np.pi
+        return torch.sin(pi * x) / (pi * x) - torch.sin(pi * y) / (pi * y) + torch.sin(pi*z)/(pi*z)
+    
+    n_dimensions=3
 
     svr_config = {"kernel": 'rbf', "C": 0.1, "gamma": 'auto', "epsilon": 0.1}
-    nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16}
+    nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":n_dimensions}
     pf_config = {"order": 5, "alpha": 0.01}
     
     sparse_coding_config = ISTAConfig(
@@ -52,13 +58,13 @@ def main():
     )
 
     partition_config = UniformPartitionConfig(
-        T=1,
-        initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
+        T=2,
+        initial_bounds=torch.tensor([[-2 for i in range(n_dimensions)], [2 for i in range(n_dimensions)]], dtype=torch.float32),
         activity_threshold=0, overlap_ratio=0.1
     )
 
     ssesm_config = SSESMConfig(
-        n_features=2, model_epochs=200,
+        n_features= n_dimensions, model_epochs=200,
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config, partition_config=partition_config,
         log_interval=100, permutation_times=1
@@ -120,8 +126,8 @@ def main():
             print(f"--- Entrenamiento número {j} con {n} muestras ---")
 
             # Generar dataset
-            dataset_config = {"n_samples": n, "function": custom_function}
-            train_data, _, _, test_data, _, _ = generate_custom_function_dataset(**dataset_config)
+            dataset_config = {"n_samples": n,"n_dimensions":n_dimensions, "function": sinc_3d_function}
+            train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
 
             # Crear experimento y entrenar
             experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)

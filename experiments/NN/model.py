@@ -7,14 +7,14 @@ from sklearn.preprocessing import StandardScaler
 
 
 class NN(nn.Module):
-    def __init__(self, epochs, lr, hidden_dim):
+    def __init__(self, epochs, lr, hidden_dim, input_d):
         super().__init__()
         self.scaler = StandardScaler()
   
         self.epochs = epochs
         self.lr = lr
         self.layers = nn.Sequential(
-            nn.Linear(2, hidden_dim),
+            nn.Linear(input_d, hidden_dim),
             nn.Tanh(), 
             nn.Linear(hidden_dim, hidden_dim),
             nn.Tanh(), 
