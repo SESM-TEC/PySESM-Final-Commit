@@ -101,9 +101,7 @@ def main():
     all_metrics = init_dict(METRICS)
     all_times   = init_dict(TIMES)
 
-    num_runs_per_set = 20
-    n_samples = [8, 16, 32, 64, 128, 256, 512, 1024]
-
+    
     # 2) Inicializar Weights & Biases una sola vez
     wandb.init(
         project="PySESM_experiments",
@@ -115,36 +113,41 @@ def main():
             "num_runs_per_set": num_runs_per_set
         }
     )
+    
+    dimensiones = [2, 3, 4, 5]
+    num_runs_per_set = 20
+    n_samples = [8, 16, 32, 64, 128, 256, 512, 1024]
 
-    for n in n_samples:
+    for dim in dimensiones:
+        for n in n_samples:
 
-        # Diccionarios temporales para este chunk
-        chunk_metrics = init_dict(METRICS)
-        chunk_times   = init_dict(TIMES)
+            # Diccionarios temporales para este chunk
+            chunk_metrics = init_dict(METRICS)
+            chunk_times   = init_dict(TIMES)
 
-        for j in range(num_runs_per_set):
-            print(f"--- Entrenamiento número {j} con {n} muestras ---")
+            for j in range(num_runs_per_set):
+                print(f"--- Entrenamiento número {j} con {n} muestras ---")
 
-            # Generar dataset
-            dataset_config = {"n_samples": n,"n_dimensions":n_dimensions, "function": sinc_3d_function}
-            train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
+                # Generar dataset
+                dataset_config = {"n_samples": n,"n_dimensions":dim, "function": sinc_3d_function}
+                train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
 
-            # Crear experimento y entrenar
-            experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
-            times = experiment.train_all(train_data, test_data)
-            metrics = experiment.test_all(train_data, test_data, plot_flag=False)
+                # Crear experimento y entrenar
+                experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
+                times = experiment.train_all(train_data, test_data)
+                metrics = experiment.test_all(train_data, test_data, plot_flag=False)
 
-            # Guardar resultados
+                # Guardar resultados
+                for key in METRICS:
+                    chunk_metrics[key].append(metrics[key])
+                for key in TIMES:
+                    chunk_times[key].append(times[key])
+
+            # Guardar resultados finales del chunk
             for key in METRICS:
-                chunk_metrics[key].append(metrics[key])
+                all_metrics[key].append(chunk_metrics[key])
             for key in TIMES:
-                chunk_times[key].append(times[key])
-
-        # Guardar resultados finales del chunk
-        for key in METRICS:
-            all_metrics[key].append(chunk_metrics[key])
-        for key in TIMES:
-            all_times[key].append(chunk_times[key])
+                all_times[key].append(chunk_times[key])
 
     joblib.dump(all_metrics, "./plots/all_metrics.joblib")
     joblib.dump(all_times, "./plots/all_times.joblib")
