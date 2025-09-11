@@ -52,7 +52,7 @@ n_samples = joblib.load("n_samples.joblib")
 
 print(metrics.keys())
 for dim, dim_metrics in metrics.items():
-    plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 8), dim=dim)
+    plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 80), dim=dim)
 
-#for dim, dim_times in times.items():
-#    plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)
+for dim, dim_times in times.items():
+    plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)

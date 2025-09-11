@@ -26,26 +26,24 @@ def main():
     """
 
     # 1. Configuración del experimento y dataset
-    def sinc_function(X):
-        x, y = X[:, 0], X[:, 1]
-        pi = np.pi
-        return torch.sin(pi * x) / (pi * x) - torch.sin(pi * y) / (pi * y)
-    
-    def sinc_3d_function(X):
-        features=[X[:, feature] for feature in range(X.size(1))]
-        pi = np.pi
-        out=0
-        for idx, feature in enumerate(features):
-            out=out+((-1)^idx)*torch.sin(pi*feature)/(pi*feature)
 
-        return out
     
-    n_dimensions= 3 
+    def parabolic_function(X):
+        """Esta funcion recibe un tensor 2d y retorna la suma de los cuadrados de sus columnas."""
+        return torch.sum(X**2, dim=1)
+    
+    def plane_function(X):
+        """Esta funcion recibe un tensor 2d y retorna la suma de las columnas."""
+        return torch.sum(X, dim=1) 
+
+
+
+    n_dimensions= 3
     all_metrics_dim={}
     all_times_dim={}
 
     for dim in range(2,n_dimensions+1):
-        num_runs_per_set = 20
+        num_runs_per_set = 10
 
 
         svr_config = {"kernel": 'rbf', "C": 0.1, "gamma": 'auto', "epsilon": 0.1}
@@ -68,7 +66,7 @@ def main():
         )
 
         partition_config = UniformPartitionConfig(
-            T=2,
+            T=1,
             initial_bounds=torch.tensor([[-2 for i in range(dim)], [2 for i in range(dim)]], dtype=torch.float32),
             activity_threshold=0, overlap_ratio=0.1
         )
@@ -132,10 +130,10 @@ def main():
             chunk_times   = init_dict(TIMES)
 
             for j in range(num_runs_per_set):
-                print(f"--- Entrenamiento número {j} con {n} muestras ---")
+                print(f"\n\n --- Entrenamiento número {j} con {n} muestras en {dim}D ---\n\n")
 
                 # Generar dataset
-                dataset_config = {"n_samples": n,"n_dimensions":dim, "function": sinc_3d_function}
+                dataset_config = {"n_samples": n,"n_dimensions":dim, "function": plane_function}
                 train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
 
                 # Crear experimento y entrenar
