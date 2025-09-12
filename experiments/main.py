@@ -42,12 +42,12 @@ def main():
     all_metrics_dim={}
     all_times_dim={}
 
-    for dim in range(2,n_dimensions+1):
+    for dim in ["2"]:
+        dim=4
         num_runs_per_set = 10
 
-
         svr_config = {"kernel": 'rbf', "C": 0.1, "gamma": 'auto', "epsilon": 0.1}
-        nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
+        nn_config = {"epochs": 500, "lr": 0.05*dim, "hidden_dim": 16, "input_d":dim}
         pf_config = {"order": 5, "alpha": 0.01}
         
         sparse_coding_config = ISTAConfig(
