@@ -9,7 +9,7 @@ License:
 '''
 
 from dataclasses import dataclass # Ensure dataclass is imported
-from typing import Union, Callable, Optional
+from collections.abc import Callable
 import logging
 
 import numpy as np
@@ -19,7 +19,6 @@ from pysesm.base_types import TensorBatch
 
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
 # Update BlockManager import:
 from .BlockManager import BlockManager, BlockManagerConfig # Import both class and config
@@ -38,18 +37,18 @@ class UniformPartitionConfig(BlockManagerConfig):
     """
     
     # Number of blocks per dimension - can be int (uniform) or tensor (per-dim)
-    T: Union[torch.Tensor, int] = DEFAULT_BLOCKS_PER_DIM
+    T: torch.Tensor | int = DEFAULT_BLOCKS_PER_DIM
     
     # Bounding box coordinates: array of shape (2, n_dims) with [min, max] corners
     # None means bounds will be inferred from data
-    initial_bounds: Optional[np.ndarray] = None
+    initial_bounds: np.ndarray | None = None
     
     # Number of points in a block that must be surpassed to be considered active.
     activity_threshold: int = 0
     
     # Block overlap ratio (0-1) for smooth transitions between blocks
     # None=no overlap, float=uniform overlap, tensor=per-dimension overlap
-    overlap_ratio: Optional[Union[float, torch.Tensor]] = None
+    overlap_ratio: float | torch.Tensor | None = None
     
     
 class UniformPartitionManager(BlockManager):
@@ -69,7 +68,6 @@ class UniformPartitionManager(BlockManager):
     def __init__(self,
                  config: UniformPartitionConfig,
                  logger: logging.Logger,
-                 device_manager: Optional[DeviceManager] = None,
                  sparse_coding_layer_hook = None
                  ):
         """
@@ -81,7 +79,7 @@ class UniformPartitionManager(BlockManager):
             device_manager (DeviceManager): which memory the tensors should use
             sparse_coding_layer_hook: function to be attached to all block's sparse coding layers
         """
-        super().__init__(config=config, logger=logger, device_manager=device_manager)
+        super().__init__(config=config, logger=logger)
         
         self.T = config.T
 
@@ -102,7 +100,7 @@ class UniformPartitionManager(BlockManager):
         # Helper for normalizing X coordinates in each block.
         self._vectorized_normalization = np.vectorize(lambda x: x.normalize_points())
 
-    def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
+    def _find_block(self, x: torch.Tensor) -> PartitionBlock | None:
         """Finds the block corresponding to a given point.
 
         This will return one block only, whose scope covers the point.
