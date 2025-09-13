@@ -326,7 +326,7 @@ class VisualizerHook:
 logger = setup_logger(level=logging.DEBUG)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 20
+n_functions = 100
 n_features = 2
 
 
