@@ -71,8 +71,8 @@ class GaussianDictLayer(DictBaseLayer):
         """
         Initializes the parameters (theta) for the Gaussian functions using self.psi.
         """
-        # self.psi is the GaussianFunction instance
-        return self.psi.initialize().to(self.device)
+        # self.psi is the GaussianFunction instance         
+        return torch.nn.Parameter(self.psi.initialize().data.to(self.device))
 
 
     def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:

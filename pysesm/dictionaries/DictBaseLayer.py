@@ -90,7 +90,6 @@ class DictBaseLayer(torch.nn.Module, ABC):
         # Setup criterion and optimizer
         self._setup_criterion()
         self._setup_optimizer()
-        self.to(self.device)
     
     @abstractmethod
     def _initialize_parameters(self, **kwargs) -> torch.nn.Parameter:

@@ -187,6 +187,8 @@ class SESM(torch.nn.Module, ABC):
         if device_manager is None:
             self.device_manager = DeviceManager(logger=self.logger, default_device="cpu")
             self.logger.info("No DeviceManager provided. Creating a default DeviceManager (CPU only).")
+        elif isinstance(device_manager,dict):
+            self.device_manager = DeviceManager(logger=self.logger, device_map=device_manager)
         else:
             self.device_manager = device_manager
         

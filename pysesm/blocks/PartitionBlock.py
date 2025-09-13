@@ -93,6 +93,9 @@ class PartitionBlock:
         self.positions: list[int] = []
         self.predicted_output: list = []
         self.sparse_coding_layer: Optional[SparseCodingBaseLayer] = None
+
+        # Cache for device-specific data copies
+        self._device_data_cache = {}
         
     def new_point(self, point_x: torch.Tensor, point_y: torch.Tensor, pos: int):
         """
@@ -148,6 +151,7 @@ class PartitionBlock:
         self.y = []
         self.target = None
         self.positions = []
+        self._device_data_cache.clear()
 
 
     def is_active(self,threshold=0) -> bool:
@@ -158,6 +162,39 @@ class PartitionBlock:
             bool: True if the block has points, False otherwise.
         """
         return len(self.X) > threshold
+    
+    def get_data_for_device(self, device: torch.device):
+        """
+        Retrieves device-specific copies of normalized_X and target.
+
+        This method implements a lazy-copying and caching mechanism. If a copy
+        of the data for the requested device already exists, it's returned.
+        Otherwise, a new copy is created, cached, and then returned.
+        If the requested device is the block's native device, the original
+        tensors are returned without making a copy.
+
+        Args:
+            device (torch.device): The target device for the data.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the
+            normalized_X and target tensors on the specified device.
+        """
+        # If the requested device is the block's native device, return originals.
+        if device == self.device:
+            return self.normalized_X, self.target
+
+        # If not native, check the cache.
+        if device in self._device_data_cache:
+            cached_data = self._device_data_cache[device]
+            return cached_data['X'], cached_data['y']
+
+        # If not native and not cached, create, cache, and return.
+        X_device = self.normalized_X.to(device)
+        y_device = self.target.to(device)
+        self._device_data_cache[device] = {'X': X_device, 'y': y_device}
+        return X_device, y_device
+
 
     def normalize_points(self):
         """

@@ -31,7 +31,7 @@ from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 #from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-#from pysesm.device_manager.DeviceManager import DeviceManager
+from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
 
 # --- Custom Loss Function Wrappers ---
@@ -188,6 +188,13 @@ class VisualizerHook:
         # Only render a frame at specified intervals to save time.
         is_log_epoch = (epoch + 1) % log_interval == 0
         is_last_epoch = epoch == total_epochs - 1
+
+        
+        # For visualization, we will always use the first active block's context,
+        # which is the only block for T=1 in this example.
+        active_block = self.model.partition_manager.retrieve_active_blocks()[0]
+
+        
         if not (epoch == 0 or is_log_epoch or is_last_epoch):
             return
 
@@ -205,6 +212,10 @@ class VisualizerHook:
         rho_params = params[:num_rho_params, :]
         mu_params = params[-n_features:, :]
 
+        # Get block's original coordinate system for denormalization
+        block_min_coords = active_block.block_scope[0].cpu()
+        block_span_coords = active_block.block_size.cpu()
+        
         # Clear and redraw the plot for the current state.
         self.ax.cla()
         self.ax.scatter(self.X_train[:, 0], self.X_train[:, 1], c='gray', 
@@ -216,19 +227,30 @@ class VisualizerHook:
 
         # Draw learned dictionary function ellipses.
         for i in range(n_functions):
-            mu = mu_params[:, i]
-            rho = rho_params[:, i]
+            mu_norm = mu_params[:, i]
+            rho_norm = rho_params[:, i]
+
+            # Denormalize mu
+            mu_orig = mu_norm * block_span_coords + block_min_coords
+
+
+            
             A = torch.zeros(n_features, n_features)
             indices = torch.triu_indices(n_features, n_features)
-            A[indices[0], indices[1]] = rho
+            A[indices[0], indices[1]] = rho_norm
+            
             G = A.T @ A
             try:
-                Sigma = torch.linalg.inv(G)
+                Sigma_norm = torch.linalg.inv(G)
             except torch.linalg.LinAlgError:
-                Sigma = torch.eye(n_features) # Fallback for singular matrix
-            self._draw_ellipse(mu, Sigma, 'red', '-', 0.05)
+                Sigma_norm = torch.eye(n_features) # Fallback for singular matrix
+
+            # Denormalize Sigma (Sigma_orig = diag(block_span_coords) @ Sigma_norm @ diag(block_span_coords))
+            Sigma_orig = torch.diag(block_span_coords) @ Sigma_norm @ torch.diag(block_span_coords)
+            self._draw_ellipse(mu_orig, Sigma_orig, 'red', '-', 0.05)
+
             # Scatter plot for means, size proportional to activation magnitude.
-            self.ax.scatter(mu[0], mu[1], s=800 * h_magnitudes[i] + 5, 
+            self.ax.scatter(mu_orig[0], mu_orig[1], s=800 * h_magnitudes[i] + 5, 
                             c='red', alpha=0.7, edgecolors='black', zorder=10)
 
         # Configure plot aesthetics.
@@ -326,14 +348,14 @@ class VisualizerHook:
 logger = setup_logger(level=logging.DEBUG)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 20
+n_functions = 100
 n_features = 2
 
 
 sparse_coding_config = ISTAConfig(
     epochs=100,
     alpha=0.15,
-    lambd=0.001,
+    lambd=0.005,
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
     power_iterations=10,
     n_functions=n_functions,
@@ -366,9 +388,9 @@ sparse_coding_config = ISTAConfig(
 dict_config = GaussianDictConfig(
     epochs = 50,
     alpha = 0.01,
-    # criterion = torch.nn.MSELoss(),
+    criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
-    criterion = JensenShannonLossWrapper(),
+    # criterion = JensenShannonLossWrapper(),
     optimizer_factory = lambda params, lr: torch.optim.SGD(
         params, lr=lr, momentum=0.1
     ),
@@ -423,7 +445,7 @@ experiment = {
     "n_samples": 500,
     "seed": 45,
     "iter": 0,
-    "device_map": {
+    "device_manager": {
         DeviceTarget.GLOBAL: "cpu",
         DeviceTarget.SPARSE_CODING_LAYER: "cpu",
         DeviceTarget.DICTIONARY_LAYER: "cuda",
