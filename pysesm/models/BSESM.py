@@ -9,19 +9,16 @@ from __future__ import annotations
 
 import logging
 import time
-import warnings
 
 from collections.abc import Callable
 
 from dataclasses import dataclass
-from sklearn.metrics import mean_squared_error
 import torch
+import torch.nn.functional as F
 
 from pysesm.blocks import PartitionBlock
 from pysesm.models.SESM import SESM, SESMConfig
-from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
 from pysesm.base_types import TensorBatch 
 
 
@@ -51,7 +48,6 @@ class BSESM(SESM):
         self,
         config: BSESMConfig,
         logger: logging.Logger,
-        device_manager: DeviceManager | None = None,
         dict_layer_hook: Callable[[dict], None] | None = None,
         sparse_coding_layer_hook: Callable[[dict], None] | None = None,
         sesm_hook: Callable[[dict], None] | None = None,
@@ -63,7 +59,6 @@ class BSESM(SESM):
         Args:
             config (BSESMConfig): Configuration object containing all BSESM parameters.
             logger (logging.Logger): Logger instance for runtime monitoring.
-            device_manager (DeviceManager): Device manager for GPU/CPU allocation.
             dict_layer_hook: Optional callback for dictionary layer monitoring.
             sparse_coding_layer_hook: Optional callback for sparse coding layer monitoring.
             sesm_hook: Optional callback for SESM-level monitoring.
@@ -72,7 +67,6 @@ class BSESM(SESM):
         super().__init__(
             config=config,
             logger=logger,
-            device_manager=device_manager,
             sesm_hook=sesm_hook,
             dict_layer_hook=dict_layer_hook,
             sparse_coding_layer_hook=sparse_coding_layer_hook,
@@ -85,8 +79,7 @@ class BSESM(SESM):
             config=self.sparse_coding_config,
             evaluation_func=self.evaluation_func,
             logger=self.logger,
-            parameter_hook=self.sparse_coding_layer_hook,
-            device=self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+            parameter_hook=self.sparse_coding_layer_hook
         )
         self.logger.info(f"Global Sparse Coding Layer: {type(self.global_sparse_coding_layer).__name__}")
 
@@ -117,7 +110,9 @@ class BSESM(SESM):
         raise TypeError("Unsupported TensorBatch types for evaluation_func: "
                         f"D={type(dictionary)}, h={type(h)}")
 
-    def _aggregate_block_data(self, blocks: list[PartitionBlock]
+    def _aggregate_block_data(self, 
+                              blocks: list[PartitionBlock],
+                              device: str | torch.device
                               ) -> tuple[TensorBatch, TensorBatch, TensorBatch]:
         """
         Aggregates data from active blocks into nested_tensors for efficient
@@ -125,7 +120,8 @@ class BSESM(SESM):
         
         Args:
             blocks (List[PartitionBlock]): List of active blocks.
-            
+            device (str | torch.device): The target device for the aggregated tensors
+
         Returns:
             Tuple containing three nested_tensors:
                 - X_nested (TensorBatch): Normalized input features for each block.
@@ -139,7 +135,6 @@ class BSESM(SESM):
             # a nested_tensor that contains a single zero-sized tensor.
             # So, .unbind() on it will return a list with one empty tensor.
             # This is the expected behavior for now, to avoid RuntimeError.
-            device = self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
             empty_tensor_list = [torch.empty(0, self.n_features,
                                              device=device)]
             empty_y_list = [torch.empty(0, 1,
@@ -156,21 +151,21 @@ class BSESM(SESM):
                                                layout=torch.jagged,
                                                device=device))
 
-        X_list = [block.normalized_X for block in blocks]
-        y_list = [block.target for block in blocks]
+        X_list = [block.normalized_X.get_for_device(device) for block in blocks]
+        y_list = [block.target.get_for_device(device) for block in blocks]
         # h needs to be detached here because DictBaseLayer.partial_fit
         # expects h to be detached for dictionary training.
-        h_list = [block.sparse_coding_layer.h.detach() for block in blocks] 
+        h_list = [block.sparse_coding_layer.h.detach().to(device) for block in blocks] 
         
         X_nested = torch.nested.nested_tensor(
             X_list, layout=torch.jagged,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
+            device=device)
         y_nested = torch.nested.nested_tensor(
             y_list, layout=torch.jagged,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
+            device=device)
         h_nested = torch.nested.nested_tensor(
             h_list, layout=torch.jagged,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
+            device=device)
         
         return X_nested, y_nested, h_nested
 
@@ -296,7 +291,7 @@ class BSESM(SESM):
             # Perform a single global training step and get updated h_nested
             h_nested = self._global_train_step(X_nested, y_nested, h_nested, epoch)
 
-            self.elapsed_time += time.time() - epoch_start_time
+            self.training_time += time.time() - epoch_start_time
 
             # Log progress for BSESM model_epochs
             if ( (self.config.log_interval > 0) and
@@ -337,23 +332,19 @@ class BSESM(SESM):
         self.partial_fit_count += 1
 
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, custom_h: torch.Tensor | None = None) -> torch.Tensor:
         """
         Predict the output using the trained BSESM model with active sub-blocks.
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            y (torch.Tensor): Target values (used to identify active blocks).
+            custom_h (torch.Tensor | None): custom sparse weights h (used for debugging).
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
 
-        if y is not None:
-            warnings.warn("Deprecated behaviour: predict does not need y values",
-                          DeprecationWarning, stacklevel=2)
-
-        
+       
         active_blocks = self.partition_manager.retrieve_inference_blocks(X)
         
         if len(active_blocks) == 0:
@@ -368,10 +359,11 @@ class BSESM(SESM):
 
         
         # Aggregate test data into a nested_tensor for efficient batch evaluation
-        X_list_test = [block.normalized_X for block in active_blocks]
+        X_list_test = [block.normalized_X.get_for_device(self.dictionary_layer.device) 
+                       for block in active_blocks]
         X_nested_test = torch.nested.nested_tensor(
             X_list_test, layout=torch.jagged,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER))
+            device=self.dictionary_layer.device)
 
         with torch.no_grad():
             # Evaluate the dictionary for all test blocks at once -> returns a
@@ -382,7 +374,10 @@ class BSESM(SESM):
             # Perform prediction for each block using its specific evaluated
             # dictionary and learned h
             y_pred_normalized_list = [
-                self.evaluation_func(dict_i, block.sparse_coding_layer.h) \
+                self.evaluation_func(
+                    dict_i, 
+                    custom_h.to(dict_i.device) if custom_h is not None else block.sparse_coding_layer.h
+                )
                 for dict_i, block in zip(dict_list_test, active_blocks)
             ]
 
@@ -401,6 +396,6 @@ class BSESM(SESM):
         sub-blocks.
         """
         y_pred = self.predict(X)
-        current_time = self.elapsed_time / 60
-        mse = mean_squared_error(y_pred.cpu().numpy(), y.cpu().numpy())
-        return y_pred, current_time, mse
+        current_time = self.training_time / 60
+        mse = F.mse_loss(y_pred,y.to(y_pred.device))
+        return y_pred, current_time, mse.item()

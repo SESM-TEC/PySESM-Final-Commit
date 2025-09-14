@@ -12,17 +12,16 @@ License:
 from __future__ import annotations
 
 import logging
-import warnings
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from sklearn.metrics import mean_squared_error
+
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from ..models.SESM import SESM, SESMConfig
-from ..device_manager.DeviceManager import DeviceManager
 from ..factories.BlockManagerFactory import BlockManagerFactory
 
 @dataclass
@@ -51,7 +50,6 @@ class SSESM(SESM):
         self,
         config: SSESMConfig,
         logger: logging.Logger,
-        device_manager: DeviceManager = None,
         dict_layer_hook: Callable[[dict], None] | None = None,
         sparse_coding_layer_hook: Callable[[dict], None] | None = None,
         sesm_hook: Callable[[dict], None] | None = None,
@@ -66,7 +64,6 @@ class SSESM(SESM):
         Args:
             config (SSESMConfig): Configuration object containing all SSESM parameters.
             logger (logging.Logger): Logger instance for runtime monitoring.
-            device_manager (DeviceManager): Device manager for GPU/CPU allocation.
             dict_layer_hook: Optional callback for dictionary layer monitoring.
             sparse_coding_layer_hook: Optional callback for sparse coding layer monitoring.
             sesm_hook: Optional callback for SESM-level monitoring.
@@ -76,7 +73,6 @@ class SSESM(SESM):
         super().__init__(
             config=config,
             logger=logger,
-            device_manager=device_manager,
             sesm_hook=sesm_hook,
             dict_layer_hook=dict_layer_hook,
             sparse_coding_layer_hook=sparse_coding_layer_hook,
@@ -89,7 +85,6 @@ class SSESM(SESM):
         self.partition_manager = BlockManagerFactory.create(
             config.partition_config,
             logger=logger, 
-            device_manager=self.device_manager,
             sparse_coding_layer_hook=sparse_coding_layer_hook
         )
 
@@ -141,7 +136,7 @@ class SSESM(SESM):
 
             self.logger.debug(f"Permutation {permutation}/{self.permutation_times} done.")
 
-    def predict(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
+    def predict(self, X: torch.Tensor, custom_h: torch.Tensor | None = None) -> torch.Tensor:
         """
         Predict the output using the trained SSESM model with active sub-blocks.
 
@@ -151,18 +146,14 @@ class SSESM(SESM):
         3. Aggregating predictions to reconstruct the final output vector.
 
         Args:
-            X (torch.Tensor): Input features for prediction.
-            y (torch.Tensor):  Deprecated parameter.  No longer needed.
-
+            X (torch.Tensor): Input features for prediction.            
+            custom_h (torch.Tensor, optional): A fixed sparse vector to use for
+                      all blocks, overriding their learned h. Useful for debugging.
+ 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
-
-        if y is not None:
-            warnings.warn("Deprecated behaviour: predict does not need y values",
-                          DeprecationWarning, stacklevel=2)
-
-        
+      
         active_blocks = self.partition_manager.retrieve_inference_blocks(X)
 
         # Create tensor directly with correct shape and device
@@ -170,7 +161,7 @@ class SSESM(SESM):
         
         for block in active_blocks:
             # Use parent's predict with the block's sparse coding h
-            block_pred = self._predict_block(block) / block.amplitude
+            block_pred = self._predict_block(block,custom_h=custom_h) / block.amplitude
             
             # Map predictions back to original positions
             for i, pos in enumerate(block.positions):
@@ -196,6 +187,9 @@ class SSESM(SESM):
                 - mse (float): Mean Squared Error between predictions and true target values.
         """
         y_pred = self.predict(X)
-        time = self.elapsed_time / 60
-        mse = mean_squared_error(y_pred.cpu().numpy(), y.cpu().numpy())
-        return y_pred, time, mse
+        time = self.training_time / 60
+
+        # Calculate MSE using PyTorch's function
+        # Ensure both tensors are on the same device for the calculation.
+        mse = F.mse_loss(y_pred, y.to(y_pred.device))
+        return y_pred, time, mse.item()

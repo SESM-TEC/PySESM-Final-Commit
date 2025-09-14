@@ -144,7 +144,6 @@ class GaussianDictLayer(DictBaseLayer):
     def electrostatic_regularization(layer: "GaussianDictLayer") -> torch.Tensor:
         """Penalizes the closeness of Gaussian means using an efficient proxy."""
         n_features = layer.n_features
-        n_functions = layer.n_functions
         epsilon = 1e-8
         
         num_rho_params = n_features * (n_features + 1) // 2
