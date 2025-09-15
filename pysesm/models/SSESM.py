@@ -186,10 +186,10 @@ class SSESM(SESM):
                 - time (float): Total elapsed time for training (in minutes).
                 - mse (float): Mean Squared Error between predictions and true target values.
         """
-        y_pred = self.predict(X)
+        y_pred = self.predict(X) # y_pred will be on X.device
         time = self.training_time / 60
 
         # Calculate MSE using PyTorch's function
         # Ensure both tensors are on the same device for the calculation.
         mse = F.mse_loss(y_pred, y.to(y_pred.device))
-        return y_pred, time, mse.item()
+        return y_pred.cpu(), time, mse.item()

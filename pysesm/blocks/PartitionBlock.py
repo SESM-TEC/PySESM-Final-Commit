@@ -10,14 +10,14 @@ Authors: The SESM Team
 License: 
 '''
 
-from typing import Tuple, Optional
-
 import torch
+
+
+from pysesm.base_types import TensorProxy
+
 
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer
-
-# TODO: Why is X a list of tensors and not simply a tensor?  
 
 class PartitionBlock:
     """
@@ -27,6 +27,8 @@ class PartitionBlock:
     input space and manages the data points (X, y) that fall within its boundaries.
     It holds references to its own data, an associated sparse coding layer,
     and properties needed for local model evaluation.
+
+    X and y are implemented as lists of tensors to optimize adding points to them.
 
     Attributes:
     - space_origin (torch.Tensor): The minimum coordinates (origin) of the entire
@@ -44,12 +46,12 @@ class PartitionBlock:
     - X (list[torch.Tensor]): List of original, unnormalized input data points (features)
                               that have been assigned to this block. Each element is
                               a tensor of shape (n_features,).
-    - normalized_X (Optional[torch.Tensor]): Stacked and normalized (0 to 1) version of X,
+    - normalized_X (Optional[TensorProxy]): Stacked and normalized (0 to 1) version of X,
                                           relative to the block's `block_scope`.
                                           Shape: (n_samples_in_block, n_features).
     - y (list[torch.Tensor]): List of original, unnormalized target values (outputs)
                               corresponding to points in X. Each element is a tensor.
-    - target (Optional[torch.Tensor]): Stacked and amplitude-scaled version of y.
+    - target (Optional[TensorProxy]): Stacked and amplitude-scaled version of y.
                                     This is the target used for sparse coding.
                                     Shape: (n_samples_in_block, output_dim).
     - positions (list[int]): List of original indices of points added to this block,
@@ -64,7 +66,7 @@ class PartitionBlock:
     def __init__(
         self,
         space_origin: torch.Tensor,
-        block_index: Tuple[int, ...], # Use Tuple for clarity
+        block_index: tuple[int, ...], # Use Tuple for clarity
         block_size: torch.Tensor,
         device: torch.device,
     ):
@@ -87,12 +89,12 @@ class PartitionBlock:
         
         self.amplitude: float = 1.0
         self.X: list[torch.Tensor] = []
-        self.normalized_X: Optional[torch.Tensor] = None
+        self.normalized_X: TensorProxy | None = None
         self.y: list[torch.Tensor] = []
-        self.target: Optional[torch.Tensor] = None
+        self.target: TensorProxy | None = None
         self.positions: list[int] = []
         self.predicted_output: list = []
-        self.sparse_coding_layer: Optional[SparseCodingBaseLayer] = None
+        self.sparse_coding_layer: SparseCodingBaseLayer | None = None
 
         # Cache for device-specific data copies
         self._device_data_cache = {}
@@ -163,38 +165,6 @@ class PartitionBlock:
         """
         return len(self.X) > threshold
     
-    def get_data_for_device(self, device: torch.device):
-        """
-        Retrieves device-specific copies of normalized_X and target.
-
-        This method implements a lazy-copying and caching mechanism. If a copy
-        of the data for the requested device already exists, it's returned.
-        Otherwise, a new copy is created, cached, and then returned.
-        If the requested device is the block's native device, the original
-        tensors are returned without making a copy.
-
-        Args:
-            device (torch.device): The target device for the data.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the
-            normalized_X and target tensors on the specified device.
-        """
-        # If the requested device is the block's native device, return originals.
-        if device == self.device:
-            return self.normalized_X, self.target
-
-        # If not native, check the cache.
-        if device in self._device_data_cache:
-            cached_data = self._device_data_cache[device]
-            return cached_data['X'], cached_data['y']
-
-        # If not native and not cached, create, cache, and return.
-        X_device = self.normalized_X.to(device)
-        y_device = self.target.to(device)
-        self._device_data_cache[device] = {'X': X_device, 'y': y_device}
-        return X_device, y_device
-
 
     def normalize_points(self):
         """
@@ -215,10 +185,10 @@ class PartitionBlock:
         # This might indicate malformed block sizes or degenerate dimensions.
         sizes[sizes == 0] = 1.0 
 
-        self.normalized_X = (tensor_X - min_vals) / sizes
+        self.normalized_X = TensorProxy((tensor_X - min_vals) / sizes)
 
 
-    def _create_target_tensor(self) -> Optional[torch.Tensor]:
+    def _create_target_tensor(self) -> torch.Tensor | None:
         """
         Private helper: Stacks and formats 'y' data into a 2D tensor,
         then scales it by `self.amplitude`. Does NOT calculate amplitude.
@@ -272,7 +242,8 @@ class PartitionBlock:
             self.amplitude = 1.0
 
         # Now, use the new helper method to create the target tensor
-        self.target = self._create_target_tensor()
+        target_tensor = self._create_target_tensor()
+        self.target = TensorProxy(target_tensor) if target_tensor is not None else None
         
     def prepare_target_for_inference(self):
         """
@@ -285,4 +256,5 @@ class PartitionBlock:
             return
 
         # Directly use the helper method; self.amplitude is assumed to be set already.
-        self.target = self._create_target_tensor()
+        target_tensor = self._create_target_tensor()
+        self.target = TensorProxy(target_tensor) if target_tensor is not None else None
