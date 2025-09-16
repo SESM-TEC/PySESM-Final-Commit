@@ -171,8 +171,8 @@ class BSESM(SESM):
 
 
     def _global_train_step(self,
-                           X_proxy: TensorProxy,
-                           y_proxy: TensorProxy,
+                           X_nested_proxy: TensorProxy,
+                           y_nested_proxy: TensorProxy,
                            h_nested: TensorBatch,
                            epoch: int):
         """
@@ -212,13 +212,13 @@ class BSESM(SESM):
             dict_list_sc = dict_nested_detached.unbind()
         else:
             dict_list_sc = [d.to(sc_device) for d in dict_nested_detached.unbind()]
-        D_mega = torch.block_diag(*dict_list_sc).detach()
+        D_mega = torch.block_diag(*dict_list_sc)
 
         # Transfer y_nested and get its contiguous values on the target device
         Y_mega = y_nested_proxy.get_for_device(sc_device).values()
         
         # Update the number of functions for the global SC layer dynamically
-        self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
+        # self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
 
         # Solve the single, large sparse coding problem
         self.global_sparse_coding_layer.partial_fit(y=Y_mega,
@@ -271,27 +271,21 @@ class BSESM(SESM):
         if not active_blocks:
             self.logger.warning("No active blocks found. Skipping training.")
             return
-        
-        # --- Initialize/Update H_mega for the global sparse coding layer (efficiently) ---
-        sc_device = self.global_sparse_coding_layer.device
-        
-        # Aggregate h vectors once on the sc_device to get a contiguous view for initialization
-        _, _, h_nested_initial = self._aggregate_block_data(active_blocks, sc_device)
-        H_mega_initial = h_nested_initial.values()
 
         # --- Step 1: Aggregate data ONCE and create proxies for static data ---
         dict_device = self.dictionary_layer.device
         sc_device = self.global_sparse_coding_layer.device
 
-        # Aggregate all data onto the dictionary's device initially
+        # Aggregate all data onto the dictionary's device initially. This is the single, expensive operation.
         X_nested, y_nested, h_nested = self._aggregate_block_data(active_blocks, device=dict_device)
 
-        # Wrap static aggregated data in proxies
+        # Wrap the static aggregated data (X, y) in proxies for efficient device access later.
         X_nested_proxy = TensorProxy(X_nested)
         y_nested_proxy = TensorProxy(y_nested)
 
-        # --- Step 2: Initialize/Update H_mega for the global sparse coding layer ---
-        H_mega_initial = h_nested.values().to(sc_device)        
+        # Transfer the contiguous block of h data efficiently to the sparse coding device.
+        H_mega_initial = h_nested.values().to(sc_device)
+
         self.global_sparse_coding_layer.config.n_functions = H_mega_initial.shape[0]
 
         # Decide if we need to force a full setup for global SC layer (recreating h Parameter)
@@ -337,10 +331,16 @@ class BSESM(SESM):
                     'dict_losses': self.dictionary_layer.losses,
                     'sparse_coding_losses': self._sparse_coding_losses,
                     'h_mega': self.global_sparse_coding_layer.h.detach().clone(),
-                    'dictionary_params': self.dictionary_layer.theta_params.detach().clone()
-                    'h_per_block': [h.detach().clone() for h in h_list_current]
+                    'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
+                    'h_per_block': [h.detach().clone() for h in h_list_current],
                 }
                 self.sesm_hook(hook_info)
+
+        # Step 2: After training is complete, distribute final h values to individual blocks
+        h_list_final = h_nested.unbind()
+        for i, block in enumerate(active_blocks):
+            # Update the h-vector of the individual sparse coding layer within each block object.
+            block.sparse_coding_layer.h.data = h_list_final[i].to(block.sparse_coding_layer.device)
 
         self.partial_fit_count += 1
 
@@ -351,7 +351,8 @@ class BSESM(SESM):
 
         Args:
             X (torch.Tensor): Input features for prediction.
-            custom_h (torch.Tensor | None): custom sparse weights h (used for debugging).
+            custom_h (torch.Tensor | None): A custom "mega" h-vector containing the
+                concatenated weights for all active blocks. Used for debugging.
 
         Returns:
             torch.Tensor: Predicted values for the input dataset.
@@ -383,15 +384,25 @@ class BSESM(SESM):
             # NestedTensor of matrices.
             dict_nested_test = self.dictionary_layer.forward(X_nested_test)
             dict_list_test = dict_nested_test.unbind()
+
+            # Prepare h vectors for prediction, handling the optional custom_h.
+            if custom_h is not None:
+                h_sizes = [b.sparse_coding_layer.h.shape[0] for b in active_blocks]
+                if custom_h.shape[0] != sum(h_sizes):
+                    raise ValueError(f"custom_h size ({custom_h.shape[0]}) must match "
+                                     f"total size of all block h's ({sum(h_sizes)})")
+                h_sections = torch.split(custom_h, h_sizes)
+                h_to_use_list = [h.to(self.dictionary_layer.device) for h in h_sections]
+            else:
+                h_to_use_list = [b.sparse_coding_layer.h.to(self.dictionary_layer.device) for b in active_blocks]
             
             # Perform prediction for each block using its specific evaluated
             # dictionary and learned h
             y_pred_normalized_list = [
                 self.evaluation_func(
-                    dict_i, 
-                    custom_h.to(dict_i.device) if custom_h is not None else block.sparse_coding_layer.h
-                )
-                for dict_i, block in zip(dict_list_test, active_blocks)
+                    dict_i, h_i
+                ) 
+                for dict_i, h_i in zip(dict_list_test, h_to_use_list)
             ]
 
 

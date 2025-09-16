@@ -8,7 +8,6 @@ from pysesm.sparse_coding.FISTALayer import FISTALayer, FISTAConfig, RestartStra
 
 # Import the base test class
 from base_sparse_coding_test import BaseSparseCodingTest
-from pysesm.enums.DeviceTargetEnum import DeviceTarget # For device manager
 
 # Import the helper for __main__ block
 from pytest_helper import print_pytest_instructions # CORRECTED IMPORT
@@ -22,7 +21,7 @@ class TestFISTALayer(BaseSparseCodingTest):
     """
     
     @pytest.fixture
-    def layer_factory(self, common_logger, common_device_manager, common_evaluation_func):
+    def layer_factory(self, common_logger, common_device, common_evaluation_func):
         """
         Factory for FISTALayer instances. This fixture provides the specific
         implementation details needed by the abstract BaseSparseCodingTest.
@@ -34,7 +33,7 @@ class TestFISTALayer(BaseSparseCodingTest):
                     config=config,
                     evaluation_func=common_evaluation_func,
                     logger=common_logger,
-                    device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                    device=common_device,
                     **kwargs
                 )
         return FISTALayerFactory()

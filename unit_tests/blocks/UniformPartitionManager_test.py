@@ -9,8 +9,6 @@ from typing import Union, Optional
 from pysesm.blocks.UniformPartitionManager import UniformPartitionManager, UniformPartitionConfig
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig # Example sparse coding layer for init_sparse_coding_per_block
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
 
 # Configure logger once at the module level
 logger = logging.getLogger("test_uniform_partition_manager")
@@ -20,20 +18,12 @@ logger.setLevel(logging.DEBUG) # Set a higher level to see debug/info messages i
 
 # --- Fixtures ---
 
-@pytest.fixture(scope="module")
-def common_device_manager():
-    """Provides a shared DeviceManager instance for all tests in this module."""
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu" # Assuming TargetDevice is an alias for DeviceTarget
-    }
-    # Using a unique logger for the DeviceManager fixture to avoid conflicts
-    return DeviceManager(logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+def common_device():
+    """Provides a common device string ('cpu') for tests."""
+    return "cpu"
 
 @pytest.fixture
-def create_manager(common_device_manager):
+def create_manager(common_device):
     """
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
@@ -50,12 +40,12 @@ def create_manager(common_device_manager):
         config = UniformPartitionConfig(
             T=T_val,
             initial_bounds=initial_bounds_np,
-            activity_threshold=threshold_val
+            activity_threshold=threshold_val,
+            device=common_device
         )
         return UniformPartitionManager(
             config=config,
-            logger=logger, # Use the module-level logger for the manager
-            device_manager=common_device_manager
+            logger=logger # Use the module-level logger for the manager
         )
     return _creator
 

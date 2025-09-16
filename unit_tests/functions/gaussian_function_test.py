@@ -1,11 +1,15 @@
-from pysesm.functions.GaussianFunction import GaussianFunction
-import torch
+import time
+from typing import Any, Union, List
 import logging
+
+import torch
 import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
-import time
-from typing import Any, Union, List
+
+
+from pysesm.functions.GaussianFunction import GaussianFunction
+
 
 # --- Fixtures ---
 

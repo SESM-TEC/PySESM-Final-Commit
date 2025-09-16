@@ -11,7 +11,6 @@ from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
 
 # Import the base test class
 from base_sparse_coding_test import BaseSparseCodingTest
-from pysesm.enums.DeviceTargetEnum import DeviceTarget # For device manager
 
 # --- Concrete Tests for ISTALayer ---
 
@@ -22,7 +21,7 @@ class TestISTALayer(BaseSparseCodingTest):
     """
     
     @pytest.fixture
-    def layer_factory(self, common_logger, common_device_manager, common_evaluation_func):
+    def layer_factory(self, common_logger, common_device, common_evaluation_func):
         """
         Factory for ISTALayer instances. This fixture provides the specific
         implementation details needed by the abstract BaseSparseCodingTest.
@@ -34,7 +33,7 @@ class TestISTALayer(BaseSparseCodingTest):
                     config=config,
                     evaluation_func=common_evaluation_func,
                     logger=common_logger,
-                    device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER),
+                    device=common_device,
                     **kwargs
                 )
         return ISTALayerFactory()

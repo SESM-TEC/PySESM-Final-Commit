@@ -75,8 +75,7 @@ class UniformPartitionManager(BlockManager):
 
         Args:
             config (UniformPartitionConfig): configuration of the partition manager.
-            logger (logging.Logger): Logger instance for recording messages and warnings.
-            device_manager (DeviceManager): which memory the tensors should use
+            logger (logging.Logger): Logger instance for recording messages and warnings.            
             sparse_coding_layer_hook: function to be attached to all block's sparse coding layers
         """
         super().__init__(config=config, logger=logger)

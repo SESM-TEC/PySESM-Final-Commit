@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 from pysesm.dictionaries.GaussianDictLayer import GaussianDictLayer, GaussianDictConfig
 #from pysesm.functions.GaussianFunction import GaussianFunction # Still used for comparison/true function
 #from pysesm.sparse_coding.ISTALayer import ISTAConfig # For parameter_hook
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager # For DeviceTargetEnum
 from pysesm.base_types import TensorBatch
 
 
@@ -52,7 +50,7 @@ def _common_logger():
 
 @pytest.fixture(scope="module")
 def _common_device():
-    return torch.device('cpu')
+    return 'cpu'
 
 @pytest.fixture(scope="module")
 def _common_evaluation_func():
@@ -97,20 +95,10 @@ def _common_evaluation_func():
                             f"D={type(dictionary)}, h={type(h)}")
     return _eval_func_impl  # Return the actual callable function.
 
-@pytest.fixture(scope="module")
-def _common_device_manager(_common_logger):
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu"
-    }
-    return DeviceManager(_common_logger, default_device="cpu", device_map=device_map)
-
 
 # --- Ported Test Cases ---
 
-def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
+def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _common_evaluation_func):
     """Test GaussianDictLayer's ability to find correct mean with fixed covariance."""
 
     seed_value = 42  # Puedes elegir cualquier entero
@@ -162,7 +150,7 @@ def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _commo
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
         parameter_hook=parameter_tracker,
-        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER) # Pass via device manager
+        device=_common_device) # Pass via device manager
     )
     
     # Initialize h to [1] since we only have one Gaussian
@@ -191,7 +179,7 @@ def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _commo
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
 
 
-def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
+def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func):
     """Test GaussianDictLayer's ability to find diagonal covariance with fixed mean."""
     n_features = 2
     n_functions = 1
@@ -223,7 +211,7 @@ def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_de
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
-        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        device=_common_device)
     )
     
     h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
@@ -260,7 +248,7 @@ def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_de
     assert dict_layer.losses[-1] < dict_layer.losses[0], "Loss did not decrease during training."
 
 
-def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func, _common_device_manager):
+def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _common_device, _common_evaluation_func):
     """Test GaussianDictLayer's ability to find non-diagonal covariance with fixed mean."""
     n_features = 2
     n_functions = 1
@@ -292,7 +280,7 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _commo
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
-        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        device=_common_device
     )
     
     h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
@@ -344,8 +332,7 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _commo
 
 # --- New Test Cases for TensorBatch and Gradients ---
 def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device,
-                                                  _common_evaluation_func,
-                                                  _common_device_manager):
+                                                  _common_evaluation_func):
     """
     Test training GaussianDictLayer with a 3D Tensor input (batch, N, F),
     verifying loss decrease and selective gradient zeroing.
@@ -382,7 +369,7 @@ def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
-        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        device=_common_device)
     )
 
     dict_layer._train_epoch(X=X_batch, y=y_batch, h=h_batch, log_losses=False,
@@ -423,8 +410,7 @@ def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device
 @pytest.mark.filterwarnings("ignore:There is a performance drop.*:UserWarning")
 @pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
 def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_device,
-                                                      _common_evaluation_func,
-                                                      _common_device_manager):
+                                                      _common_evaluation_func):
     """
     Test training GaussianDictLayer with a nested_tensor input,
     verifying loss decrease and selective gradient zeroing.
@@ -462,7 +448,7 @@ def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_de
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
-        device=_common_device_manager.get_device(DeviceTarget.DICTIONARY_LAYER)
+        device=_common_device
     )
 
     dict_layer._train_epoch(X=X_nested, y=y_nested, h=h_nested, log_losses=False,
