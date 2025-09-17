@@ -17,7 +17,7 @@ import torch
 from pysesm.base_types import BaseConfig, TensorBatch
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DictConfig(BaseConfig):
     """Base configuration for all dictionary types"""
     epochs: int

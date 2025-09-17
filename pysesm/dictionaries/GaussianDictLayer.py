@@ -18,7 +18,7 @@ from pysesm.functions.GaussianFunction import GaussianFunction
 from pysesm.base_types import TensorBatch
 from .DictBaseLayer import DictBaseLayer, DictConfig
 
-@dataclass
+@dataclass(kw_only=True)
 class GaussianDictConfig(DictConfig):
     """Configuration specific to Gaussian dictionaries"""
     mu_epochs: int = 10
