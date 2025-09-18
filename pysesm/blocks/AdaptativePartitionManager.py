@@ -19,6 +19,7 @@ from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.PartitionBlock import PartitionBlock
+from pysesm.base_types import TensorProxy
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
@@ -187,10 +188,7 @@ class AdaptativePartitionManager(BlockManager):
         
         vectorized_normalize = np.vectorize(lambda block: block.normalize_points())
         vectorized_normalize(x)
-        
-        for block in x:
-           aspect_ratio = block.block_size / block.block_size.max()
-           block.normalized_X = block.normalized_X * aspect_ratio
+
 
     def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = False):
         """

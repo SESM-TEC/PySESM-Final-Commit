@@ -166,7 +166,7 @@ class PartitionBlock:
         return len(self.X) > threshold
     
 
-    def normalize_points(self):
+    def normalize_points(self, preserve_aspect_ratio: bool = True):
         """
         Normalizes the X coordinates of all points within the block to a [0, 1] range,
         relative to the block's own `block_scope`.
@@ -181,11 +181,16 @@ class PartitionBlock:
         min_vals = self.block_scope[0].to(self.device)
         sizes = self.block_size.to(self.device) 
 
+        if preserve_aspect_ratio:
+            divisor = sizes.max()
+        else:
+            divisor = sizes
+
         # Protect against division by zero for any dimension that has zero size.
         # This might indicate malformed block sizes or degenerate dimensions.
-        sizes[sizes == 0] = 1.0 
+        divisor[divisor == 0] = 1.0 if isinstance(divisor, torch.Tensor) else (1.0 if divisor == 0 else divisor)
 
-        self.normalized_X = TensorProxy((tensor_X - min_vals) / sizes)
+        self.normalized_X = TensorProxy((tensor_X - min_vals) / divisor)
 
 
     def _create_target_tensor(self) -> torch.Tensor | None:

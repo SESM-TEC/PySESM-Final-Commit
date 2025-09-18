@@ -27,7 +27,7 @@ from .PartitionBlock import PartitionBlock
 # Default number of blocks per dimension if not specified
 DEFAULT_BLOCKS_PER_DIM = 4
 
-@dataclass
+@dataclass(kw_only=True)
 class UniformPartitionConfig(BlockManagerConfig):
     """Configuration for UniformPartitionManager.
     

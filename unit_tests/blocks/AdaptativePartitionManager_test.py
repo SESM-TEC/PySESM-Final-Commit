@@ -13,6 +13,7 @@ from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig
 logger = logging.getLogger("test_uniform_partition_manager")
 logger.setLevel(logging.DEBUG)
 
+# pylint: disable=redefined-outer-name
 
 @pytest.fixture(scope="module")
 def common_device():
@@ -165,7 +166,7 @@ def test_add_points(create_manager, common_device):
     maxSplitsBeforeRestart=5
     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
 
-    device = common_device()
+    device = common_device
 
     y = torch.randn(500, 1)
 
