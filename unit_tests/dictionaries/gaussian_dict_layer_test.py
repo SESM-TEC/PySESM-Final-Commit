@@ -140,7 +140,8 @@ def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _commo
         rho_epochs=0,  # Do not learn rho (fixed covariance)
         split_mu_rho=True, # Use split training strategy
         eig_range=[0.5, 0.5], # Fixed eigenvalues for fixed covariance
-        mu_range=[[-0.5, 0.5], [-0.5, 0.5]] # Initial wide range for mean initialization
+        mu_range=[[-0.5, 0.5], [-0.5, 0.5]], # Initial wide range for mean initialization
+        device=_common_device
     )
 
     dict_layer = GaussianDictLayer(
@@ -149,8 +150,7 @@ def test_gaussian_dict_layer_find_mu_only(_common_logger, _common_device, _commo
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
         logger=_common_logger,
-        parameter_hook=parameter_tracker,
-        device=_common_device) # Pass via device manager
+        parameter_hook=parameter_tracker
     )
     
     # Initialize h to [1] since we only have one Gaussian
@@ -202,7 +202,8 @@ def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_de
         rho_epochs=500, # Learn rho for all epochs
         split_mu_rho=True, # Use split training
         eig_range=[0.1, 5.0], # Wider range for eigenvalues to capture 2.0 and 0.5
-        mu_range=[[0.0, 0.0], [0.0, 0.0]] # Fixed mean initialization at origin
+        mu_range=[[0.0, 0.0], [0.0, 0.0]], # Fixed mean initialization at origin
+        device=_common_device
     )
 
     dict_layer = GaussianDictLayer(
@@ -210,8 +211,7 @@ def test_gaussian_dict_layer_find_diagonal_covariance(_common_logger, _common_de
         n_features=n_features,
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
-        logger=_common_logger,
-        device=_common_device)
+        logger=_common_logger
     )
     
     h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
@@ -271,7 +271,8 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _commo
         rho_epochs=500, # Learn rho for all epochs
         split_mu_rho=True, # Use split training
         eig_range=[0.1, 5.0], # Wider range for eigenvalues to capture values
-        mu_range=[[0.0, 0.0], [0.0, 0.0]] # Fixed mean initialization at origin
+        mu_range=[[0.0, 0.0], [0.0, 0.0]], # Fixed mean initialization at origin
+        device=_common_device
     )
 
     dict_layer = GaussianDictLayer(
@@ -279,8 +280,7 @@ def test_gaussian_dict_layer_find_non_diagonal_covariance(_common_logger, _commo
         n_features=n_features,
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
-        logger=_common_logger,
-        device=_common_device
+        logger=_common_logger
     )
     
     h = torch.ones((1, 1), dtype=torch.float32, device=_common_device).detach()
@@ -360,7 +360,8 @@ def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device
         rho_epochs=epochs_to_run // 2, # Train rho for other half
         split_mu_rho=True,
         eig_range=[0.1, 1.0],
-        mu_range=[-1.0, 1.0]
+        mu_range=[-1.0, 1.0],
+        device=_common_device
     )
 
     dict_layer = GaussianDictLayer(
@@ -368,8 +369,7 @@ def test_gaussian_dict_layer_train_with_3d_tensor(_common_logger, _common_device
         n_features=n_features,
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
-        logger=_common_logger,
-        device=_common_device)
+        logger=_common_logger
     )
 
     dict_layer._train_epoch(X=X_batch, y=y_batch, h=h_batch, log_losses=False,
@@ -439,7 +439,8 @@ def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_de
         rho_epochs=epochs_to_run // 2,
         split_mu_rho=True,
         eig_range=[0.1, 1.0],
-        mu_range=[-1.0, 1.0]
+        mu_range=[-1.0, 1.0],
+        device=_common_device
     )
 
     dict_layer = GaussianDictLayer(
@@ -447,8 +448,7 @@ def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_de
         n_features=n_features,
         n_functions=n_functions,
         evaluation_func=_common_evaluation_func,
-        logger=_common_logger,
-        device=_common_device
+        logger=_common_logger
     )
 
     dict_layer._train_epoch(X=X_nested, y=y_nested, h=h_nested, log_losses=False,
