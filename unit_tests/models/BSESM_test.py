@@ -343,26 +343,26 @@ def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor
         num_blocks=num_blocks, min_samples_per_block=min_samples, max_samples_per_block=max_samples
     )
 
-    X_proxy_actual, y_proxy_actual, h_nested_actual = model._aggregate_block_data(active_blocks, device=device)
+    X_nested_actual, y_nested_actual, h_nested_actual = model._aggregate_block_data(active_blocks, device=device)
 
     # Assert X_nested_actual matches X_nested_expected
-    assert isinstance(X_proxy_actual,TensorProxy)
-    X_nested_actual = X_proxy_actual.get_for_device(device)
+
+    assert isinstance(X_nested_actual, torch.Tensor) and X_nested_actual.is_nested
+
     assert len(X_nested_actual.unbind()) == num_blocks
     for i in range(num_blocks):
         assert torch.allclose(X_nested_actual.unbind()[i], X_nested_expected.unbind()[i])
         assert X_nested_actual.unbind()[i].shape == active_blocks[i].normalized_X.get_for_device(device).shape
 
     # Assert y_nested_actual matches y_nested_expected
-    assert isinstance(y_proxy_actual, TensorProxy)
-    y_nested_actual = y_proxy_actual.get_for_device(device)
+    assert isinstance(y_nested_actual, torch.Tensor) and y_nested_actual.is_nested
     assert len(y_nested_actual.unbind()) == num_blocks
     for i in range(num_blocks):
         assert torch.allclose(y_nested_actual.unbind()[i], y_nested_expected.unbind()[i])
         assert y_nested_actual.unbind()[i].shape == active_blocks[i].target.get_for_device(device).shape
 
     # Assert h_nested_actual matches h_nested_expected (detached copies of block h's)
-    assert isinstance(h_nested_actual, torch.Tensor)
+    assert isinstance(h_nested_actual, torch.Tensor) and h_nested_actual.is_nested
     assert h_nested_actual.is_nested
     assert len(h_nested_actual.unbind()) == num_blocks
     for i in range(num_blocks):
@@ -374,21 +374,23 @@ def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor
     # Test with no active blocks
     # When no blocks are active, _aggregate_block_data returns NestedTensors
     # that internally hold a single empty tensor, as per PyTorch's current (and sometimes counter-intuitive) behavior.
-    X_empty_nested, y_empty_nested, h_empty_nested = model._aggregate_block_data([])
+    X_empty_actual, y_empty_actual, h_empty_actual = model._aggregate_block_data([], device=device)
     
-    assert X_empty_nested.is_nested # It's still a NestedTensor
-    assert len(X_empty_nested.unbind()) == 1 # It unbinds to a list with ONE empty tensor
-    assert X_empty_nested.unbind()[0].numel() == 0 # That single tensor is truly empty (0 elements)
-    assert X_empty_nested.unbind()[0].shape == (0, n_features) # And has the correct feature dimension
+    assert X_empty_actual.is_nested # It's still a NestedTensor
+    assert len(X_empty_actual.unbind()) == 1 # It unbinds to a list with ONE empty tensor
+    assert X_empty_actual.unbind()[0].numel() == 0 # That single tensor is truly empty (0 elements)
+    assert X_empty_actual.unbind()[0].shape == (0, n_features) # And has the correct feature dimension
     
-    assert y_empty_nested.is_nested
-    assert len(y_empty_nested.unbind()) == 1
-    assert y_empty_nested.unbind()[0].numel() == 0
+    assert y_empty_actual.is_nested
+    assert len(y_empty_actual.unbind()) == 1
+    assert y_empty_actual.unbind()[0].numel() == 0
+
+
     # assert y_empty_nested.unbind()[0].shape == (0, 1) # And has the correct target dimension
     
-    assert h_empty_nested.is_nested
-    assert len(h_empty_nested.unbind()) == 1
-    assert h_empty_nested.unbind()[0].numel() == 0
+    assert h_empty_actual.is_nested
+    assert len(h_empty_actual.unbind()) == 1
+    assert h_empty_actual.unbind()[0].numel() == 0
     # assert h_empty_nested.unbind()[0].shape == (0, n_functions, 1) # And has the correct function and output dimensions
 
 @pytest.mark.filterwarnings("ignore:The PyTorch API of nested tensors.*:UserWarning")
@@ -472,7 +474,7 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
     # 6) Asserts básicos de forma y dispositivo
     assert isinstance(y_predicted_actual, torch.Tensor)
     assert y_predicted_actual.shape == (X_test_input.shape[0], 1)
-    assert y_predicted_actual.device == device
+    assert str(y_predicted_actual.device) == device
     assert y_predicted_actual.dtype == torch.float32
     assert torch.isfinite(y_predicted_actual).all()
 
