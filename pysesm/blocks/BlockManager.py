@@ -26,7 +26,7 @@ from .PartitionBlock import PartitionBlock
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BlockManagerConfig(BaseConfig):
     """Base configuration for all block manager configurations"""
     # Inherited classes should define their specific attributes

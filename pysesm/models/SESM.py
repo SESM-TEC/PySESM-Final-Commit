@@ -28,7 +28,7 @@ from ..blocks.PartitionBlock import PartitionBlock
 from ..blocks.BlockManager import BlockManager, BlockManagerConfig
 from ..base_types import BaseConfig, TensorProxy
 
-@dataclass
+@dataclass(kw_only=True)
 class SESMConfig(BaseConfig):
     """
     Configuration for SESM model.

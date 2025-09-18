@@ -9,7 +9,7 @@ adapts itself depending on the data it has.
 Author: Hender Valdivia
 '''
 from dataclasses import dataclass
-from typing import Union, Callable
+from collections.abc import Callable
 
 import logging
 import torch
@@ -19,12 +19,11 @@ from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.device_manager.DeviceManager import DeviceManager
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
 
-@dataclass
+@dataclass(kw_only=True)
 class AdaptativePartitionConfig(BlockManagerConfig):
     """Configuration for AdaptativePartitionManager.
     
@@ -52,7 +51,6 @@ class AdaptativePartitionManager(BlockManager):
         self,
         config: AdaptativePartitionConfig,
         logger: logging.Logger,
-        device_manager: DeviceManager =None,
         sparse_coding_layer_hook=None
     ):
         """
@@ -66,7 +64,7 @@ class AdaptativePartitionManager(BlockManager):
                 If not provided, bounds are automatically derived from the data.
             threshold (float, optional): Threshold for determining block activity.
         """
-        super().__init__(config=config, logger=logger, device_manager=device_manager)
+        super().__init__(config=config, logger=logger)
         
         self.logger = logger
         self.maxNodeSize = config.maxNodeSize
@@ -78,10 +76,9 @@ class AdaptativePartitionManager(BlockManager):
         self.total_blocks: int = 0
         self.splits: int = 0
         self.initial_bounds = None
-        self.kdtree: KDTree = None
-        self.device_manager: DeviceManager = device_manager              
+        self.kdtree: KDTree = None            
 
-    def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
+    def _find_block(self, x: torch.Tensor) -> PartitionBlock | None:
         """
         Finds the block corresponding to a given point.
 

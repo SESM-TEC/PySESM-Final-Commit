@@ -24,7 +24,7 @@ from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_
 
 __all__ = ['ISTALayer', 'ISTAConfig', 'StepSizeMethod']
 
-@dataclass
+@dataclass(kw_only=True)
 class ISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the ISTA algorithm.
@@ -191,7 +191,7 @@ class ISTALayer(SparseCodingBaseLayer):
             # Call parameter hook if provided
             if self.parameter_hook is not None:
                 hook_info = {
-                    'h': self.h.detach().clone(),
+                    'h': self.h.detach().clone(), # pylint: disable=not-callable
                     'gradient': gradient.detach().clone(),
                     'loss': loss.item(),
                     'alpha': step_size
@@ -243,6 +243,7 @@ class ISTALayer(SparseCodingBaseLayer):
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
+            reset_state (bool): if False, keep internal state for eigenvector computation
         """
         epochs = self.config.epochs
 

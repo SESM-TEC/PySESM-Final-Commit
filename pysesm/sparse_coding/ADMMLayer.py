@@ -21,7 +21,7 @@ import torch
 from .SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 from .sparse_coding_utils import soft_threshold
 
-@dataclass
+@dataclass(kw_only=True)
 class ADMMConfig(SparseCodingConfig):
     """
     Configuration parameters for the ADMM algorithm.

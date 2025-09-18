@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from ..models.SESM import SESM, SESMConfig
 from ..factories.BlockManagerFactory import BlockManagerFactory
 
-@dataclass
+@dataclass(kw_only=True)
 class SSESMConfig(SESMConfig):
     """
     Configuration for SSESM model, extending base SESMConfig.

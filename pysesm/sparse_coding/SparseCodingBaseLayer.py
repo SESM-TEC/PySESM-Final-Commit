@@ -21,7 +21,7 @@ import torch
 
 from ..base_types import BaseConfig
 
-@dataclass
+@dataclass(kw_only=True)
 class SparseCodingConfig(BaseConfig):
     """
     Configuration parameters for all sparse coding algorithms.

@@ -1,33 +1,25 @@
-from typing import Union, Optional
+import logging 
+
+import pytest
+
+import torch
+import numpy as np
 
 from pysesm.blocks.Node import Node
 from pysesm.blocks.SESMData import SESMData
-from pysesm.blocks.KDTree import KDTree, dummyData
+from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager, AdaptativePartitionConfig
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.utils.loggers import setup_logger
-import torch
-import logging 
-import pytest
-import numpy as np
 
 logger = logging.getLogger("test_uniform_partition_manager")
 logger.setLevel(logging.DEBUG)
 
 @pytest.fixture(scope="module")
-def common_device_manager():
-    """Provides a shared DeviceManager instance for all tests in this module."""
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu" # Assuming TargetDevice is an alias for DeviceTarget
-    }
-    # Using a unique logger for the DeviceManager fixture to avoid conflicts
-    return DeviceManager(logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+def common_device():
+    """Provides a shared device for all tests in this module."""   
+    return "cpu"
+
 @pytest.fixture
-def create_KDTree(common_device_manager):
+def create_KDTree(common_device):
     """
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
@@ -39,18 +31,18 @@ def create_KDTree(common_device_manager):
             y=y,
             maxNodeSize=maxNodeSize,
             data_wrapper=SESMData,
-            device=common_device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+            device=common_device
         )
     return _creator
 
 @pytest.fixture
-def create_manager(common_device_manager):
+def create_manager(common_device):
     """
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
     """
-    def _creator(T_val: Union[int, torch.Tensor],
-                 initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None,
+    def _creator(T_val: int | torch.Tensor,
+                 initial_bounds_val:  np.ndarray | torch.Tensor | None =None,
                  threshold_val: float=0):
         # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
         if isinstance(initial_bounds_val, torch.Tensor):
@@ -61,20 +53,20 @@ def create_manager(common_device_manager):
         config = AdaptativePartitionConfig(
             maxNodeSize=5,
             maxSplitsBeforeRestart=5,
-            overlap_ratio=None
+            overlap_ratio=None,
+            device=common_device
         )
         return AdaptativePartitionManager(
             config=config,
-            logger=logger, # Use the module-level logger for the manager
-            device_manager=common_device_manager
+            logger=logger # Use the module-level logger for the manager            
         )
     return _creator
 
-def test_greatestVarDim(common_device_manager):
+def test_greatestVarDim(common_device):
     """
     Asserts the greatest variance dimension is calculated correctly in the node
     """
-    device = common_device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    device = common_device
     x = torch.randn(20, 5).to(device)
     y = torch.randn(20, 1).to(device)    
     node=Node(x,y, SESMData)
@@ -85,11 +77,11 @@ def test_greatestVarDim(common_device_manager):
     assert dim==dim_test
 
 
-def test_splitDataInNodes(create_KDTree, common_device_manager):
+def test_splitDataInNodes(create_KDTree, common_device):
     """
     Tests the splitDataInNodes function which basically initializes the KDTree
     """
-    device = common_device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    device = common_device
     torch.manual_seed(42) 
     x = torch.randn(501, 6).to(device)
     y = torch.randn(501, 1).to(device)

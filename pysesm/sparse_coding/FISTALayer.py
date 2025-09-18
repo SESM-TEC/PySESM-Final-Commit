@@ -34,7 +34,7 @@ class MomentumScheme(Enum):
     ORIGINAL = auto()   # Standard FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
     MONOTONIC = auto()  # Alternative scheme for better stability: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
     
-@dataclass
+@dataclass(kw_only=True)
 class FISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the FISTA algorithm.
@@ -272,7 +272,7 @@ class FISTALayer(SparseCodingBaseLayer):
             # Call parameter hook if provided
             if self.parameter_hook is not None:
                 hook_info = {
-                    'h': self.h.detach().clone(),
+                    'h': self.h.detach().clone(), # pylint: disable=not-callable
                     'z': self.z.detach().clone(),
                     't': self.t,
                     'gradient': gradient.detach().clone(),
