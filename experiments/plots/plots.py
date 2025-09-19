@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import joblib   
 
 def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None, dim = 2):
+    global function
     """
     Crea un conjunto de boxplots para cada métrica en un diccionario.
     Cada subplot representa una métrica (ej. MSE_NN) y contiene múltiples
@@ -42,17 +43,20 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
         axes[i].set_xlabel('Training samples')
         axes[i].yaxis.grid(True, alpha=0.7)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Ajusta para que no tape el título
-    plt.savefig(filename+"_"+str(dim)+ "D"+".png", dpi=300)
+    plt.tight_layout()  # Ajusta para que no tape el título
+    plt.savefig(filename+"_"+str(dim)+ "D"+function+".png", dpi=300)
     #wandb.log({"Boxplots": wandb.Image(fig)})
 
-times   = joblib.load("all_times.joblib")
-metrics = joblib.load("all_metrics.joblib")
-n_samples = joblib.load("n_samples.joblib")
+functions=['zakharov_function', 'rosenbrock_rescaled_function', 'zhou_function']
+for function in functions:
+    
+    times   = joblib.load(f"all_times{function}.joblib")
+    metrics = joblib.load(f"all_metrics{function}.joblib")
+    n_samples = joblib.load(f"n_samples{function}.joblib")
 
-print(metrics.keys())
-for dim, dim_metrics in metrics.items():
-    plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 8), dim=dim)
+    print(metrics.keys())
+    for dim, dim_metrics in metrics.items():
+        plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 8), dim=dim)
 
-#for dim, dim_times in times.items():
-#    plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)
+    for dim, dim_times in times.items():
+        plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)

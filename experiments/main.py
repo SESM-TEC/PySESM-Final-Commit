@@ -114,7 +114,7 @@ def main():
 
 
 
-    n_dimensions= 3
+    n_dimensions= 4
     all_metrics_dim={}
     all_times_dim={}
     functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
