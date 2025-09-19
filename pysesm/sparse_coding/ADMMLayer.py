@@ -70,7 +70,6 @@ class ADMMLayer(SparseCodingBaseLayer):
         logger (logging.Logger): Logger for recording debug information.
         debug (bool): Whether to enable detailed debug logging.
         parameter_hook (Callable): Optional callback function to monitor internal state.
-        device: Device to run computations on.
         cached_factorization (tuple): Cached matrix factorization for efficiency.
     """
 
@@ -86,8 +85,7 @@ class ADMMLayer(SparseCodingBaseLayer):
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Callable[[dict], None] | None = None,
-            device = None):
+            parameter_hook: Callable[[dict], None] | None = None):
         """
         Initializes the ADMMLayer with the specified hyperparameters and components.
 
@@ -96,14 +94,12 @@ class ADMMLayer(SparseCodingBaseLayer):
             logger (logging.Logger, optional): Logger for recording debug information.
             debug (bool, optional): Whether to enable detailed debug logging.
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
-            device: Device to run computations on.
         """
         super().__init__(config=config,
                          evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
-                         parameter_hook=parameter_hook,
-                         device=device)
+                         parameter_hook=parameter_hook)
 
         self.losses = []
         self.cached_factorization = None

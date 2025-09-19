@@ -322,7 +322,6 @@ class UniformPartitionManager(BlockManager):
                 block.sparse_coding_layer = SparseCodingFactory.create(
                     config = config,
                     logger = self.logger,
-                    device= self.device,
                     parameter_hook=self.sparse_coding_layer_hook,
                     evaluation_func=evaluation_func
             )

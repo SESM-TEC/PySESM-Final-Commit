@@ -66,7 +66,6 @@ class ISTALayer(SparseCodingBaseLayer):
         logger (logging.Logger): Logger for recording debug information.
         debug (bool): Whether to enable detailed debug logging.
         parameter_hook (Callable): Optional callback function to monitor internal state.
-        device: Device to run computations on.
         last_eigenvector (torch.Tensor): Last computed eigenvector for warm-starting calculations.
     """
 
@@ -78,8 +77,7 @@ class ISTALayer(SparseCodingBaseLayer):
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Callable[[dict], None] | None = None,
-            device = None):
+            parameter_hook: Callable[[dict], None] | None = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
@@ -88,14 +86,12 @@ class ISTALayer(SparseCodingBaseLayer):
             logger (logging.Logger, optional): Logger for recording debug information.
             debug (bool, optional): Whether to enable detailed debug logging.
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
-            device: Device for computation (CPU/GPU).
         """
         super().__init__(config=config,
                          evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
-                         parameter_hook=parameter_hook,
-                         device=device)
+                         parameter_hook=parameter_hook)
 
         self.losses = []
         self.last_eigenvector = None  # For warm starting calculations

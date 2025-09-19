@@ -61,8 +61,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
                  evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
                  logger: logging.Logger | None = None,
                  debug: bool = False,
-                 parameter_hook: Callable | None = None,
-                 device: torch.device | None = None):
+                 parameter_hook: Callable | None = None):
         """
         Base initialization. Child classes must call super().__init__()
         """
@@ -78,7 +77,7 @@ class SparseCodingBaseLayer(torch.nn.Module, Generic[T_Config], ABC):
         if self.config.n_functions is None:
             raise ValueError("n_functions must be specified in SparseCodingConfig")
         
-        self.device = device
+        self.device = torch.device(config.device) if config.device else torch.device('cpu')
         self.logger = logger
         self.debug = debug
         self.evaluation_func = evaluation_func

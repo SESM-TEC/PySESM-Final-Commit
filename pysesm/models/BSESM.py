@@ -409,9 +409,10 @@ class BSESM(SESM):
         # Fill predictions directly into final tensor
         for i, block in enumerate(active_blocks):
             # The y_pred_normalized_list elements are (N_samples_in_block, 1)
-            block_preds_unnormalized = y_pred_normalized_list[i] / block.amplitude
-            y_final_predictions[block.positions, 0] = block_preds_unnormalized[:,0]
-        
+            block_preds_unnormalized = y_pred_normalized_list[i] / block.amplitude # Still on dict_layer's device
+            # Move prediction to the final tensor's device (CPU) before assignment
+            y_final_predictions[block.positions, 0] = block_preds_unnormalized.to(y_final_predictions.device)[:,0]
+            
         return y_final_predictions
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):

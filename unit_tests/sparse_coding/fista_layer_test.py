@@ -33,7 +33,6 @@ class TestFISTALayer(BaseSparseCodingTest):
                     config=config,
                     evaluation_func=common_evaluation_func,
                     logger=common_logger,
-                    device=common_device,
                     **kwargs
                 )
         return FISTALayerFactory()

@@ -51,7 +51,6 @@ class DictBaseLayer(torch.nn.Module, ABC):
         evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
         parameter_hook: Callable[[dict], None] | None = None,
-        device = None,
         **kwargs  # For subclass-specific parameters like 'psi' for Gaussian
     ):
         """
@@ -64,7 +63,6 @@ class DictBaseLayer(torch.nn.Module, ABC):
             evaluation_func: Function to evaluate dictionary * h
             logger: Logger instance
             parameter_hook: Optional callback for parameter monitoring
-            device: Device for computation
             **kwargs: Additional arguments passed to subclasses
         """
         super().__init__()
@@ -80,7 +78,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         self.evaluation_func = evaluation_func
         self.logger = logger
         self.parameter_hook = parameter_hook
-        self.device = device
+        self.device = torch.device(config.device) if config.device else torch.device('cpu')
         self.losses = []
         self.dictionary = None
         
@@ -90,6 +88,8 @@ class DictBaseLayer(torch.nn.Module, ABC):
         # Setup criterion and optimizer
         self._setup_criterion()
         self._setup_optimizer()
+
+        self.to(self.device)
     
     @abstractmethod
     def _initialize_parameters(self, **kwargs) -> torch.nn.Parameter:

@@ -75,7 +75,7 @@ class BlockManager(ABC):
         # Store these base attributes
         self.config = config
         self.logger = logger
-        self.device = config.device
+        self.device = torch.device(config.device) if config.device else torch.device('cpu')
         self.blocks = None
 
     @abstractmethod

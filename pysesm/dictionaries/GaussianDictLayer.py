@@ -42,7 +42,6 @@ class GaussianDictLayer(DictBaseLayer):
         evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
         parameter_hook: Callable[[dict], None] | None = None,
-        device = None,
         **kwargs
     ):
         # Create the Gaussian surrogate function
@@ -61,7 +60,6 @@ class GaussianDictLayer(DictBaseLayer):
             evaluation_func=evaluation_func,
             logger=logger,
             parameter_hook=parameter_hook,
-            device=device,
             **kwargs
         )
 
@@ -72,7 +70,7 @@ class GaussianDictLayer(DictBaseLayer):
         Initializes the parameters (theta) for the Gaussian functions using self.psi.
         """
         # self.psi is the GaussianFunction instance         
-        return torch.nn.Parameter(self.psi.initialize().data.to(self.device))
+        return torch.nn.Parameter(self.psi.initialize().data)
 
 
     def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:

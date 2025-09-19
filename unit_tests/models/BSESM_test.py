@@ -153,8 +153,7 @@ def _nested_tensor_data_generator(_bsesm_config_fixture, _common_evaluation_func
             sparse_coding_layer_instance = ISTALayer(
                 config=_bsesm_config_fixture.sparse_coding_config,
                 evaluation_func=_common_evaluation_func,
-                logger=logging.getLogger(f"test_istalayer_block_{i}"),
-                device=device
+                logger=logging.getLogger(f"test_istalayer_block_{i}")
             )
             # ISTALayer's __init__ calls setup() which initializes h as a Parameter
             block.sparse_coding_layer = sparse_coding_layer_instance
@@ -223,7 +222,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
 
     # Simulate internal loss updates for logging check
     model.dictionary_layer.losses = [0.5, 0.4, 0.3] * model_epochs # Ensure enough entries
-    model.global_sparse_coding_layer.losses = [0.6, 0.5, 0.4] * model_epochs # Ensure enough entries
+    model._sparse_coding_losses = [0.6, 0.5, 0.4] * model_epochs # Ensure enough entries
 
     initial_training_time = model.training_time
     initial_partial_fit_count = model.partial_fit_count
@@ -272,7 +271,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
 
 
 def test_bsesm_global_train_step_orchestration(
-    _sample_bsesm_model, 
+    _sample_bsesm_model,
     _nested_tensor_data_generator, 
     _common_evaluation_func # Pass common_evaluation_func
 ):
@@ -288,11 +287,9 @@ def test_bsesm_global_train_step_orchestration(
     num_blocks = 2
     X_nested, y_nested, h_nested_initial, active_blocks = _nested_tensor_data_generator(num_blocks=num_blocks, min_samples_per_block=5, max_samples_per_block=10)
 
-
     # Initialize model.global_sparse_coding_layer.h for the test before the call
     total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
     model.global_sparse_coding_layer.config.n_functions = total_h_elements
-
     model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device))
     initial_h_mega = model.global_sparse_coding_layer.h.data.clone()
 
@@ -313,14 +310,13 @@ def test_bsesm_global_train_step_orchestration(
     # We can still verify the inputs to the sparse coding layer by mocking it,
     # but it's more robust to check the outcome.
     expected_Y_mega = torch.cat(y_nested.unbind()) # y_nested is already a NestedTensor
-    
     expected_D_mega = torch.block_diag(*dict_list_from_real_layer)
     
     # Verify that the real ISTALayer ran and produced results
     assert len(model.global_sparse_coding_layer.losses) > 0, "Real ISTA layer should have populated its losses"
     assert not torch.allclose(model.global_sparse_coding_layer.h.data, initial_h_mega), "h should have been updated by the real ISTA layer"
 
-    # Verify that the returned h_nested is correctly updated with the h from the real layer   
+    # Verify that the returned h_nested is correctly updated with the h from the real layer
     assert returned_h_nested.is_nested
     assert torch.allclose(returned_h_nested.values(), model.global_sparse_coding_layer.h.data)
     
@@ -346,9 +342,7 @@ def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor
     X_nested_actual, y_nested_actual, h_nested_actual = model._aggregate_block_data(active_blocks, device=device)
 
     # Assert X_nested_actual matches X_nested_expected
-
     assert isinstance(X_nested_actual, torch.Tensor) and X_nested_actual.is_nested
-
     assert len(X_nested_actual.unbind()) == num_blocks
     for i in range(num_blocks):
         assert torch.allclose(X_nested_actual.unbind()[i], X_nested_expected.unbind()[i])
@@ -384,8 +378,6 @@ def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor
     assert y_empty_actual.is_nested
     assert len(y_empty_actual.unbind()) == 1
     assert y_empty_actual.unbind()[0].numel() == 0
-
-
     # assert y_empty_nested.unbind()[0].shape == (0, 1) # And has the correct target dimension
     
     assert h_empty_actual.is_nested
@@ -483,6 +475,98 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
     assert torch.allclose(y_predicted_actual, y_expected, rtol=1e-4, atol=1e-5), \
         f"Predicción no coincide con lo esperado.\nPred:\n{y_predicted_actual}\nExp:\n{y_expected}"
     
+# --- Multi-Device Integration Test ---
+
+# Conditional execution marker for CUDA
+CUDA_AVAILABLE = torch.cuda.is_available()
+
+@pytest.fixture
+def _bsesm_multi_device_config_fixture():
+    """Provides a BSESMConfig specifically for multi-device testing."""
+    n_features = 2
+    n_functions = 5
+    
+    # Configure dictionary for CUDA, sparse coding for CPU
+    sparse_coding_config = ISTAConfig(
+        epochs=2, lambd=0.01, n_functions=n_functions, device='cpu'
+    )
+    dict_config = GaussianDictConfig(
+        epochs=2, alpha=0.1, eig_range=[0.1, 1.0], mu_range=[-1.0, 1.0], device='cuda:0'
+    )
+    # Partition manager can be on any device, let's use CPU as default
+    partition_config = UniformPartitionConfig(
+        T=torch.tensor([2, 2], dtype=torch.int),
+        initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
+        device='cpu'
+    )
+    
+    return BSESMConfig(
+        n_features=n_features,
+        model_epochs=1,
+        sparse_coding_config=sparse_coding_config,
+        dict_config=dict_config,
+        partition_config=partition_config,
+        seed=42
+        # Global device is not set, letting components use their specific configs
+    )
+
+@pytest.mark.skipif(not CUDA_AVAILABLE, reason="CUDA not available, skipping multi-device test")
+def test_bsesm_multi_device_execution_and_predict(_bsesm_multi_device_config_fixture):
+    """
+    Integration test for BSESM with dictionary on GPU and sparse coding on CPU.
+    Verifies that `partial_fit` and `predict` run without device mismatch errors.
+    """
+    # 1. Setup the model with the multi-device configuration
+    config = _bsesm_multi_device_config_fixture
+    model = BSESM(config=config, logger=logger)
+
+    # Verify initial device placement
+    assert str(model.dictionary_layer.device) == 'cuda:0'
+    assert str(model.global_sparse_coding_layer.device) == 'cpu'
+    assert str(model.partition_manager.device) == 'cpu'
+    
+    # 2. Prepare input data on the CPU (a common scenario)
+    n_samples = 20
+    X_train = torch.randn(n_samples, config.n_features, device='cpu')
+    y_train = torch.randn(n_samples, 1, device='cpu')
+
+    # 3. Execute `partial_fit`
+    # This is the main stress test. If it completes without a device mismatch error,
+    # the core data transfers (proxies, .to(device)) are working.
+    try:
+        model.partial_fit(X_train, y_train)
+    except Exception as e:
+        pytest.fail(f"model.partial_fit failed with a device-related error: {e}")
+
+    # 4. Verify post-training state
+    # Check that parameters remain on their designated devices
+    assert str(model.dictionary_layer.theta_params.device) == 'cuda:0'
+    assert str(model.global_sparse_coding_layer.h.device) == 'cpu'
+
+    # Retrieve an active block and check its internal sparse coding layer's device
+    active_blocks = model.partition_manager.retrieve_active_blocks()
+    assert len(active_blocks) > 0
+    # The SC layer inside the block is created by the partition manager's hook,
+    # and its config specifies 'cpu'.
+    assert str(active_blocks[0].sparse_coding_layer.device) == 'cpu'
+    assert str(active_blocks[0].sparse_coding_layer.h.device) == 'cpu'
+    
+    # 5. Execute `predict`
+    X_test = torch.randn(10, config.n_features, device='cpu')
+    y_pred = None
+    try:
+        y_pred = model.predict(X_test)
+    except Exception as e:
+        pytest.fail(f"model.predict failed with a device-related error: {e}")
+
+    # 6. Verify prediction output
+    assert y_pred is not None
+    assert y_pred.shape == (X_test.shape[0], 1)
+    # The output should be on the same device as the input tensor X_test
+    assert str(y_pred.device) == str(X_test.device)
+    assert torch.isfinite(y_pred).all()
+    logger.info("Multi-device test completed successfully.")
+    
 if __name__ == "__main__":
     # Ensure pytest instructions are printed if run directly
     try:
@@ -490,4 +574,3 @@ if __name__ == "__main__":
         print_pytest_instructions()
     except ImportError:
         print("Please run this file using pytest. Example: pytest unit_tests/models/BSESM_test.py")
-
