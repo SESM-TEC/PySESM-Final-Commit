@@ -4,6 +4,7 @@ import numpy as np
 import joblib
 import wandb
 from prepare_all import EXPERIMENT
+from collections import defaultdict
 
 from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset, generate_custom_nd_function_dataset
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper, CrossEntropyLossWrapper
@@ -113,7 +114,7 @@ def main():
 
 
 
-    n_dimensions= 4
+    n_dimensions= 3
     all_metrics_dim={}
     all_times_dim={}
     functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
@@ -148,7 +149,7 @@ def main():
             )
 
             ssesm_config = SSESMConfig(
-                n_features= dim, model_epochs=200,
+                n_features= dim, model_epochs=100,
                 sparse_coding_config=sparse_coding_config,
                 dict_config=dict_config, partition_config=partition_config,
                 log_interval=100, permutation_times=1
@@ -169,21 +170,9 @@ def main():
 
 
 
-            # Definir las métricas y tiempos una sola vez
-            METRICS = ["NN_MAE", "NN_MSE", "SVR_MAE", "SVR_MSE", 
-                    "SESM_MAE", "SESM_MSE", "PF_MAE", "PF_MSE"]
-
-            TIMES = ["svr_time", "nn_time", "sesm_time", "pf_time"]
-
-
-            def init_dict(keys):
-                """Inicializa un diccionario con listas vacías por clave."""
-                return {key: [] for key in keys}
-
-
             # 1) Diccionarios principales
-            all_metrics = init_dict(METRICS)
-            all_times   = init_dict(TIMES)
+            all_metrics = defaultdict(list)
+            all_times   = defaultdict(list)
 
             
             # 2) Inicializar Weights & Biases una sola vez
@@ -203,8 +192,8 @@ def main():
             for n in n_samples:
 
                 # Diccionarios temporales para este chunk
-                chunk_metrics = init_dict(METRICS)
-                chunk_times   = init_dict(TIMES)
+                chunk_metrics = defaultdict(list)
+                chunk_times   = defaultdict(list)
 
                 for j in range(num_runs_per_set):
                     print(f"\n\n --- Entrenamiento número {j} con {n} muestras en {dim}D de la función {function.__name__} ---\n\n")
@@ -219,16 +208,17 @@ def main():
                     metrics = experiment.test_all(train_data, test_data, plot_flag=False)
 
                     # Guardar resultados
-                    for key in METRICS:
-                        chunk_metrics[key].append(metrics[key])
-                    for key in TIMES:
-                        chunk_times[key].append(times[key])
-
+                    for key, value in metrics.items(): 
+                        chunk_metrics[key].append(value)
+                    for key, value in times.items():
+                        chunk_times[key].append(value)
+    
                 # Guardar resultados finales del chunk
-                for key in METRICS:
-                    all_metrics[key].append(chunk_metrics[key])
-                for key in TIMES:
-                    all_times[key].append(chunk_times[key])
+                for key, value in chunk_metrics.items():
+                    all_metrics[key].append(value)
+                for key, value in chunk_times.items():
+                    all_times[key].append(value)
+
             all_metrics_dim[dim]=all_metrics
             all_times_dim[dim]=all_times
 
