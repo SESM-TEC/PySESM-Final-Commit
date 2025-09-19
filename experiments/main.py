@@ -116,7 +116,7 @@ def main():
     functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
     n_dimensions= 3
     num_runs_per_set = 2
-    n_samples = [64, 256, 512, 1024]  # Número de muestras por chunk (debe ser una lista de enteros)
+    n_samples = [64, 256]  # Número de muestras por chunk (debe ser una lista de enteros)
 
     all_metrics_dim={}
     all_times_dim={}
@@ -226,7 +226,7 @@ def main():
 
         joblib.dump(all_metrics_dim, "./plots/all_metrics"+str(function.__name__)+".joblib")
         joblib.dump(all_times_dim, "./plots/all_times"+str(function.__name__)+".joblib")
-        joblib.dump(n_samples_dim, "./plots/n_samples"+str(function.__name__)+".joblib")
+        joblib.dump(n_samples, "./plots/n_samples.joblib")
 
     wandb.finish()
     print("Experimento completado. Métricas para boxplots listas.")

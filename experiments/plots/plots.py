@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import joblib   
+import os
 
 def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None, dim = 2):
     global function
@@ -37,14 +38,22 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
         axes[i].spines['top'].set_visible(False)
         axes[i].spines['right'].set_visible(False)
         axes[i].set_ylim(ylim)
-        axes[i].set_xticklabels(n_samples)
+
+        n_samples_dim = [int(n**(dim/2)) for n in n_samples]
+        axes[i].set_xticklabels(n_samples_dim)
+
         axes[i].set_title(nombre_metrica)
         axes[i].set_ylabel(nombre_metrica)
         axes[i].set_xlabel('Training samples')
         axes[i].yaxis.grid(True, alpha=0.7)
 
-    plt.tight_layout()  # Ajusta para que no tape el título
-    plt.savefig(filename+"_"+str(dim)+ "D"+function+".png", dpi=300)
+    output_dir = os.path.join(os.getcwd(), function) 
+    os.makedirs(output_dir, exist_ok=True)
+    name = filename+"_"+str(dim)+ "D"+".png"
+    full_filename = os.path.join(output_dir, name)
+
+    plt.tight_layout()
+    plt.savefig(full_filename, dpi=300)
     #wandb.log({"Boxplots": wandb.Image(fig)})
 
 functions=['zakharov_function', 'rosenbrock_rescaled_function', 'zhou_function']
@@ -52,9 +61,8 @@ for function in functions:
     
     times   = joblib.load(f"all_times{function}.joblib")
     metrics = joblib.load(f"all_metrics{function}.joblib")
-    n_samples = joblib.load(f"n_samples{function}.joblib")
-
-    print(metrics.keys())
+    n_samples = joblib.load("n_samples.joblib")
+    print(n_samples)
     for dim, dim_metrics in metrics.items():
         plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 8), dim=dim)
 
