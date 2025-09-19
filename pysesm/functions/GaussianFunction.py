@@ -197,6 +197,9 @@ class GaussianFunction(SurrogateFunction):
                 f"Input X must be a 2D tensor of shape (n_samples, n_features). "
                 f"Got shape {X.shape} for n_features={self.n_features}."
             )
+
+        # Ensure input tensor has the same dtype as the model parameters for consistency
+        X = X.to(Theta.dtype)      
         
         n_samples = X.shape[0]
 

@@ -210,7 +210,9 @@ def _ssesm_multi_device_config_fixture():
     dict_config = GaussianDictConfig(epochs=2, alpha=0.1, device='cuda:0')
     sparse_coding_config = ISTAConfig(epochs=2, n_functions=n_functions, device='cpu')
     partition_config = UniformPartitionConfig(
-        T=2, initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]]), device='cpu'
+        T=2,
+        initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
+        device='cpu'
     )
     
     return SSESMConfig(
