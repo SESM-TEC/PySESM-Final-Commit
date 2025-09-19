@@ -409,7 +409,7 @@ partition_config = UniformPartitionConfig(
     T=1,
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     activity_threshold=0,
-    overlap_ratio=0.25
+    overlap_ratio=0.25,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 # partition_config = AdaptativePartitionConfig(
