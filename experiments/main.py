@@ -116,6 +116,7 @@ def main():
     functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
     n_dimensions= 3
     num_runs_per_set = 2
+    n_samples = [64, 256, 512, 1024]  # Número de muestras por chunk (debe ser una lista de enteros)
 
     all_metrics_dim={}
     all_times_dim={}
@@ -156,9 +157,9 @@ def main():
             )
 
             #TODO: el diccionario experiment1 está pidiendo n_samples, pero n_samples es un valor que varia a lo largo del experimento
-            n_samples = 4
+            sesm_n_samples = 4
             experiment1 = {
-                "config": ssesm_config, "hyp_set": 1, "n_samples": n_samples,
+                "config": ssesm_config, "hyp_set": 1, "n_samples": sesm_n_samples,
                 "seed": 45, "iter": 0,
                 "device_map": {
                     DeviceTarget.GLOBAL: "cpu",
@@ -187,9 +188,10 @@ def main():
                 }
             )
             
-            #n_samples = [8, 16, 32, 64, 128, 256, 512, 1024]**(dim-1)
-            n_samples=[2**((3+i)*(dim-1)) for i in range(2)]
-            for n in n_samples:
+
+            n_samples_dim = [int(n**(dim/2)) for n in n_samples]
+
+            for n in n_samples_dim:
 
                 # Diccionarios temporales para este chunk
                 chunk_metrics = defaultdict(list)
@@ -224,7 +226,7 @@ def main():
 
         joblib.dump(all_metrics_dim, "./plots/all_metrics"+str(function.__name__)+".joblib")
         joblib.dump(all_times_dim, "./plots/all_times"+str(function.__name__)+".joblib")
-        joblib.dump(n_samples, "./plots/n_samples"+str(function.__name__)+".joblib")
+        joblib.dump(n_samples_dim, "./plots/n_samples"+str(function.__name__)+".joblib")
 
     wandb.finish()
     print("Experimento completado. Métricas para boxplots listas.")
