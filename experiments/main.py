@@ -113,18 +113,18 @@ def main():
         return torch.sum(X, dim=1) 
 
 
+    functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
+    n_dimensions= 3
+    num_runs_per_set = 2
 
-    n_dimensions= 4
     all_metrics_dim={}
     all_times_dim={}
-    functions=[zakharov_function, rosenbrock_rescaled_function, zhou_function]
-
+  
     for function in functions:
-        for dim in range(2,n_dimensions):
-            num_runs_per_set = 2
+        for dim in range(2,n_dimensions+1):
 
             svr_config = {"kernel": 'rbf', "C": 0.1, "gamma": 'auto', "epsilon": 0.1}
-            nn_config = {"epochs": 500, "lr": 0.01*dim, "hidden_dim": 16, "input_d":dim}
+            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
             pf_config = {"order": 5, "alpha": 0.01}
             
             sparse_coding_config = ISTAConfig(
