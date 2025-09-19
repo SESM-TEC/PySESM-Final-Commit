@@ -30,8 +30,6 @@ from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils.plot_and_save_stats import plot_surface
 #from pysesm.utils.metric_loggers import *
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
 from mpl_toolkits.mplot3d import Axes3D
 
 # --- Custom Loss Function Wrappers ---
@@ -359,7 +357,8 @@ sparse_coding_config = ISTAConfig(
     step_size_method=StepSizeMethod.FROBENIUS,  # POWER_ITERATION,
     power_iterations=10,
     n_functions=n_functions,
-    criterion=torch.nn.MSELoss()
+    criterion=torch.nn.MSELoss(),
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 # sparse_coding_config = FISTAConfig(
 #     epochs=400,
@@ -402,7 +401,8 @@ dict_config = GaussianDictConfig(
     #regularization_func = None,
     regularization_func = GaussianDictLayer.electrostatic_regularization, 
     #regularization_func = GaussianDictLayer.gram_regularization, # or None
-    regularization_gamma = 0.005
+    regularization_gamma = 0.005,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
 partition_config = UniformPartitionConfig(
@@ -410,6 +410,7 @@ partition_config = UniformPartitionConfig(
     initial_bounds = torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     activity_threshold=0,
     overlap_ratio=0.25
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 # partition_config = AdaptativePartitionConfig(
 #         maxNodeSize=251,
@@ -424,7 +425,8 @@ ssesm_config = SSESMConfig(
     dict_config = dict_config,
     partition_config = partition_config,
     log_interval=25,
-    permutation_times=1
+    permutation_times=1,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
 bsesm_config = BSESMConfig(
@@ -434,6 +436,7 @@ bsesm_config = BSESMConfig(
     dict_config = dict_config,
     partition_config = partition_config,
     log_interval=100,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
 # 3. DEFINE EXPERIMENT PARAMETERS
@@ -444,21 +447,9 @@ experiment = {
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
-    "iter": 0,
-    "device_manager": {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cuda",
-        DeviceTarget.PARTITION_MANAGER: "cpu"
-    },
-    
-    #"dict_layer_hook": lambda info: log_to_WB("DictLayer", info, logger=logger, project_name="sesm-test"),
-    #"ista_layer_hook": lambda info: log_to_WB("IstaLayer", info, logger=logger, project_name="sesm-test"),
-    #"dict_layer_hook": lambda info: log_to_console("DictLayer", info),
-    #"ista_layer_hook": lambda info: log_to_console("IstaLayer", info),   
-    #"sesm_hook": lambda info: log_to_WB("SESM", info, logger=logger, project_name="sesm-test")
+    "iter": 0
 }
-
+    
 def show_all_h(model: SESM, logger: logging.Logger, threshold: float = 1e-6):
     """
     Inspects and logs the activation vectors (h) for all active blocks.
