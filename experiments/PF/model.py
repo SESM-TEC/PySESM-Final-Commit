@@ -11,13 +11,16 @@ class PF():
         ])
 
     def train(self, X_train, y_train):
+        print("\n Training PF...")
 
         start_time = time.time()
         self.poly_lasso.fit(X_train, y_train)
         end_time = time.time()
         
+        
         return end_time - start_time
 
     def test(self, X_test):
+        print("\n Testing PF...")
         y_pred = self.poly_lasso.predict(X_test)
         return y_pred

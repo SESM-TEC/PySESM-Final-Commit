@@ -30,9 +30,9 @@ def main():
         "zhou_function": [-2, 2]
     }
     functions=[fun.zakharov_function, fun.rosenbrock_rescaled_function, fun.zhou_function]
-    dimensions= [1, 2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
-    n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
-    num_runs_per_set = 2 # CAMBIAR A 50 
+    dimensions= [ 3] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
+    n_samples = [16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
+    num_runs_per_set = 1 # CAMBIAR A 50 
 
 
 
@@ -43,7 +43,7 @@ def main():
         for dim in dimensions:
 
             svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
-            nn_config = {"epochs": 500, "lr": 0.001, "hidden_dim": 16, "input_d":dim}
+            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
             pf_config = {"order": 9, "alpha": 0.01}
             
             sparse_coding_config = ISTAConfig(
@@ -94,7 +94,6 @@ def main():
 
             
             # 2) Inicializar Weights & Biases una sola vez
-            """
             wandb.init(
                 project="PySESM_experiments",
                 config={
@@ -105,7 +104,6 @@ def main():
                     "num_runs_per_set": num_runs_per_set
                 }
             )
-            """
             
             # Se recalcula el tamaño del dataset en cada dimension
             n_samples_dim = [int(n**dim) for n in n_samples]
@@ -117,12 +115,14 @@ def main():
 
                 for j in range(num_runs_per_set):
                     
-                    print("\n==================================" \
-                    f"\n Train rep:     {j}"\
-                    f"\n Dataset size:  {n}"\
-                    f"\n Dimension:     {dim}"\
-                    f"\n Function:      {function.__name__}"\
-                    "\n==================================\n")
+                    print(rf"""
+                    =================================================================================
+                                              ,___,      Repetition:      {j}                               
+                          0      (\(\         (O.o)      Dataset size:    {n}                      
+                         /|\     (-.-)        /),,)       Dimension:       {dim}             
+                         / \     o_(")(")      " "       Function:        {function.__name__}    
+                    =================================================================================
+                    """)
                     
                 
                     # Generar dataset con n muestras, de dim dimensiones con la funcion function
@@ -137,7 +137,7 @@ def main():
                     # Se entrenan y testean 4 modelos j veces 
                     experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
                     times = experiment.train_all(train_data, test_data)
-                    metrics = experiment.test_all(train_data, test_data, plot_flag=False)
+                    metrics = experiment.test_all(train_data, test_data)
 
                     # Guardar mse y mae de cada modelo j veces
                     for key, value in metrics.items(): 
@@ -154,8 +154,8 @@ def main():
             all_metrics_dim[dim]=all_metrics
             all_times_dim[dim]=all_times
         
-        joblib.dump(all_metrics_dim, "./plots/all_metrics"+str(function.__name__)+".joblib")
-        joblib.dump(all_times_dim, "./plots/all_times"+str(function.__name__)+".joblib")
+        joblib.dump(all_metrics_dim, "./plots/all_metrics_"+str(function.__name__)+".joblib")
+        joblib.dump(all_times_dim, "./plots/all_times_"+str(function.__name__)+".joblib")
         joblib.dump(n_samples, "./plots/n_samples.joblib")
 
     wandb.finish()

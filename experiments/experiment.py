@@ -53,7 +53,7 @@ class EXPERIMENT:
         
 
 
-    def test_all(self, train_data, test_data, plot_flag=False):
+    def test_all(self, train_data, test_data):
 
         _, _, xtest, ytest = prepare_dataset(train_data, test_data)
         
@@ -61,18 +61,21 @@ class EXPERIMENT:
         svr_pred = self.SVR_model.test(xtest)
         nn_pred = self.nn_model.test(xtest)
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
-        pf_pred=self.PF.test(xtest)
+        pf_pred = self.PF.test(xtest)
 
         metrics = {
-            "SVR_MSE": mean_squared_error(ytest, svr_pred),
-            "SVR_MAE": mean_absolute_error(ytest, svr_pred),
-            "NN_MSE": mean_squared_error(ytest, nn_pred),
-            "NN_MAE": mean_absolute_error(ytest, nn_pred),
             "SESM_MSE": SESM_mse,
-            "SESM_MAE":mean_absolute_error(ytest, SESM_pred),
+            "SVR_MSE": mean_squared_error(ytest, svr_pred),
+            "NN_MSE": mean_squared_error(ytest, nn_pred),
             "PF_MSE": mean_squared_error(ytest, pf_pred),
+
+            "SESM_MAE":mean_absolute_error(ytest, SESM_pred),
+            "SVR_MAE": mean_absolute_error(ytest, svr_pred),
+            "NN_MAE": mean_absolute_error(ytest, nn_pred),
             "PF_MAE": mean_absolute_error(ytest, pf_pred)
         }
+        for key, value in metrics.items():
+            print(f"{key}: {value}")
         
         return metrics
     

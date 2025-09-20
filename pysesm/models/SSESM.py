@@ -116,6 +116,7 @@ class SSESM(SESM):
             *_: Additional unused positional arguments.
 
         """
+        print("\n Training SSESM...")
         start_time = time.time()
         # Ensure y is 2D
         if y.dim() == 1:
@@ -162,7 +163,7 @@ class SSESM(SESM):
         Returns:
             torch.Tensor: Predicted values for the input dataset.
         """
-
+        print("\n Testing SSESM...")
         if y is not None:
             warnings.warn("Deprecated behaviour: predict does not need y values",
                           DeprecationWarning, stacklevel=2)

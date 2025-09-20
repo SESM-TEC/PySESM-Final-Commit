@@ -33,7 +33,6 @@ class SVR:
 
     def load(self, path: str = 'svr_model.joblib'):
         self.model = joblib.load(path)
-        print(f"Model loaded'{path}'")
 
 
     def train(self, xtrain, ytrain):
@@ -48,7 +47,7 @@ class SVR:
         return end_time - start_time
 
     def test(self, xtest):
-
+        print("\n Testing SVR...")
         ypred = self.predict(xtest)
 
         return ypred

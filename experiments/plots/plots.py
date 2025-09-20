@@ -37,7 +37,7 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
         # 4. Configurar el título y las etiquetas de los ejes
         axes[i].spines['top'].set_visible(False)
         axes[i].spines['right'].set_visible(False)
-        axes[i].set_ylim(ylim)
+        axes[i].set_ylim([0, ylim])
 
         n_samples_dim = [int(n**dim) for n in n_samples]
         axes[i].set_xticklabels(n_samples_dim)
@@ -56,6 +56,14 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
     plt.savefig(full_filename, dpi=300)
     #wandb.log({"Boxplots": wandb.Image(fig)})
 
+def calc_max_mean(metricas: dict):
+    mean_max = 0
+    for _, value in metricas.items():
+        for v in value:
+            mean_v = sum(v)/len(v)
+            if mean_v > mean_max:
+                mean_max = mean_v
+    return mean_max
 
 
 functions=['zakharov_function', 'rosenbrock_rescaled_function', 'zhou_function']
@@ -66,7 +74,9 @@ for function in functions:
     n_samples = joblib.load("n_samples.joblib")
 
     for dim, dim_metrics in metrics.items():
-        plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=None, dim=dim)
+        max_mean = calc_max_mean(dim_metrics)
+        plot_caja_bigote(dim_metrics, n_samples, "metrics", ylim=max_mean, dim=dim)
 
     for dim, dim_times in times.items():
-        plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)
+        max_mean = calc_max_mean(dim_times)
+        plot_caja_bigote(dim_times, n_samples, "times", ylim= max_mean, dim=dim)
