@@ -132,12 +132,14 @@ class VisualizerHook:
     """
     def __init__(self, model: SESM, ax: plt.Axes, X_train: torch.Tensor,
                  gt_mu: list, gt_sigma: list, 
-                 output_dir: str = "animation_frames"):
+                 output_dir: str = "animation_frames",
+                 plot_limits: tuple = ((-2.5, 2.5), (-2.5, 2.5))):
         self.model = model
         self.ax = ax
         self.X_train = X_train.detach().cpu()
         self.ground_truth_mu = [mu.cpu() for mu in gt_mu]
         self.ground_truth_sigma = [s.cpu() for s in gt_sigma]
+        self.plot_limits = plot_limits
         self.fig = ax.get_figure()
         
         # Attributes for video frame generation.
@@ -254,7 +256,7 @@ class VisualizerHook:
         # Configure plot aesthetics.
         self.ax.set_title(f'Dictionary Evolution')
         self.ax.set_xlabel('Feature 1'); self.ax.set_ylabel('Feature 2')
-        self.ax.set_xlim(-2.5, 2.5); self.ax.set_ylim(-2.5, 2.5)
+        self.ax.set_xlim(*self.plot_limits[0]); self.ax.set_ylim(*self.plot_limits[1])
         self.ax.grid(True, linestyle='--', alpha=0.5)
         self.ax.set_aspect('equal', adjustable='box')
 
@@ -346,7 +348,7 @@ class VisualizerHook:
 logger = setup_logger(level=logging.DEBUG)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 100
+n_functions = 20
 n_features = 2
 
 
@@ -385,23 +387,27 @@ sparse_coding_config = ISTAConfig(
 # )
 
 dict_config = GaussianDictConfig(
-    epochs = 50,
+    epochs=100,
     alpha = 0.01,
     criterion = torch.nn.MSELoss(),
     # criterion = KLDivLossWrapper(),
     # criterion = JensenShannonLossWrapper(),
-    optimizer_factory = lambda params, lr: torch.optim.SGD(
-        params, lr=lr, momentum=0.1
+    #optimizer_factory = lambda params, lr: torch.optim.SGD(
+    #    params, lr=lr, momentum=0.1
+    #),
+    optimizer_factory = lambda params, lr: torch.optim.AdamW(
+        params, lr=lr, weight_decay=0
     ),
     mu_epochs = 10,
     rho_epochs = 10,
     split_mu_rho = False,
+    # These ranges operate in the NORMALIZED space [0, 1] of the block.        
     eig_range = [0.05, 0.2],
-    mu_range = [-2.0, 2.0],
+    mu_range = [0, 1],
     #regularization_func = None,
     regularization_func = GaussianDictLayer.electrostatic_regularization, 
     #regularization_func = GaussianDictLayer.gram_regularization, # or None
-    regularization_gamma = 0.005,
+    regularization_gamma = 0.001,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
@@ -508,7 +514,7 @@ else:
     model = SSESM(**experiment, logger=logger)
 
 # Create and install the visualization hook AFTER the model is instantiated.
-visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma)
+visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5,5),(-5,5)))
 model.sesm_hook = visual_hook
     
 # 6. TRAIN AND EVALUATE THE MODEL

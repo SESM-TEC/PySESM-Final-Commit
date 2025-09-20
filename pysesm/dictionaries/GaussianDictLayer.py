@@ -25,6 +25,7 @@ class GaussianDictConfig(DictConfig):
     rho_epochs: int = 10
     split_mu_rho: bool = True
     # Parameters for GaussianFunction initialization
+    # Note: mu_range and eig_range operate in the NORMALIZED block space (e.g., [0, 1]).
     eig_range: list = None
     mu_range: list = None
 

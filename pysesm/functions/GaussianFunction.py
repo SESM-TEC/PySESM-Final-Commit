@@ -76,7 +76,7 @@ class GaussianFunction(SurrogateFunction):
                  mu_range: RangeType = None, 
                  eig_range: RangeType = None):
 
-        mu_range = [-1, 1] if mu_range is None else mu_range
+        mu_range = [0.0, 1.0] if mu_range is None else mu_range
         eig_range = [0.1, 0.5] if eig_range is None else eig_range
         
         super().__init__(n_features=n_features, 
