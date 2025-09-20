@@ -39,7 +39,7 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
         axes[i].spines['right'].set_visible(False)
         axes[i].set_ylim(ylim)
 
-        n_samples_dim = [int(n**(dim/2)) for n in n_samples]
+        n_samples_dim = [int(n**dim) for n in n_samples]
         axes[i].set_xticklabels(n_samples_dim)
 
         axes[i].set_title(nombre_metrica)
@@ -56,15 +56,17 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
     plt.savefig(full_filename, dpi=300)
     #wandb.log({"Boxplots": wandb.Image(fig)})
 
+
+
 functions=['zakharov_function', 'rosenbrock_rescaled_function', 'zhou_function']
 for function in functions:
     
     times   = joblib.load(f"all_times{function}.joblib")
     metrics = joblib.load(f"all_metrics{function}.joblib")
     n_samples = joblib.load("n_samples.joblib")
-    print(n_samples)
+
     for dim, dim_metrics in metrics.items():
-        plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=(0, 8), dim=dim)
+        plot_caja_bigote(dim_metrics, n_samples, "all_metrics", ylim=None, dim=dim)
 
     for dim, dim_times in times.items():
         plot_caja_bigote(dim_times, n_samples, "all_times", dim=dim)
