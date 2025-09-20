@@ -426,11 +426,11 @@ partition_config = UniformPartitionConfig(
 
 ssesm_config = SSESMConfig(
     n_features = n_features,
-    model_epochs = 5000,
+    model_epochs = 1500,
     sparse_coding_config = sparse_coding_config,
     dict_config = dict_config,
     partition_config = partition_config,
-    log_interval=25,
+    log_interval=10,
     permutation_times=1,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )

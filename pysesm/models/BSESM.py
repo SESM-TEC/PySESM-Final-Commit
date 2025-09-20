@@ -421,6 +421,12 @@ class BSESM(SESM):
         sub-blocks.
         """
         y_pred = self.predict(X)
+
         current_time = self.training_time / 60
+        
+        # Ensure both tensors are on the same device for the calculation.
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)
+        
         mse = F.mse_loss(y_pred,y.to(y_pred.device))
         return y_pred, current_time, mse.item()

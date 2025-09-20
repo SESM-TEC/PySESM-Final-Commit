@@ -171,10 +171,12 @@ class SSESM(SESM):
 
     def performance_stats(self, X: torch.Tensor, y: torch.Tensor):
         """
-        Evaluate the model's performance on a given dataset using active sub-blocks.
+        Evaluate the model's performance on a given dataset using
+        active sub-blocks.
 
-        The method computes predictions, tracks the elapsed training time, and calculates
-        the Mean Squared Error (MSE) between the predictions and true values.
+        The method computes predictions, tracks the elapsed training
+        time, and calculates the Mean Squared Error (MSE) between the
+        predictions and true values.
 
         Args:
             X (torch.Tensor): Input features for evaluation.
@@ -185,11 +187,17 @@ class SSESM(SESM):
                 - y_pred (torch.Tensor): Predicted values for the dataset.
                 - time (float): Total elapsed time for training (in minutes).
                 - mse (float): Mean Squared Error between predictions and true target values.
+
         """
         y_pred = self.predict(X) # y_pred will be on X.device
         time = self.training_time / 60
 
         # Calculate MSE using PyTorch's function
+        # Ensure both tensors are on the same device for the calculation.
+        if y.dim() == 1:
+            y = y.unsqueeze(-1)        
+
+        
         # Ensure both tensors are on the same device for the calculation.
         mse = F.mse_loss(y_pred, y.to(y_pred.device))
         return y_pred.cpu(), time, mse.item()
