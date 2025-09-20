@@ -4,30 +4,45 @@ from PF.model import PF
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import joblib
+import torch
 from pysesm.models.SSESM import SSESM
 from pysesm.utils.loggers import setup_logger
 import logging
 
-def prepare_dataset(train_data: dict = None, test_data: dict = None):
-    xtrain = train_data["X"]  
-    ytrain = train_data["Z"]
 
-    xtest = test_data["X"]
-    ytest = test_data["Z"]
 
-    return xtrain, ytrain, xtest, ytest
 
 
 class EXPERIMENT:
-    def __init__(self, svr_config: dict, nn_config: dict, experiment1: dict, pce_config: dict):
+    def __init__(self, svr_config: dict, nn_config: dict, sesm_config: dict, pce_config: dict):
 
         logger = setup_logger(level=logging.DEBUG)
 
-        self.SESM_model=SSESM(**experiment1, logger=logger)
+        self.SESM_model=SSESM(**sesm_config, logger=logger)
         self.SVR_model = SVR(**svr_config)
         self.nn_model = NN(**nn_config)
         self.PF=PF(**pce_config)
 
+        
+
+    def normalize_dataset(self, train_data: dict = None, test_data: dict = None):
+        xtrain = train_data["X"]  
+        ytrain = train_data["Z"]
+
+        xtest = test_data["X"]
+        ytest = test_data["Z"]
+
+        meanx = torch.mean(xtrain, dim=0)
+        stdx = torch.std(xtrain, dim=0)
+        meany = torch.mean(ytrain)
+        stdy = torch.std(ytrain)
+
+        xtrain = (xtrain - meanx) / stdx
+        ytrain = (ytrain - meany) / stdy
+        xtest = (xtest - meanx) / stdx
+        ytest = (ytest - meany) / stdy
+
+        return xtrain, ytrain, xtest, ytest
 
 
 
@@ -36,10 +51,10 @@ class EXPERIMENT:
             train_data, 
             test_data):
         # ENTRENAMIENTO
-        xtrain, ytrain, xtest, ytest = prepare_dataset(train_data, test_data)
+        xtrain, ytrain, xtest, ytest = self.normalize_dataset(train_data, test_data)
 
         svr_time = self.SVR_model.train(xtrain, ytrain)
-        nn_time = self.nn_model.train_for_experiment(xtrain, ytrain, xtest, ytest)
+        nn_time = self.nn_model.train_nn(xtrain, ytrain, xtest, ytest)
         pf_time = self.PF.train(xtrain, ytrain)
         sesm_time = self.SESM_model.partial_fit(xtrain, ytrain)
 
@@ -49,13 +64,18 @@ class EXPERIMENT:
             "pf_time": pf_time,
             "sesm_time": sesm_time
         }
+
+        print("\n Training times (s):")
+        for key, value in times.items():
+            print(f"{key}: {value} ")
+
         return times
         
 
 
     def test_all(self, train_data, test_data):
 
-        _, _, xtest, ytest = prepare_dataset(train_data, test_data)
+        _, _, xtest, ytest = self.normalize_dataset(train_data, test_data)
         
  
         svr_pred = self.SVR_model.test(xtest)
@@ -74,11 +94,16 @@ class EXPERIMENT:
             "NN_MAE": mean_absolute_error(ytest, nn_pred),
             "PF_MAE": mean_absolute_error(ytest, pf_pred)
         }
+
+        print("\n Metrics:")
         for key, value in metrics.items():
             print(f"{key}: {value}")
-        
+      
         return metrics
     
+
+
+    # DE MOMENTO NO SE USA
     def save_metrics(self, metrics, times, n_samples, function):
         """ 
         Esta funcion recibe 2 diccionarios y un vector

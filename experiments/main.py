@@ -30,7 +30,7 @@ def main():
         "zhou_function": [-2, 2]
     }
     functions=[fun.zakharov_function, fun.rosenbrock_rescaled_function, fun.zhou_function]
-    dimensions= [ 3] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
+    dimensions= [ 1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 1 # CAMBIAR A 50 
 
@@ -74,7 +74,6 @@ def main():
                 log_interval=100, permutation_times=1
             )
 
-          
             experiment1 = {
                 "config": ssesm_config, "hyp_set": 1, "n_samples": 0,
                 "seed": 45, "iter": 0,
@@ -85,7 +84,6 @@ def main():
                     DeviceTarget.PARTITION_MANAGER: "cpu"
                 }
             }
-
 
 
             # 1) Diccionarios principales
@@ -119,7 +117,7 @@ def main():
                     =================================================================================
                                               ,___,      Repetition:      {j}                               
                           0      (\(\         (O.o)      Dataset size:    {n}                      
-                         /|\     (-.-)        /),,)       Dimension:       {dim}             
+                         /|\     (-.-)        /),,)      Dimension:       {dim}             
                          / \     o_(")(")      " "       Function:        {function.__name__}    
                     =================================================================================
                     """)

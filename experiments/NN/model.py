@@ -34,17 +34,7 @@ class NN(nn.Module):
 
 
 
-    def train_for_experiment(self, xtrain, ytrain, xtest, ytest):
-        self.Xmean = torch.mean(xtrain, dim=0)
-        self.Xstd = torch.std(xtrain, dim=0)
-        self.ymean = torch.mean(ytrain, dim=0)
-        self.ystd = torch.std(ytrain, dim=0)
-
-        xtrain = (xtrain - self.Xmean) / self.Xstd
-        xtest = (xtest - self.Xmean) / self.Xstd
-
-        ytrain = (ytrain - self.ymean) / self.ystd
-        ytest = (ytest - self.ymean) / self.ystd
+    def train_nn(self, xtrain, ytrain, xtest, ytest):
 
         # ENTRENAMIENTO
         criterion = nn.MSELoss()
@@ -91,12 +81,9 @@ class NN(nn.Module):
         model_path = "nn_model.pth"
         self.load(model_path)
 
-        xtest = (xtest - self.Xmean) / self.Xstd  # Normalizar usando los mismos parámetros que en el entrenamiento
         
         # 4. Pasar el tensor normalizado a la red neuronal para la predicción
         predictions = self.layers(xtest)
-        predictions = predictions * self.ystd + self.ymean  # Desnormalizar las predicciones
-
         # 5. El resto del código es correcto para la salida
         predictions = predictions.detach().cpu().numpy().squeeze()
         return predictions

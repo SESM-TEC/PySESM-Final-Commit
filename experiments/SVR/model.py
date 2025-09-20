@@ -3,7 +3,6 @@ import joblib
 from sklearn.svm import SVR as svr
 import torch
 import time
-from sklearn.preprocessing import StandardScaler
 
 
 class SVR:
@@ -11,7 +10,6 @@ class SVR:
     Una clase para encapsular un modelo Support Vector Regression (SVR) de scikit-learn.
     """
     def __init__(self, kernel, C, gamma, epsilon):
-        self.scaler=StandardScaler()
         self.model = svr(
             kernel = kernel, 
             C = C, 
@@ -21,7 +19,6 @@ class SVR:
 
   
     def predict(self, X: torch.tensor) -> np.ndarray:
-        self.scaler.transform(X)
         predictions = self.model.predict(X)
         return predictions
 
@@ -36,7 +33,6 @@ class SVR:
 
 
     def train(self, xtrain, ytrain):
-        xtrain = self.scaler.fit_transform(xtrain)
         print("\n Training SVR...")
 
         start_time = time.time()
