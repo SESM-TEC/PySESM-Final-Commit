@@ -13,7 +13,8 @@ authors = [
     {name = "Pablo Alvarado", email = "palvarado@itcr.ac.cr"},
     {name = "Joshua Gamboa", email = "joshgc.19@gmail.com"},
     {name = "Aldo Cambronero", email = "cambroneroaldo03@gmail.com"},
-    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"}
+    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"},
+    {name = "Aaron Salas", email = "asalas@estudiantec.cr"}
 ]
 dependencies = [
     "numpy",
