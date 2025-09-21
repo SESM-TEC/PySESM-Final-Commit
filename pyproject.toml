@@ -16,13 +16,22 @@ authors = [
     {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"},
     {name = "Aaron Salas", email = "asalas@estudiantec.cr"}
 ]
+
 dependencies = [
     "numpy",
-    "matplotlib>=3.9.1",
-    "torch",
+    "torch>=2.0.0",
+    ]
+
+[project.optional-dependencies]
+# Dependencies needed only for running examples, experiments, and tests.
+# Install with: pip install ".[dev]"
+dev = [
+    "matplotlib",
     "scipy",
-    "logger",
     "scikit-learn",
+    "wandb",
+    "imageio",
+    "joblib",
     "plotly",
     "pandas",
     "pytest"
