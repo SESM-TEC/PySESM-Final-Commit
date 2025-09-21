@@ -1,8 +1,8 @@
 '''
 Copyright (C) 2023-2025 Tecnológico de Costa Rica
 
-This script provides a trivial example of using the SESM framework 
-to represent a dataset of three Gaussian distributions with a single block.
+This script provides an example of using the SESM framework to represent a 
+dataset of three Gaussian distributions with a multi-block partition (2x2 grid).
 
 Authors: The SESM Team 
 License: 
@@ -14,18 +14,14 @@ import matplotlib.pyplot as plt
 
 from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
-from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
-from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme
-from pysesm.sparse_coding import ADMMConfig
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
-from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils_dataset.gaussian_covariance_density import generate_nondiag_covariance_matrices
 from pysesm.utils.plot_and_save_stats import plot_surface
-from visualization import VisualizerHook # Import from the new centralized file
+from visualization import VisualizerHook  # Import from the new centralized file
 from mpl_toolkits.mplot3d import Axes3D
 
 # --- Main Script ---
@@ -34,40 +30,29 @@ from mpl_toolkits.mplot3d import Axes3D
 logger = setup_logger(level=logging.INFO)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 20
+n_functions = 20  # Increased for more capacity in a multi-block scenario
 n_features = 2
 
-# --- Partition Manager Configurations (choose one) ---
 partition_config = UniformPartitionConfig(
-    T=1,
+    T=2,  # <-- Key change: Creates a 2x2 grid of 4 blocks
     initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     activity_threshold=0,
     overlap_ratio=0.25,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
-# partition_config = AdaptativePartitionConfig(
-#     maxNodeSize=251,
-#     maxSplitsBeforeRestart=5,
-#     overlap_ratio=0.1,
-#     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# )
 
 
-# --- Dictionary Configuration ---
 dict_config = GaussianDictConfig(
-    epochs=100,
+    epochs=25,
     alpha=0.01,
     criterion=torch.nn.MSELoss(),
     optimizer_factory=lambda params, lr: torch.optim.AdamW(
-        params, lr=lr, weight_decay=0.001
+        params, lr=lr, weight_decay=0.001 # Added small weight decay
     ),
-    # optimizer_factory = lambda params, lr: torch.optim.SGD(
-    #    params, lr=lr, momentum=0.1
-    # ),
     mu_epochs=10,
     rho_epochs=10,
     split_mu_rho=False,
-    # These ranges operate in the NORMALIZED space [0, 1] of the block.        
+    # These ranges operate in the NORMALIZED space [0, 1] of the block.
     eig_range=[0.05, 0.2],
     mu_range=[0.0, 1.0],
     regularization_func=GaussianDictLayer.electrostatic_regularization,
@@ -75,10 +60,8 @@ dict_config = GaussianDictConfig(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
-
-# --- Sparse Coding Configurations (choose one) ---
 sparse_coding_config = ISTAConfig(
-    epochs=150,
+    epochs=50,
     alpha=0.15,
     lambd=0.005,
     step_size_method=StepSizeMethod.FROBENIUS,
@@ -87,61 +70,23 @@ sparse_coding_config = ISTAConfig(
     criterion=torch.nn.MSELoss(),
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
-# sparse_coding_config = FISTAConfig(
-#     epochs=100,
-#     alpha=0.15,
-#     lambd=0.005,
-#     step_size_method=StepSizeMethod.FROBENIUS,
-#     power_iterations=10,
-#     n_functions=n_functions,
-#     criterion=torch.nn.MSELoss(),
-#     restart_strategy=RestartStrategy.ADAPTIVE,
-#     momentum_scheme=MomentumScheme.MONOTONIC,
-#     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# )
-# sparse_coding_config = ADMMConfig(
-#     epochs=100,
-#     rho=1.0,
-#     alpha=1.5,
-#     lambda_scaling=1.0,
-#     lambd=0.00001,
-#     abs_tol=1e-4,
-#     rel_tol=1e-2,
-#     n_functions=n_functions,
-#     criterion=torch.nn.MSELoss(),
-#     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# )
 
-
-
-# --- Main SESM Model Configurations (choose one) ---
 ssesm_config = SSESMConfig(
     n_features=n_features,
-    model_epochs=1500,
+    model_epochs=100,  # Increased epochs for the more complex multi-block problem
     partition_config=partition_config,
     dict_config=dict_config,
     sparse_coding_config=sparse_coding_config,
-    log_interval=50,
-    permutation_times=1,
+    log_interval=25,
+    permutation_times=10, # Permuting blocks is important in SSESM
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
-# bsesm_config = BSESMConfig(
-#     n_features=n_features,
-#     model_epochs=5000,
-#     sparse_coding_config=sparse_coding_config,
-#     dict_config=dict_config,
-#     partition_config=partition_config,
-#     log_interval=50,
-#     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# )
 
 # 3. DEFINE EXPERIMENT PARAMETERS
-which_sesm = "ssesm" # "ssesm" or "bsesm"
-
 experiment = {
-    "config": ssesm_config, # bsesm_config if which_sesm=="bsesm" else ssesm_config,
-    "hyp_set": 1,
-    "n_samples": 500,
+    "config": ssesm_config,
+    "hyp_set": 2, # Changed to distinguish from one-block
+    "n_samples": 1000, # More samples for a more complex setup
     "seed": 45,
     "iter": 0
 }
@@ -198,7 +143,7 @@ model.sesm_hook = visual_hook
     
 # 6. TRAIN AND EVALUATE THE MODEL
 try:
-    logging.info("Training model %s", model.__class__.__name__)
+    logging.info("Training model %s with T=%d", model.__class__.__name__, partition_config.T)
     model.partial_fit(X_train, y_train)
     
     show_all_h(model, logger)
@@ -222,7 +167,7 @@ except KeyboardInterrupt:
 finally:
     # Ensure the video is created even if training is interrupted.
     if 'visual_hook' in locals() and visual_hook is not None:
-        visual_hook.create_video(video_name="one_block_evolution.mp4")
+        visual_hook.create_video(video_name="multi_block_evolution.mp4")
 
 print("\nDisplaying final plots. Close all plot windows to exit.")
 plt.show(block=True)
