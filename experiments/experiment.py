@@ -3,7 +3,6 @@ from NN.model import NN
 from PF.model import PF
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-import joblib
 import torch
 from pysesm.models.SSESM import SSESM
 from pysesm.utils.loggers import setup_logger
@@ -101,26 +100,6 @@ class EXPERIMENT:
       
         return metrics
     
-
-
-    # DE MOMENTO NO SE USA
-    def save_metrics(self, metrics, times, n_samples, function):
-        """ 
-        Esta funcion recibe 2 diccionarios y un vector
-
-        metrics (dict): Contiene las metricas obtenidas con una funcion en especifico,
-        la clave seria la dimension, en cada dimension se encuentran todos los errores registrados
-        
-        times (dict): la clave seria la dimension, en cada dimension se registran los tiempos
-        de entrenamiento de cada modelo con distintos tamaños de dataset
-
-        n_samples (list): contiene los tamaños de los datasets en 1 dimension, se usa para calcular 
-        el tamaño de dataset de otras dimensiones
-        """
-        joblib.dump(metrics, "./plots/all_metrics"+str(function.__name__)+".joblib")
-        joblib.dump(times, "./plots/all_times"+str(function.__name__)+".joblib")
-        joblib.dump(n_samples, "./plots/n_samples.joblib")
-
 
 
 

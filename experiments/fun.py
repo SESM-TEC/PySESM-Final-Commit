@@ -80,9 +80,17 @@ def zakharov_function(X: torch.Tensor) -> torch.Tensor:
     return sum1 + sum2**2 + sum2**4
 
 
-def plane_function(X):
-    """Esta funcion recibe un tensor 2d y retorna la suma de las columnas."""
-    return torch.sum(X, dim=1) 
 
 
+def styblinski_tang_function(X: torch.Tensor) -> torch.Tensor:
+    """
+    Styblinski-Tang function.
 
+    Args:
+        X (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
+                        Each row is a point in the search space.
+
+    Returns:
+        torch.Tensor: Function values of shape (n_samples,).
+    """
+    return 0.5 * torch.sum(X**4 - 16 * X**2 + 5 * X, dim=1)

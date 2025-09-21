@@ -23,11 +23,11 @@ def main():
     """
     # CONFIGURACIONES DEL EXPERIMENTO
     function_limits = {
-        "zakharov_function" : [-2, 2],
-        "rosenbrock_rescaled_function": [-2, 2],
-        "zhou_function": [-2, 2]
+        "zakharov_function" : [-10, 10],
+        "styblinski_tang_function": [-5, 5],
+        "zhou_function": [0, 1]
     }
-    functions=[fun.zakharov_function, fun.rosenbrock_rescaled_function, fun.zhou_function]
+    functions=[fun.zakharov_function, fun.styblinski_tang_function, fun.zhou_function]
     dimensions= [1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 10 # CAMBIAR A 50 
@@ -62,9 +62,10 @@ def main():
                 eig_range=[0.05, 0.2],
             )
 
+            [x1lim, x2lim] = function_limits[function.__name__]
             partition_config = UniformPartitionConfig(
                 T=1,
-                initial_bounds=torch.tensor([[-2 for i in range(dim)], [2 for i in range(dim)]], dtype=torch.float32),
+                initial_bounds=torch.tensor([[x1lim for i in range(dim)], [x2lim for i in range(dim)]], dtype=torch.float32),
                 activity_threshold=0, overlap_ratio=0.1
             )
 
