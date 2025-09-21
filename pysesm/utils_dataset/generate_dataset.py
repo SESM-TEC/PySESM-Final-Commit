@@ -8,10 +8,10 @@ from pysesm.utils_dataset.mesh_generation import generate_mu, generate_mesh_samp
 
 def generate_gaussian_dataset(
     n_samples: int,
-    means: list[tuple[float, float]] = None,
-    variances: list[float] = None,
-    weights: list[float] = None,
-    limits: tuple[float, float] = None,
+    means: list[tuple[float, float]] | None = None,
+    variances: list | None = None,
+    weights: list[float] | None = None,
+    limits: tuple[float, float] | None = None,
     mesh_divisions: int = 50
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -27,7 +27,8 @@ def generate_gaussian_dataset(
     Args:
         n_samples (int): Number of random samples to generate for training
         means (List[Tuple[float, float]]): List of means for each gaussian component
-        variances (List[float]): List of variances for each gaussian component
+        variances (List): List of variances to create diagonal covariance matrices,
+                          or a list of predefined 2x2 covariance tensors (torch.Tensor)
         weights (List[float]): List of weights for each gaussian component
         limits (Tuple[float, float]): Lower and upper limits for the data range
         mesh_divisions (int): Number of divisions per dimension for the test mesh
@@ -62,8 +63,16 @@ def generate_gaussian_dataset(
     if not (len(means) == len(variances) == len(weights)):
         raise ValueError("means, variances and weights must have the same length")
     
-    # Create diagonal covariance matrices
-    sigma_list = [var * torch.eye(2) for var in variances]
+    # Create or assign covariance matrices
+    if variances and isinstance(variances[0], torch.Tensor):
+        # Use pre-defined covariance matrices
+        sigma_list = variances
+    else:
+        # Create diagonal covariance matrices from variances
+        sigma_list = [var * torch.eye(2) for var in variances]
+
+
+
     
     # Convert means to tensors
     mu_list = [generate_mu(mu[0], mu[1]) for mu in means]

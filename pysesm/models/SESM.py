@@ -443,7 +443,8 @@ class SESM(torch.nn.Module, ABC):
 
         sparsecoding.partial_fit(y=y_sc,
                                  dictionary=dictionary_for_sparse,
-                                 reset_state=(epoch == 0))
+                                 #reset_state=(epoch == 0))
+                                 reset_state=True)
 
         self._sparse_coding_losses.append(sparsecoding.losses[-1])
         
