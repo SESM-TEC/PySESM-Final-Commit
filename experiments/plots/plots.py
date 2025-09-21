@@ -58,15 +58,15 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
 
 def calc_max_mean(metricas: dict):
     mean_max = 0
-    for _, value in metricas.items():
-        for v in value:
-            mean_v = sum(v)/len(v)
-            if mean_v > mean_max:
+    for _, value in metricas.items(): # Recorre cada metrica [sesm_mae, nn_mae, svr_mae, pf_mae ...]
+        for v in value: # Recorre las metricas de cada dataset size [8, 16, 32, ...]
+            mean_v = sum(v)/len(v) # calcula la media
+            if mean_v > mean_max: # Guarda la media maxima
                 mean_max = mean_v
     return mean_max
 
 
-functions=['zakharov_function']
+functions=['zakharov_function', 'styblinski_tang_function']
 for function in functions:
     
     times   = joblib.load(f"all_times_{function}.joblib")
