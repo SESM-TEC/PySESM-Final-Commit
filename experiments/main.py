@@ -11,11 +11,10 @@ from pysesm.utils_dataset.generate_dataset import generate_custom_function_datas
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper
 
 from pysesm.models.SSESM import SSESMConfig
-from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
+from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 def main():
     """
@@ -46,9 +45,12 @@ def main():
             pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
             sparse_coding_config = ISTAConfig(
-                epochs=200, alpha=0.1, lambd=0.00001,
+                epochs=200,
+                alpha=0.1,
+                lambd=0.00001,
                 step_size_method=StepSizeMethod.FROBENIUS,
-                power_iterations=10, n_functions=10,
+                power_iterations=10,
+                n_functions=85,
                 criterion=torch.nn.MSELoss()
             )
 
@@ -57,7 +59,7 @@ def main():
                 criterion=JensenShannonLossWrapper(),
                 optimizer_factory=lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
                 mu_epochs=10, rho_epochs=10, split_mu_rho=True,
-                eig_range=[0.05, 0.2], mu_range=[-2.0, 2.0],
+                eig_range=[0.05, 0.2],
             )
 
             partition_config = UniformPartitionConfig(
@@ -69,26 +71,17 @@ def main():
             ssesm_config = SSESMConfig(
                 n_features= dim, model_epochs=100,
                 sparse_coding_config=sparse_coding_config,
-                dict_config=dict_config, partition_config=partition_config,
-                log_interval=100, permutation_times=1
+                dict_config=dict_config,
+                partition_config=partition_config,
+                log_interval=100,
+                permutation_times=1,
+                seed=45,
+                device="cuda" if torch.cuda.is_available() else "cpu"
             )
-
-            experiment1 = {
-                "config": ssesm_config, "hyp_set": 1, "n_samples": 0,
-                "seed": 45, "iter": 0,
-                "device_map": {
-                    DeviceTarget.GLOBAL: "cpu",
-                    DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-                    DeviceTarget.DICTIONARY_LAYER: "cpu",
-                    DeviceTarget.PARTITION_MANAGER: "cpu"
-                }
-            }
-
 
             # 1) Diccionarios principales
             all_metrics = defaultdict(list)
-            all_times   = defaultdict(list)
-
+            all_times   = defaultdict(list)            
             
             # 2) Inicializar Weights & Biases una sola vez
             wandb.init(
@@ -132,7 +125,7 @@ def main():
 
                     # Crear experimento y entrenar con el metodo train_all y testear con test_all
                     # Se entrenan y testean 4 modelos j veces 
-                    experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
+                    experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
                     experiment.setup_dataset(train_data, test_data)
                     times = experiment.train_all()
                     metrics = experiment.test_all()

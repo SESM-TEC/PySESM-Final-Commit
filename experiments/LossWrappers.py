@@ -11,8 +11,14 @@ class KLDivLossWrapper(torch.nn.Module):
         
     def forward(self, inputs, targets):
         # Step 1: Ensure non-negativity (if your data can be negative)
-        inputs = torch.nn.functional.relu(inputs) + 1e-8  # Small constant for numerical stability
-        targets = torch.nn.functional.relu(targets) + 1e-8
+        # Shift both tensors to ensure non-negativity, mapping the target's minimum to 0.
+        min_val = torch.min(targets)
+        shifted_inputs = inputs - min_val
+        shifted_targets = targets - min_val
+         
+        # Apply relu as a safeguard and add epsilon for numerical stability.
+        inputs = torch.nn.functional.relu(shifted_inputs) + 1e-8
+        targets = torch.nn.functional.relu(shifted_targets) + 1e-8
         
         # Step 2: Normalize to make them proper distributions
         # Option 1: Normalize across all elements
@@ -44,8 +50,15 @@ class CrossEntropyLossWrapper(torch.nn.Module):
         
     def forward(self, inputs, targets):
         # Ensure non-negativity
-        inputs = torch.nn.functional.relu(inputs) + self.epsilon
-        targets = torch.nn.functional.relu(targets) + self.epsilon
+
+        # Shift both tensors to ensure non-negativity, mapping the target's minimum to 0.
+        min_val = torch.min(targets)
+        shifted_inputs = inputs - min_val
+        shifted_targets = targets - min_val
+        
+        # Apply relu as a safeguard and add epsilon for numerical stability.
+        inputs = torch.nn.functional.relu(shifted_inputs) + self.epsilon
+        targets = torch.nn.functional.relu(shifted_targets) + self.epsilon
         
         # Normalize to make them proper distributions
         inputs_normalized = inputs / torch.sum(inputs)
@@ -72,8 +85,15 @@ class JensenShannonLossWrapper(torch.nn.Module):
         
     def forward(self, inputs, targets):
         # Ensure non-negativity
-        inputs = torch.nn.functional.relu(inputs) + self.epsilon
-        targets = torch.nn.functional.relu(targets) + self.epsilon
+
+        # Shift both tensors to ensure non-negativity, mapping the target's minimum to 0.
+        min_val = torch.min(targets)
+        shifted_inputs = inputs - min_val
+        shifted_targets = targets - min_val
+         
+        # Apply relu as a safeguard and add epsilon for numerical stability.
+        inputs = torch.nn.functional.relu(shifted_inputs) + self.epsilon
+        targets = torch.nn.functional.relu(shifted_targets) + self.epsilon
         
         # Normalize to make them proper distributions
         inputs_normalized = inputs / torch.sum(inputs)
