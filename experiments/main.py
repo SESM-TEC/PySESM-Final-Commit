@@ -8,7 +8,7 @@ from collections import defaultdict
 import fun
 
 from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset, generate_custom_nd_function_dataset
-from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper, CrossEntropyLossWrapper
+from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper
 
 from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTALayer, ISTAConfig, StepSizeMethod
@@ -16,7 +16,6 @@ from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
 from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
 
 def main():
     """
@@ -30,7 +29,7 @@ def main():
         "zhou_function": [-2, 2]
     }
     functions=[fun.zakharov_function, fun.rosenbrock_rescaled_function, fun.zhou_function]
-    dimensions= [ 1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
+    dimensions= [ 3,4] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 1 # CAMBIAR A 50 
 
@@ -44,7 +43,7 @@ def main():
 
             svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
             nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
-            pf_config = {"order": 9, "alpha": 0.01}
+            pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
             sparse_coding_config = ISTAConfig(
                 epochs=200, alpha=0.1, lambd=0.00001,
@@ -134,8 +133,9 @@ def main():
                     # Crear experimento y entrenar con el metodo train_all y testear con test_all
                     # Se entrenan y testean 4 modelos j veces 
                     experiment = EXPERIMENT(svr_config, nn_config, experiment1, pf_config)
-                    times = experiment.train_all(train_data, test_data)
-                    metrics = experiment.test_all(train_data, test_data)
+                    experiment.setup_dataset(train_data, test_data)
+                    times = experiment.train_all()
+                    metrics = experiment.test_all()
 
                     # Guardar mse y mae de cada modelo j veces
                     for key, value in metrics.items(): 

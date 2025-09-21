@@ -14,18 +14,25 @@ import logging
 
 
 class EXPERIMENT:
-    def __init__(self, svr_config: dict, nn_config: dict, sesm_config: dict, pce_config: dict):
+    def __init__(
+            self, 
+            svr_config: dict, 
+            nn_config: dict, 
+            sesm_config: dict, 
+            pf_config: dict,
+            ):
 
         logger = setup_logger(level=logging.DEBUG)
 
         self.SESM_model=SSESM(**sesm_config, logger=logger)
         self.SVR_model = SVR(**svr_config)
         self.nn_model = NN(**nn_config)
-        self.PF=PF(**pce_config)
+        self.PF=PF(**pf_config)
+
 
         
 
-    def normalize_dataset(self, train_data: dict = None, test_data: dict = None):
+    def setup_dataset(self, train_data: dict = None, test_data: dict = None):
         xtrain = train_data["X"]  
         ytrain = train_data["Z"]
 
@@ -37,33 +44,21 @@ class EXPERIMENT:
         meany = torch.mean(ytrain)
         stdy = torch.std(ytrain)
 
-        xtrain = (xtrain - meanx) / stdx
-        ytrain = (ytrain - meany) / stdy
-        xtest = (xtest - meanx) / stdx
-        ytest = (ytest - meany) / stdy
-
-        return xtrain, ytrain, xtest, ytest
+        self.xtrain = (xtrain - meanx) / stdx
+        self.ytrain = (ytrain - meany) / stdy
+        self.xtest = (xtest - meanx) / stdx
+        self.ytest = (ytest - meany) / stdy
 
 
 
-    def train_all(
-            self,
-            train_data, 
-            test_data):
+
+    def train_all(self):
         # ENTRENAMIENTO
-        xtrain, ytrain, xtest, ytest = self.normalize_dataset(train_data, test_data)
-
-        svr_time = self.SVR_model.train(xtrain, ytrain)
-        nn_time = self.nn_model.train_nn(xtrain, ytrain, xtest, ytest)
-        pf_time = self.PF.train(xtrain, ytrain)
-        sesm_time = self.SESM_model.partial_fit(xtrain, ytrain)
-
-        times = {
-            "svr_time": svr_time,
-            "nn_time": nn_time,
-            "pf_time": pf_time,
-            "sesm_time": sesm_time
-        }
+        times = {}
+        times['svr_time'] = self.SVR_model.train(self.xtrain, self.ytrain)
+        times['nn_time'] = self.nn_model.train_nn(self.xtrain, self.ytrain, self.xtest, self.ytest)
+        times['pf_time'] = self.PF.train(self.xtrain, self.ytrain)
+        times['sesm_time'] = self.SESM_model.partial_fit(self.xtrain, self.ytrain)
 
         print("\n Training times (s):")
         for key, value in times.items():
@@ -73,26 +68,23 @@ class EXPERIMENT:
         
 
 
-    def test_all(self, train_data, test_data):
-
-        _, _, xtest, ytest = self.normalize_dataset(train_data, test_data)
-        
- 
-        svr_pred = self.SVR_model.test(xtest)
-        nn_pred = self.nn_model.test(xtest)
-        SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(xtest, ytest)
-        pf_pred = self.PF.test(xtest)
+    def test_all(self):
+         # TESTING
+        svr_pred = self.SVR_model.test(self.xtest)
+        nn_pred = self.nn_model.test(self.xtest)
+        SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(self.xtest, self.ytest)
+        pf_pred = self.PF.test(self.xtest)
 
         metrics = {
             "SESM_MSE": SESM_mse,
-            "SVR_MSE": mean_squared_error(ytest, svr_pred),
-            "NN_MSE": mean_squared_error(ytest, nn_pred),
-            "PF_MSE": mean_squared_error(ytest, pf_pred),
+            "SVR_MSE": mean_squared_error(self.ytest, svr_pred),
+            "NN_MSE":  mean_squared_error(self.ytest, nn_pred),
+            "PF_MSE":  mean_squared_error(self.ytest, pf_pred),
 
-            "SESM_MAE":mean_absolute_error(ytest, SESM_pred),
-            "SVR_MAE": mean_absolute_error(ytest, svr_pred),
-            "NN_MAE": mean_absolute_error(ytest, nn_pred),
-            "PF_MAE": mean_absolute_error(ytest, pf_pred)
+            "SESM_MAE":mean_absolute_error(self.ytest, SESM_pred),
+            "SVR_MAE": mean_absolute_error(self.ytest, svr_pred),
+            "NN_MAE":  mean_absolute_error(self.ytest, nn_pred),
+            "PF_MAE":  mean_absolute_error(self.ytest, pf_pred)
         }
 
         print("\n Metrics:")
