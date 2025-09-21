@@ -30,16 +30,24 @@ from mpl_toolkits.mplot3d import Axes3D
 logger = setup_logger(level=logging.INFO)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 20  # Increased for more capacity in a multi-block scenario
+n_functions = 20  
 n_features = 2
 
 partition_config = UniformPartitionConfig(
-    T=2,  # <-- Key change: Creates a 2x2 grid of 4 blocks
+    T=2,  
     initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
     activity_threshold=0,
     overlap_ratio=0.25,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
+
+# partition_config = AdaptativePartitionConfig(
+#     maxNodeSize=251,
+#     maxSplitsBeforeRestart=5,
+#     overlap_ratio=0.1,
+#     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# )
+
 
 
 dict_config = GaussianDictConfig(
