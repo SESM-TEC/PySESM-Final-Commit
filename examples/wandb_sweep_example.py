@@ -11,6 +11,7 @@ License:
 import logging
 import torch
 import wandb
+import numpy as np
 
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
@@ -38,33 +39,40 @@ sweep_config = {
         'n_functions': {
             'distribution': 'q_uniform',
             'q': 1,
-            'min': 20,
-            'max': 80,
-            'doc': "Number of dictionary words (model capacity)."
+            'min': 10,
+            'max': 80
         },
         'dict_alpha': {
-            'distribution': 'log_uniform_values',
+            'distribution': 'log_uniform',
             'min': 1e-4,
-            'max': 1e-2,
-            'doc': "Learning rate for the dictionary optimizer (AdamW)."
+            'max': 1e-2
         },
         'sc_lambd': {
-            'distribution': 'log_uniform_values',
+            'distribution': 'log_uniform',
             'min': 1e-4,
-            'max': 1e-2,
-            'doc': "L1 regularization strength for sparse coding (ISTA)."
+            'max': 1e-2
         },
         'reg_gamma': {
-            'distribution': 'log_uniform_values',
-            'min': 1e-4,
-            'max': 5e-3,
-            'doc': "Strength of the electrostatic regularization."
+            'distribution': 'log_uniform',
+            'min': 1e-5,
+            'max': 5e-2
         },
         'weight_decay': {
-            'distribution': 'log_uniform_values',
+            'distribution': 'log_uniform',
             'min': 1e-5,
-            'max': 1e-2,
-            'doc': "Weight decay for the AdamW dictionary optimizer."
+            'max': 1e-2
+        },
+        'sc_epochs': {
+            'distribution': 'q_uniform',
+            'q': 10,
+            'min': 50,
+            'max': 250
+        },
+        'dict_epochs': {
+            'distribution': 'q_uniform',
+            'q': 10,
+            'min': 50,
+            'max': 200
         }
     }
 }
@@ -77,7 +85,7 @@ non_diag_sigmas = [sigma1, sigma2, sigma3]
 (trainDataset, X_train, y_train,
  testDataset, X_test, y_test,
  gt_mu, gt_sigma) = generate_gaussian_dataset(
-    n_samples=1000,
+    n_samples=250,
     variances=non_diag_sigmas  
 )
 
@@ -97,7 +105,7 @@ def train():
 
     # --- Build PySESM configs dynamically from the sweep config ---
     sparse_coding_config = ISTAConfig(
-        epochs=150,
+        epochs=cfg.sc_epochs,
         lambd=cfg.sc_lambd,
         step_size_method=StepSizeMethod.FROBENIUS,
         n_functions=cfg.n_functions,
@@ -106,7 +114,7 @@ def train():
     )
 
     dict_config = GaussianDictConfig(
-        epochs=100,
+        epochs=cfg.dict_epochs,
         alpha=cfg.dict_alpha,
         criterion=torch.nn.MSELoss(),
         optimizer_factory=lambda params, lr: torch.optim.AdamW(
@@ -118,7 +126,7 @@ def train():
     )
 
     partition_config = UniformPartitionConfig(
-        T=2,
+        T=1,
         initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
         device=device
     )
@@ -130,7 +138,7 @@ def train():
         dict_config=dict_config,
         partition_config=partition_config,
         log_interval=200, # Log less frequently during sweeps
-        permutation_times=5,
+        permutation_times=1,
         device=device
     )
 
@@ -165,4 +173,4 @@ if __name__ == "__main__":
     logger.info(f"Starting wandb sweep agent with ID: {sweep_id}")
     # The 'count' argument specifies how many runs to execute.
     wandb.agent(sweep_id, function=train, count=20)
-    logger.info("Sweep finished.")```
+    logger.info("Sweep finished.")
