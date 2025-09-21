@@ -60,9 +60,10 @@ def main():
                 eig_range=[0.05, 0.2], mu_range=[-2.0, 2.0],
             )
 
+            [x1lim, x2lim] = function_limits[function.__name__]
             partition_config = UniformPartitionConfig(
                 T=1,
-                initial_bounds=torch.tensor([[-2 for i in range(dim)], [2 for i in range(dim)]], dtype=torch.float32),
+                initial_bounds=torch.tensor([[x1lim for i in range(dim)], [x2lim for i in range(dim)]], dtype=torch.float32),
                 activity_threshold=0, overlap_ratio=0.1
             )
 
