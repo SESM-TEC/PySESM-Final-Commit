@@ -66,11 +66,11 @@ def calc_max_mean(metricas: dict):
     return mean_max
 
 
-functions=['zakharov_function', 'rosenbrock_rescaled_function', 'zhou_function']
+functions=['zakharov_function']
 for function in functions:
     
-    times   = joblib.load(f"all_times{function}.joblib")
-    metrics = joblib.load(f"all_metrics{function}.joblib")
+    times   = joblib.load(f"all_times_{function}.joblib")
+    metrics = joblib.load(f"all_metrics_{function}.joblib")
     n_samples = joblib.load("n_samples.joblib")
 
     for dim, dim_metrics in metrics.items():
