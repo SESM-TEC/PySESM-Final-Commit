@@ -395,7 +395,7 @@ class SESM(torch.nn.Module, ABC):
                 self.logger.info(
                     f"Block {block.block_index} - Epoch {epoch + 1}/{self.model_epochs}: "
                     f"Dict Loss: {self.dictionary_layer_losses[-1]:.6f}, "
-                    f"SC Loss: {block.sparse_coding_layer.losses[-1]:.6f}"
+                    f"SC Loss: {self._sparse_coding_losses[-1]:.6f}"
                 )
                 
         self.partial_fit_count += 1
@@ -441,18 +441,25 @@ class SESM(torch.nn.Module, ABC):
         y_sc = y.get_for_device(sc_device)
         dictionary_for_sparse = self.dictionary_layer.dictionary.detach().to(sc_device)
 
-        sparsecoding.partial_fit(y=y_sc,
-                                 dictionary=dictionary_for_sparse,
-                                 #reset_state=(epoch == 0))
-                                 reset_state=True)
 
-        self._sparse_coding_losses.append(sparsecoding.losses[-1])
+        if sparsecoding.config.epochs > 0:
+            sparsecoding.partial_fit(y=y_sc,
+                                     dictionary=dictionary_for_sparse,
+                                     #reset_state=(epoch == 0))
+                                     reset_state=True)
+            self._sparse_coding_losses.append(sparsecoding.losses[-1])
+        else:
+            # If no training happened, calculate the current forward loss with the fixed h
+            with torch.no_grad():
+                loss = sparsecoding.forward(y=y_sc, dictionary=dictionary_for_sparse, log_losses=False)
+                self._sparse_coding_losses.append(loss.item())       
+        
         
         # Call SESM hook if provided for monitoring
         if self.sesm_hook is not None:
             hook_info = {
                 'partial_fit_count': self.partial_fit_count,
-                'sparse_coding_losses': sparsecoding.losses[-sparsecoding.config.epochs:],
+                'sparse_coding_losses': [self._sparse_coding_losses[-1]],
                 'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
                 'h': sparsecoding.h.detach().clone(),
                 'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
