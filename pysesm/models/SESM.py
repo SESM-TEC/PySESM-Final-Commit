@@ -457,15 +457,18 @@ class SESM(torch.nn.Module, ABC):
         
         # Call SESM hook if provided for monitoring
         if self.sesm_hook is not None:
-            hook_info = {
-                'partial_fit_count': self.partial_fit_count,
-                'sparse_coding_losses': [self._sparse_coding_losses[-1]],
-                'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
-                'h': sparsecoding.h.detach().clone(),
-                'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
-                'model_epoch': epoch
-            }
-            self.sesm_hook(hook_info)
+            if self.config.log_interval > 0 and (epoch + 1) % self.config.log_interval == 0:
+                hook_info = {
+                    'partial_fit_count': self.partial_fit_count,
+                    # Pass the last computed sparse coding loss, which is always available now.
+                    # Wrap it in a list to maintain the expected type for the hook.
+                    'sparse_coding_losses': [self._sparse_coding_losses[-1]],
+                    'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
+                    'h': sparsecoding.h.detach().clone(),
+                    'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
+                    'model_epoch': epoch
+                }
+                self.sesm_hook(hook_info)
             
     def predict(self,
                 X: torch.Tensor,

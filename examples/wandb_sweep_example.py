@@ -19,6 +19,7 @@ from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
+from pysesm.utils.metric_loggers import log_to_WB
 from pysesm.utils_dataset.gaussian_covariance_density import generate_nondiag_covariance_matrices
 
 # --- 1. SETUP LOGGER & DEVICE ---
@@ -43,36 +44,37 @@ sweep_config = {
             'max': 80
         },
         'dict_alpha': {
-            'distribution': 'log_uniform',
+            'distribution': 'log_uniform_values',
             'min': 1e-4,
             'max': 1e-2
         },
         'sc_lambd': {
-            'distribution': 'log_uniform',
+            'distribution': 'log_uniform_values',
             'min': 1e-4,
             'max': 1e-2
         },
         'reg_gamma': {
-            'distribution': 'log_uniform',
+            'distribution': 'log_uniform_values',
             'min': 1e-5,
             'max': 5e-2
         },
         'weight_decay': {
-            'distribution': 'log_uniform',
-            'min': 1e-5,
+            'distribution': 'q_uniform',
+            'q': 5e-6,
+            'min': 0,
             'max': 1e-2
         },
         'sc_epochs': {
             'distribution': 'q_uniform',
-            'q': 10,
-            'min': 50,
+            'q': 5,
+            'min': 10,
             'max': 250
         },
         'dict_epochs': {
             'distribution': 'q_uniform',
-            'q': 10,
-            'min': 50,
-            'max': 200
+            'q': 5,
+            'min': 100,
+            'max': 500
         }
     }
 }
@@ -98,6 +100,15 @@ def train():
     """
     # Initialize a new wandb run
     run = wandb.init()
+    cfg = wandb.config
+
+    # --- Construct a technical run name ---
+    # We can create a more informative name using the unique run ID and key hyperparameters.
+    run_number = run.name.split('-')[-1]
+    technical_name = f"run_{int(run_number):03d}-funcs_{cfg.n_functions}-sc_e_{cfg.sc_epochs}-dict_e_{cfg.dict_epochs}"
+    wandb.run.name = technical_name
+    # Save the new name to the summary, which is useful for tables in W&B reports
+    wandb.run.save()
     
     # Access the hyperparameters for this run from wandb.config
     cfg = wandb.config
@@ -145,6 +156,13 @@ def train():
     experiment = {
         "config": ssesm_config,
         "seed": 42,
+        # The hook is now a simple lambda, its frequency is controlled by log_interval above.
+        "sesm_hook": lambda info: log_to_WB(
+            layer_name="EpochLosses", info={
+                "sc_loss": info['sparse_coding_losses'][-1],
+                "dict_loss": info['dictionary_losses'][-1]
+            }
+        ),        
     }
 
     # --- Instantiate and Train the Model ---
@@ -172,5 +190,5 @@ if __name__ == "__main__":
     # Start the sweep agent
     logger.info(f"Starting wandb sweep agent with ID: {sweep_id}")
     # The 'count' argument specifies how many runs to execute.
-    wandb.agent(sweep_id, function=train, count=20)
+    wandb.agent(sweep_id, function=train, count=200)
     logger.info("Sweep finished.")
