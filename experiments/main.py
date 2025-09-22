@@ -23,11 +23,11 @@ def main():
     """
     # CONFIGURACIONES DEL EXPERIMENTO
     function_limits = {
-        "zakharov_function" : [-10, 10],
-        "styblinski_tang_function": [-5, 5],
-        "zhou_function": [0, 1]
+        "function_zakharov" : [-10, 10],
+        "function_styblinski_tang": [-5, 5],
+        "function_zhou": [0, 1]
     }
-    functions=[fun.zakharov_function, fun.styblinski_tang_function, fun.zhou_function]
+    functions=[fun.function_zhou, fun.function_zakharov, fun.function_styblinski_tang]
     dimensions= [1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 10 # CAMBIAR A 50 

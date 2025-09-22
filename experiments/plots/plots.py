@@ -14,6 +14,9 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, ylim = None
                         y los valores son listas de vectores.
                         Ej: {'MSE_NN': [vector_chunk1, vector_chunk2, ...]}
         n_samples (list): Lista con el número de muestras usadas. Ej: [8, 16, 32, ...]
+        filename (str): Nombre base para guardar la figura.
+        ylim (float, optional): Límite superior para el eje y. Si es None, se ajusta automáticamente.
+        dim (int): Dimensión del problema (1D, 2D, etc.) para el título del gráfico.
     """
     ancho = len(metricas) // 2
     alto = 2
@@ -66,7 +69,7 @@ def calc_max_mean(metricas: dict):
     return mean_max
 
 
-functions=['zakharov_function', 'styblinski_tang_function']
+functions=['function_zhou', 'function_zakharov', 'function_styblinski_tang']
 for function in functions:
     
     times   = joblib.load(f"all_times_{function}.joblib")

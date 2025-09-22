@@ -1,7 +1,7 @@
 import torch
 
 # Funcion con más oscilaciones
-def zhou_function(X: torch.Tensor) -> torch.Tensor:
+def function_zhou(X: torch.Tensor) -> torch.Tensor:
     """
     Zhou (1998) function.
 
@@ -30,32 +30,8 @@ def zhou_function(X: torch.Tensor) -> torch.Tensor:
     # Final result
     return (10.0**d) / 2.0 * (phi1 + phi2)
 
-#Funcion con algunos valles o montañas "suaves"
-def rosenbrock_rescaled_function(X: torch.Tensor) -> torch.Tensor:
-    """
-    Rescaled Rosenbrock function.
-
-    Args:
-        X (torch.Tensor): Input tensor of shape (n_samples, 4).
-                        Each row is a point in the search space, with values in [0,1].
-
-    Returns:
-        torch.Tensor: Function values of shape (n_samples,).
-    """
-    # Rescale inputs: [0,1] -> [-5,10]
-    Xbar = 15 * X - 5  # shape (n_samples, 4)
-
-    # Rosenbrock sum
-    sum_terms = torch.sum(
-        100.0 * (Xbar[:, 1:] - Xbar[:, :-1]**2)**2 + (1 - Xbar[:, :-1])**2,
-        dim=1
-    )
-
-    # Rescale output
-    return (sum_terms - 3.827e5) / 3.755e5
-
 #Funcion tipo parábola
-def zakharov_function(X: torch.Tensor) -> torch.Tensor:
+def function_zakharov(X: torch.Tensor) -> torch.Tensor:
     """
     Zakharov function.
 
@@ -82,7 +58,7 @@ def zakharov_function(X: torch.Tensor) -> torch.Tensor:
 
 
 
-def styblinski_tang_function(X: torch.Tensor) -> torch.Tensor:
+def function_styblinski_tang(X: torch.Tensor) -> torch.Tensor:
     """
     Styblinski-Tang function.
 
