@@ -9,10 +9,9 @@ import fun
 
 from pysesm.utils_dataset.generate_dataset import generate_custom_function_dataset, generate_custom_nd_function_dataset
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper
-
 from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
-from pysesm.dictionaries import GaussianDictLayer, GaussianDictConfig
+from pysesm.dictionaries import GaussianDictConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
 
@@ -101,8 +100,8 @@ def main():
             for n in n_samples_dim:
 
                 # Diccionarios temporales para este chunk
-                chunk_metrics = defaultdict(list)
-                chunk_times   = defaultdict(list)
+                chunk_metrics = defaultdict(list) # {}
+                chunk_times   = defaultdict(list) # {}
 
                 for j in range(num_runs_per_set):
                     
@@ -114,8 +113,7 @@ def main():
                          / \     o_(")(")      " "       Function:        {function.__name__}    
                     =================================================================================
                     """)
-                    
-                
+
                     # Generar dataset con n muestras, de dim dimensiones con la funcion function
                     dataset_config = {
                         "n_samples": n,
@@ -124,6 +122,8 @@ def main():
                         "limits": function_limits[function.__name__]}
                     train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
 
+
+
                     # Crear experimento y entrenar con el metodo train_all y testear con test_all
                     # Se entrenan y testean 4 modelos j veces 
                     experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
@@ -131,24 +131,28 @@ def main():
                     times = experiment.train_all()
                     metrics = experiment.test_all()
 
+
                     # Guardar mse y mae de cada modelo j veces
                     for key, value in metrics.items(): 
                         chunk_metrics[key].append(value)
                     for key, value in times.items():
                         chunk_times[key].append(value)
-    
+
                 # Guardar resultados finales del chunk
                 for key, value in chunk_metrics.items():
                     all_metrics[key].append(value)
                 for key, value in chunk_times.items():
                     all_times[key].append(value)
 
+
             all_metrics_dim[dim]=all_metrics
             all_times_dim[dim]=all_times
         
-        joblib.dump(all_metrics_dim, "./plots/all_metrics_"+str(function.__name__)+".joblib")
-        joblib.dump(all_times_dim, "./plots/all_times_"+str(function.__name__)+".joblib")
+
+        joblib.dump(all_metrics_dim, "./plots/metrics_"+str(function.__name__)+".joblib")
+        joblib.dump(all_times_dim, "./plots/times_"+str(function.__name__)+".joblib")
         joblib.dump(n_samples, "./plots/n_samples.joblib")
+
 
     wandb.finish()
     print("Experimento completado. Métricas para boxplots listas.")
