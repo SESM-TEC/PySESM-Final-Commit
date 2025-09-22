@@ -27,9 +27,9 @@ def main():
         "function_zhou": [0, 1]
     }
     functions=[fun.function_zhou, fun.function_zakharov, fun.function_styblinski_tang]
-    dimensions= [1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
-    n_samples = [4]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
-    num_runs_per_set = 1 # CAMBIAR A 50 
+    dimensions= [1, 2, 3, 4] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
+    n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
+    num_runs_per_set = 50 # CAMBIAR A 50 
 
 
 
