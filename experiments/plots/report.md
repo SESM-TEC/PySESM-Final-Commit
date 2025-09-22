@@ -33,8 +33,6 @@
 
 <img src="function_zhou/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
 <img src="function_zhou/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
-<img src="function_zhou/times_1D.png" alt="Tiempos en 1 dimension" width="500">  
-<img src="function_zhou/times_2D.png" alt="Tiempos en 2 dimensiones" width="500">  
 
 ---
 
@@ -42,8 +40,6 @@
 
 <img src="function_zakharov/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
 <img src="function_zakharov/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
-<img src="function_zakharov/times_1D.png" alt="Tiempos en 1 dimension" width="500">  
-<img src="function_zakharov/times_2D.png" alt="Tiempos en 2 dimensiones" width="500">  
 
 ---
 
@@ -51,7 +47,5 @@
 
 <img src="function_styblinski_tang/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
 <img src="function_styblinski_tang/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
-<img src="function_styblinski_tang/times_1D.png" alt="Tiempos en 1 dimension" width="500">  
-<img src="function_styblinski_tang/times_2D.png" alt="Tiempos en 2 dimensiones" width="500">
 
 

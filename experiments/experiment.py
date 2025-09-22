@@ -28,6 +28,8 @@ class EXPERIMENT:
         self.nn_model = NN(**nn_config)
         self.PF=PF(**pf_config)
 
+        self.metrics = {}
+
 
         
 
@@ -59,20 +61,14 @@ class EXPERIMENT:
 
     def train_all(self):
         # ENTRENAMIENTO
-        times = {}
-        times['svr_time'] = self.SVR_model.train(self.xtrain, self.ytrain)
-        times['nn_time'] = self.nn_model.train_nn(self.xtrain, self.ytrain, self.xtest, self.ytest)
-        times['pf_time'] = self.PF.train(self.xtrain, self.ytrain)
-        
         self.SESM_model.partial_fit(self.xtrain_orig, self.ytrain_orig)
-        times['sesm_time'] = self.SESM_model.training_time
-
-        print("\n Training times (s):")
-        for key, value in times.items():
-            print(f"{key}: {value} ")
-
-        return times
+        self.metrics['TIME_SESM'] = self.SESM_model.training_time
+        self.metrics['TIME_SVR'] = self.SVR_model.train(self.xtrain, self.ytrain)
+        self.metrics['TIME_NN'] = self.nn_model.train_nn(self.xtrain, self.ytrain, self.xtest, self.ytest)
+        self.metrics['TIME_PF'] = self.PF.train(self.xtrain, self.ytrain)
         
+        return self.metrics
+
 
 
     def test_all(self):
@@ -82,23 +78,22 @@ class EXPERIMENT:
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(self.xtest_orig, self.ytest_orig)
         pf_pred = self.PF.test(self.xtest)
 
-        metrics = {
-            "SESM_MSE": SESM_mse,
-            "SVR_MSE": mean_squared_error(self.ytest, svr_pred),
-            "NN_MSE":  mean_squared_error(self.ytest, nn_pred),
-            "PF_MSE":  mean_squared_error(self.ytest, pf_pred),
+        self.metrics.update({
+            "MSE_SESM": SESM_mse,
+            "MSE_SVR": mean_squared_error(self.ytest, svr_pred),
+            "MSE_NN":  mean_squared_error(self.ytest, nn_pred),
+            "MSE_PF":  mean_squared_error(self.ytest, pf_pred),
 
-            "SESM_MAE":mean_absolute_error(self.ytest_orig, SESM_pred),
-            "SVR_MAE": mean_absolute_error(self.ytest, svr_pred),
-            "NN_MAE":  mean_absolute_error(self.ytest, nn_pred),
-            "PF_MAE":  mean_absolute_error(self.ytest, pf_pred)
-        }
+            "MAE_SESM": mean_absolute_error(self.ytest_orig, SESM_pred),
+            "MAE_SVR": mean_absolute_error(self.ytest, svr_pred),
+            "MAE_NN":  mean_absolute_error(self.ytest, nn_pred),
+            "MAE_PF":  mean_absolute_error(self.ytest, pf_pred)
+        })
 
         print("\n Metrics:")
-        for key, value in metrics.items():
+        for key, value in self.metrics.items():
             print(f"{key}: {value}")
       
-        return metrics
     
 
 

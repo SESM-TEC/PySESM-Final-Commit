@@ -28,14 +28,13 @@ def main():
     }
     functions=[fun.function_zhou, fun.function_zakharov, fun.function_styblinski_tang]
     dimensions= [1,2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
-    n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
-    num_runs_per_set = 10 # CAMBIAR A 50 
+    n_samples = [4]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
+    num_runs_per_set = 1 # CAMBIAR A 50 
 
 
 
 
     all_metrics_dim={}
-    all_times_dim={}
     for function in functions:
         for dim in dimensions:
 
@@ -80,8 +79,7 @@ def main():
             )
 
             # 1) Diccionarios principales
-            all_metrics = defaultdict(list)
-            all_times   = defaultdict(list)            
+            all_metrics = defaultdict(list)          
             
             # 2) Inicializar Weights & Biases una sola vez
             wandb.init(
@@ -101,7 +99,6 @@ def main():
 
                 # Diccionarios temporales para este chunk
                 chunk_metrics = defaultdict(list) # {}
-                chunk_times   = defaultdict(list) # {}
 
                 for j in range(num_runs_per_set):
                     
@@ -128,29 +125,24 @@ def main():
                     # Se entrenan y testean 4 modelos j veces 
                     experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
                     experiment.setup_dataset(train_data, test_data)
-                    times = experiment.train_all()
-                    metrics = experiment.test_all()
+                    experiment.train_all()
+                    experiment.test_all()
+                    metrics = experiment.metrics
 
 
                     # Guardar mse y mae de cada modelo j veces
                     for key, value in metrics.items(): 
                         chunk_metrics[key].append(value)
-                    for key, value in times.items():
-                        chunk_times[key].append(value)
 
                 # Guardar resultados finales del chunk
                 for key, value in chunk_metrics.items():
                     all_metrics[key].append(value)
-                for key, value in chunk_times.items():
-                    all_times[key].append(value)
 
 
             all_metrics_dim[dim]=all_metrics
-            all_times_dim[dim]=all_times
         
 
         joblib.dump(all_metrics_dim, "./plots/metrics_"+str(function.__name__)+".joblib")
-        joblib.dump(all_times_dim, "./plots/times_"+str(function.__name__)+".joblib")
         joblib.dump(n_samples, "./plots/n_samples.joblib")
 
 
