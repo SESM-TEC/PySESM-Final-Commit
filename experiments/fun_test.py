@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 
 
 function_limits = {
-    "zakharov_function" : [-10, 10],
-    "zhou_function": [0, 1],
-    "styblinski_tang_function": [-5, 5],
+    "function_zakharov" : [-10, 10],
+    "function_zhou": [0, 1],
+    "function_styblinski_tang": [-5, 5],
 }
 functions=[
-    fun.zakharov_function,
-    fun.zhou_function, 
-    fun.styblinski_tang_function
+    fun.function_zakharov,
+    fun.function_zhou, 
+    fun.function_styblinski_tang
 ]
 
 
@@ -41,7 +41,7 @@ for i, function in enumerate(functions):
     ax = axes[i]
     
     ax.scatter(xtest[:, 0], xtest[:, 1], ztest,
-               s=10, c=ztest, cmap= 'viridis', marker=".", label="Datos")
+               s=15, c=ztest, cmap= 'viridis', marker=".", label="Datos")
     
     # Configurar títulos y etiquetas para cada subplot
     ax.set_title(function.__name__.replace("_", " ").title())
