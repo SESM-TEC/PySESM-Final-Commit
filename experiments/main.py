@@ -50,7 +50,7 @@ def main():
         for dim in dimensions:
 
             svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
-            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim, "batch_size": 32}
+            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
             pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
             sparse_coding_config = ISTAConfig(

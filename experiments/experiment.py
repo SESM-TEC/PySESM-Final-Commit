@@ -104,6 +104,8 @@ class EXPERIMENT:
         for key, value in self.metrics.items():
             print(f"{key}: {value}")
 
+
+
     def save_configs(self):
         # Crear una copia de los diccionarios de configuración y eliminar los elementos problemáticos
         sparse_coding_config_to_save = self.sparse_coding_config.__dict__.copy()

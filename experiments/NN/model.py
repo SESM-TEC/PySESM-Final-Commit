@@ -1,16 +1,16 @@
+"""ANN para regresion"""
 import torch.nn as nn
 import torch
 import torch.optim as optim
 import time
-from torch.utils.data import TensorDataset, DataLoader
+
 
 class NN(nn.Module):
-    def __init__(self, epochs, lr, hidden_dim, input_d, batch_size=32):
+    def __init__(self, epochs, lr, hidden_dim, input_d):
         super().__init__()
- 
+  
         self.epochs = epochs
         self.lr = lr
-        self.batch_size = batch_size # Añadido batch_size
         self.layers = nn.Sequential(
             nn.Linear(input_d, hidden_dim),
             nn.Tanh(), 
@@ -22,15 +22,9 @@ class NN(nn.Module):
     def forward(self, x: torch.Tensor):
         return self.layers(x)
     
+
     def train_nn(self, xtrain, ytrain, xtest, ytest):
 
-        # Convertir datos a TensorDataset
-        train_dataset = TensorDataset(xtrain, ytrain.unsqueeze(1))
-        # Crear DataLoader
-        train_loader = DataLoader(dataset=train_dataset, 
-                                  batch_size=self.batch_size, 
-                                  shuffle=True)
-        
         # ENTRENAMIENTO
         criterion = nn.MSELoss()
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
@@ -39,21 +33,19 @@ class NN(nn.Module):
         start_time = time.time()
         for epoch in range(self.epochs):
             self.train()
-            
-            # Iterar sobre el DataLoader para entrenar en lotes
-            for batch_xtrain, batch_ytrain in train_loader:
-                # 1. Vaciar los gradientes
-                optimizer.zero_grad()
 
-                # 2. Forward pass: pasar el lote actual
-                predictions = self(batch_xtrain)
+            # 1. Vaciar los gradientes
+            optimizer.zero_grad()
 
-                # 3. Calcular la pérdida
-                loss = criterion(predictions, batch_ytrain)
+            # 2. Forward pass: pasar el tensor completo
+            predictions = self(xtrain)
 
-                # 4. Backward pass y actualización de pesos
-                loss.backward()
-                optimizer.step()
+            # 3. Calcular la pérdida
+            loss = criterion(predictions, ytrain.unsqueeze(1))
+
+            # 4. Backward pass y actualización de pesos
+            loss.backward()
+            optimizer.step()
             
             # Evaluación (opcional pero recomendado)
             self.eval()
@@ -62,8 +54,8 @@ class NN(nn.Module):
             
             if (epoch + 1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{self.epochs}], "
-                      f"mse_train: {loss.item():.6f}, "
-                      f"mse_val: {test_loss.item():.6f}")
+                    f"mse_train: {loss.item():.6f}, "
+                    f"mse_val: {test_loss.item():.6f}")
         end_time = time.time()
 
         return end_time - start_time
@@ -75,3 +67,4 @@ class NN(nn.Module):
         # Conversion a numpy
         predictions = predictions.detach().cpu().numpy().squeeze()
         return predictions
+        
