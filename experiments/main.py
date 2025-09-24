@@ -32,7 +32,7 @@ def main():
     dimensions= [1, 2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 15 # CAMBIAR A 50 
-
+    
     wandb.init(
         project="PySESM_experiments",
         config={
@@ -43,7 +43,7 @@ def main():
             "num_runs_per_set": num_runs_per_set
         }
     )
-
+    
 
     all_metrics_dim={}
     for function in functions:
@@ -111,7 +111,7 @@ def main():
                          / \     o_(")(")      " "       Function:        {function.__name__}    
                     =================================================================================
                     """)
-
+                    torch.manual_seed(j)
                     # Generar dataset con n muestras, de dim dimensiones con la funcion function
                     dataset_config = {
                         "n_samples": n,
