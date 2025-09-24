@@ -57,7 +57,7 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, dim = 2):
     for j in range(len(metricas_lista), len(axes)):
         fig.delaxes(axes[j])
 
-    output_dir = os.path.join(os.getcwd(), function)
+    output_dir = os.path.join(os.getcwd(), rf"./plots/{function}")
     os.makedirs(output_dir, exist_ok=True)
     full_filename = os.path.join(output_dir, f"{filename}_{dim}D.png")
 
@@ -72,8 +72,8 @@ def plot_caja_bigote(metricas: dict, n_samples: list, filename: str, dim = 2):
 functions=['function_zhou', 'function_zakharov', 'function_styblinski_tang']
 for function in functions:
     
-    metrics = joblib.load(f"metrics_{function}.joblib")
-    n_samples = joblib.load("n_samples.joblib")
+    metrics = joblib.load(f"./metrics/metrics_{function}.joblib")
+    n_samples = joblib.load("./metrics/n_samples.joblib")
 
     for dim, dim_metrics in metrics.items():
         plot_caja_bigote(dim_metrics, n_samples, "metrics", dim=dim)

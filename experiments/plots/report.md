@@ -27,25 +27,22 @@
 
 
 
-
+---
 
 ## function_zhou
 
-<img src="function_zhou/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
-<img src="function_zhou/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
+<img src="plots/function_zhou/metrics_1D.png" alt="Metricas en 1 dimension" width="650">  
+<img src="plots/function_zhou/metrics_2D.png" alt="Metricas en 2 dimensiones" width="650">  
 
 ---
 
 ## function_zakharov
 
-<img src="function_zakharov/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
-<img src="function_zakharov/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
-
+<img src="plots/function_zakharov/metrics_1D.png" alt="Metricas en 1 dimension" width="650">  
+<img src="plots/function_zakharov/metrics_2D.png" alt="Metricas en 2 dimensiones" width="650">  
 ---
 
 ## function_styblinski_tang
-
-<img src="function_styblinski_tang/metrics_1D.png" alt="Metricas en 1 dimension" width="700">  
-<img src="function_styblinski_tang/metrics_2D.png" alt="Metricas en 2 dimensiones" width="700">  
-
+<img src="plots/function_styblinski_tang/metrics_1D.png" alt="Metricas en 1 dimension" width="650">  
+<img src="plots/function_styblinski_tang/metrics_2D.png" alt="Metricas en 2 dimensiones" width="650">  
 

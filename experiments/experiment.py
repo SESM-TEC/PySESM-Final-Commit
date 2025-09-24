@@ -4,9 +4,11 @@ from PF.model import PF
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import torch
+import logging
+import joblib
+
 from pysesm.models.SSESM import SSESM
 from pysesm.utils.loggers import setup_logger
-import logging
 
 
 
@@ -29,6 +31,14 @@ class EXPERIMENT:
         self.PF=PF(**pf_config)
 
         self.metrics = {}
+
+        # Para guardar las configuraciones y luego serializarlas
+        self.sparse_coding_config = sesm_config.sparse_coding_config
+        self.dict_config = sesm_config.dict_config
+        self.ssesm_config = sesm_config
+        self.svr_config = svr_config
+        self.nn_config = nn_config
+        self.pf_config = pf_config
 
 
         
@@ -93,8 +103,32 @@ class EXPERIMENT:
         print("\n Metrics:")
         for key, value in self.metrics.items():
             print(f"{key}: {value}")
-      
-    
+
+    def save_configs(self):
+        # Crear una copia de los diccionarios de configuración y eliminar los elementos problemáticos
+        sparse_coding_config_to_save = self.sparse_coding_config.__dict__.copy()
+        del sparse_coding_config_to_save["criterion"]
+
+        dict_config_to_save = self.dict_config.__dict__.copy()
+        del dict_config_to_save["criterion"]
+        del dict_config_to_save["optimizer_factory"]
+
+        # Crear una versión serializable de ssesm_config
+        ssesm_config_to_save = self.ssesm_config.__dict__.copy()
+        ssesm_config_to_save["sparse_coding_config"] = sparse_coding_config_to_save
+        ssesm_config_to_save["dict_config"] = dict_config_to_save
+
+        # GUARDAR CONFIGURACIONES DE LOS MODELOS
+        models_config_data = {
+            "SVR (Support Vector Regressor)": self.svr_config,
+            "PF (Polynomial Features)": self.pf_config,
+            "NN (Neural Network)": self.nn_config,
+            "SESM (Sparse Encoding Surrogate Model)": ssesm_config_to_save
+        }
+        # ...
+        joblib.dump(models_config_data, "./plots/config/config_models.joblib")
+        
+        
 
 
 

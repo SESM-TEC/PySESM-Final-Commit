@@ -20,6 +20,8 @@ def main():
     Script para correr múltiples experimentos en chunks de tamaño n_samples.
     Cada chunk se usa para entrenar y luego testear, guardando métricas por corrida.
     """
+
+    
     # CONFIGURACIONES DEL EXPERIMENTO
     function_limits = {
         "function_zakharov" : [-10, 10],
@@ -27,11 +29,20 @@ def main():
         "function_zhou": [0, 1]
     }
     functions=[fun.function_zhou, fun.function_zakharov, fun.function_styblinski_tang]
-    dimensions= [1, 2, 3, 4] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
+    dimensions= [1, 2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
     n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
-    num_runs_per_set = 50 # CAMBIAR A 50 
+    num_runs_per_set = 15 # CAMBIAR A 50 
 
-
+    wandb.init(
+        project="PySESM_experiments",
+        config={
+            "functions": [func.__name__ for func in functions],
+            "function_limits": function_limits,
+            "dimensions": dimensions,
+            "n_samples_1D": n_samples,
+            "num_runs_per_set": num_runs_per_set
+        }
+    )
 
 
     all_metrics_dim={}
@@ -39,7 +50,7 @@ def main():
         for dim in dimensions:
 
             svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
-            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim}
+            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d":dim, "batch_size": 32}
             pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
             sparse_coding_config = ISTAConfig(
@@ -79,20 +90,10 @@ def main():
             )
 
             # 1) Diccionarios principales
-            all_metrics = defaultdict(list)          
-            
-            # 2) Inicializar Weights & Biases una sola vez
-            wandb.init(
-                project="PySESM_experiments",
-                config={
-                    "svr_config": svr_config,
-                    "nn_config": nn_config,
-                    "SESM_config": ssesm_config,
-                    "PF_config": pf_config,
-                    "num_runs_per_set": num_runs_per_set
-                }
-            )
-            
+            all_metrics = defaultdict(list)       
+
+
+
             # Se recalcula el tamaño del dataset en cada dimension
             n_samples_dim = [int(n**dim) for n in n_samples]
             for n in n_samples_dim:
@@ -117,7 +118,7 @@ def main():
                         "n_dimensions":dim, 
                         "function": function,
                         "limits": function_limits[function.__name__]}
-                    train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
+                    train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config )
 
 
 
@@ -142,8 +143,21 @@ def main():
             all_metrics_dim[dim]=all_metrics
         
 
-        joblib.dump(all_metrics_dim, "./plots/metrics_"+str(function.__name__)+".joblib")
-        joblib.dump(n_samples, "./plots/n_samples.joblib")
+        joblib.dump(all_metrics_dim, "./plots/metrics/metrics_"+str(function.__name__)+".joblib")
+        joblib.dump(n_samples, "./plots/metrics/n_samples.joblib")
+        
+        
+    # GUARDAR CONFIGURACIONES DEL EXPERIMENTO
+    experiment_config_data = {
+        "Métricas": ["mae", "mse", "time"],
+        "Dimensiones": dimensions,  # Se toma de la variable en el script
+        "Repeticiones": num_runs_per_set, # Se toma de la variable en el script
+        "Funciones": [func.__name__ for func in functions],
+        "Tamaño del dataset 1D": n_samples
+    }
+
+    joblib.dump(experiment_config_data, "./plots/config/config_experiment.joblib")
+    experiment.save_configs()
 
 
     wandb.finish()
