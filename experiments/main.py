@@ -11,7 +11,7 @@ from pysesm.utils_dataset.generate_dataset import generate_custom_function_datas
 from LossWrappers import KLDivLossWrapper, JensenShannonLossWrapper
 from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
-from pysesm.dictionaries import GaussianDictConfig
+from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
 
@@ -30,7 +30,7 @@ def main():
     }
     functions=[fun.function_zhou, fun.function_zakharov, fun.function_styblinski_tang]
     dimensions= [1, 2] # CAMBIAR A [1, 2, 3, 4] DIMENSIONES
-    n_samples = [4, 8, 16, 32, 64]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
+    n_samples = [2, 4, 8, 16, 32]  # CAMBIAR A [4, 8, 16, 32, 64] #TODO: quizas lineal funcionaria mejor
     num_runs_per_set = 15 # CAMBIAR A 50 
     
     wandb.init(
@@ -54,21 +54,29 @@ def main():
             pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
             sparse_coding_config = ISTAConfig(
-                epochs=200,
+                epochs=150,
                 alpha=0.1,
-                lambd=0.00001,
+                lambd=1e-3,
                 step_size_method=StepSizeMethod.FROBENIUS,
                 power_iterations=10,
-                n_functions=85,
-                criterion=torch.nn.MSELoss()
+                n_functions= 8**dim,
+                criterion=torch.nn.MSELoss(),
+                device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
             )
 
             dict_config = GaussianDictConfig(
-                epochs=40, alpha=0.01,
-                criterion=JensenShannonLossWrapper(),
-                optimizer_factory=lambda params, lr: torch.optim.SGD(params, lr=lr, momentum=0.1),
-                mu_epochs=10, rho_epochs=10, split_mu_rho=True,
-                eig_range=[0.05, 0.2],
+                epochs=400,
+                alpha=0.01,
+                criterion=torch.nn.MSELoss(),
+                optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr), # USAR adamW
+                mu_epochs=10, 
+                rho_epochs=10, 
+                split_mu_rho=False,
+                eig_range=[0.05, 0.2],  # ANCHE DE LAS GAUSSIANAS
+                regularization_func=GaussianDictLayer.electrostatic_regularization,
+                regularization_gamma=0.001,
+                device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
             )
 
             [x1lim, x2lim] = function_limits[function.__name__]
@@ -79,7 +87,8 @@ def main():
             )
 
             ssesm_config = SSESMConfig(
-                n_features= dim, model_epochs=100,
+                n_features= dim, 
+                model_epochs=500,
                 sparse_coding_config=sparse_coding_config,
                 dict_config=dict_config,
                 partition_config=partition_config,
