@@ -45,5 +45,5 @@ class SVR:
     def test(self, xtest):
         print("\n Testing SVR...")
         ypred = self.predict(xtest)
-
+        ypred = torch.from_numpy(ypred)
         return ypred

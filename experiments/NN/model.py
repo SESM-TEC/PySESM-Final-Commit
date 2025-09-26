@@ -65,6 +65,6 @@ class NN(nn.Module):
         # Evaluación
         predictions = self.layers(xtest)
         # Conversion a numpy
-        predictions = predictions.detach().cpu().numpy().squeeze()
+        predictions = predictions.detach().cpu()
         return predictions
         

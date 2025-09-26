@@ -88,7 +88,7 @@ def main():
 
             ssesm_config = SSESMConfig(
                 n_features= dim, 
-                model_epochs=500,
+                model_epochs=10,
                 sparse_coding_config=sparse_coding_config,
                 dict_config=dict_config,
                 partition_config=partition_config,
