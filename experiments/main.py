@@ -112,7 +112,7 @@ def main():
 
                 for j in range(num_runs_per_set):
                     
-                    print(rf"""
+                    logging.info(rf"""
                     =================================================================================
                                               ,___,      Repetition:      {j+1}/{num_runs_per_set}
                           0/     (\(\         (O.o)      Dataset size:    {n}                      
@@ -170,7 +170,7 @@ def main():
 
 
     wandb.finish()
-    print("Experimento completado. Métricas para boxplots listas.")
+    logging.info("Experimento completado. Métricas para boxplots listas.")
 
 
 
