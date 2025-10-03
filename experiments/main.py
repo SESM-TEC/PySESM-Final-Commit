@@ -125,9 +125,9 @@ def main():
                 pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
                 
                 sparse_coding_config = ISTAConfig(
-                    epochs=150,
+                    epochs=110,
                     alpha=0.1,
-                    lambd=1e-3,
+                    lambd=5e-4,
                     step_size_method=StepSizeMethod.FROBENIUS,
                     power_iterations=10,
                     n_functions=8**dim,
@@ -145,7 +145,7 @@ def main():
                     split_mu_rho=False,
                     eig_range=[0.05, 0.2],
                     regularization_func=GaussianDictLayer.electrostatic_regularization,
-                    regularization_gamma=0.001,
+                    regularization_gamma=2e-8,
                     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 )
 
@@ -158,7 +158,7 @@ def main():
 
                 ssesm_config = SSESMConfig(
                     n_features=dim, 
-                    model_epochs=10,
+                    model_epochs=50,
                     sparse_coding_config=sparse_coding_config,
                     dict_config=dict_config,
                     partition_config=partition_config,
