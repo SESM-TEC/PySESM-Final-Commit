@@ -136,12 +136,12 @@ def main():
                 )
 
                 dict_config = GaussianDictConfig(
-                    epochs=400,
-                    alpha=0.01,
+                    epochs=300,
+                    alpha=0.001107722632753506,
                     criterion=torch.nn.MSELoss(),
                     optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
-                    mu_epochs=10, 
-                    rho_epochs=10, 
+                    mu_epochs=1, 
+                    rho_epochs=1, 
                     split_mu_rho=False,
                     eig_range=[0.05, 0.2],
                     regularization_func=GaussianDictLayer.electrostatic_regularization,
