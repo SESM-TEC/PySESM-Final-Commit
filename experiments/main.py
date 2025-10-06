@@ -14,22 +14,23 @@ from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
-
+from pysesm.utils.loggers import setup_logger
 
 def load_checkpoint(checkpoint_dir="./checkpoints"):
     """
     Carga el checkpoint si existe.
     Retorna: (all_metrics_dim, progress_tracker, experiment_config_data) o (None, None, None)
     """
+    logger=setup_logger(level=logging.DEBUG)
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.joblib")
     
     if os.path.exists(checkpoint_path):
-        logging.info(f"Checkpoint encontrado en {checkpoint_path}. Cargando...")
+        logger.debug("Checkpoint encontrado en %s. Cargando...", checkpoint_path)
         checkpoint = joblib.load(checkpoint_path)
-        logging.info(f"Checkpoint cargado. Progreso: {len(checkpoint['progress_tracker'])} combinaciones completadas.")
+        logger.debug("Checkpoint cargado. Progreso: %d combinaciones completadas.",len(checkpoint['progress_tracker']))
         return checkpoint['all_metrics_dim'], checkpoint['progress_tracker'], checkpoint.get('experiment_config_data', None)
     else:
-        logging.info("No se encontró checkpoint. Iniciando desde cero.")
+        logger.debug("No se encontró checkpoint. Iniciando desde cero.")
         return {}, set(), None
 
 
@@ -39,7 +40,7 @@ def save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data, c
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.joblib")
-    
+    logger=setup_logger(level=logging.DEBUG)
     checkpoint = {
         'all_metrics_dim': all_metrics_dim,
         'progress_tracker': progress_tracker,
@@ -51,7 +52,7 @@ def save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data, c
     joblib.dump(checkpoint, temp_path)
     os.replace(temp_path, checkpoint_path)
     
-    logging.info(f"Checkpoint guardado: {len(progress_tracker)} combinaciones completadas.")
+    logger.debug("Checkpoint guardado: %s combinaciones completadas.",len(progress_tracker))
 
 
 def is_combination_done(progress_tracker, function_name, dim, n, run_idx):
@@ -75,6 +76,7 @@ def main():
     Script para correr múltiples experimentos con sistema de checkpoint/recovery.
     """
     
+    logger=setup_logger(level=logging.DEBUG)
     # CONFIGURACIONES DEL EXPERIMENTO
     function_limits = {
         "function_zakharov": [-10, 10],
@@ -199,17 +201,17 @@ def main():
                 for j in range(num_runs_per_set):
                     # VERIFICAR SI ESTA COMBINACIÓN YA FUE COMPLETADA
                     if is_combination_done(progress_tracker, function_name, dim, n, j):
-                        logging.info(f"Saltando: {function_name}, dim={dim}, n={n}, run={j+1} (ya completado)")
+                        logger.debug("Saltando: %s, dim=%d, n=%d, run=%d (ya completado)",function_name,dim,n,j+1)
                         continue
                     
-                    logging.info(rf"""
+                    logger.debug("""
                     =================================================================================
-                                                ,___,      Repetition:      {j+1}/{num_runs_per_set}
-                            0/     (\(\         (O.o)      Dataset size:    {n}                      
-                            <|      (-.-)        /),,)      Dimension:       {dim}             
-                            / \     o_(")(")      " "       Function:        {function_name}    
+                                                ,___,      Repetition:      %d/%d
+                            0/     (\(\         (O.o)      Dataset size:    %d                      
+                            <|      (-.-)        /),,)      Dimension:       %d             
+                            / \     o_(")(")      " "       Function:        %s    
                     =================================================================================
-                    """)
+                    """,j+1,num_runs_per_set,n,dim,function_name)
                     
                     torch.manual_seed(j)
                     
@@ -254,13 +256,11 @@ def main():
     checkpoint_path = "./checkpoints/checkpoint.joblib"
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
-        logging.info(" Experimento completado exitosamente. Checkpoint eliminado.")
+        logger.debug("Experimento completado exitosamente. Checkpoint eliminado.")
     
-    logging.error(f"Error durante el experimento: {e}")
-    logging.info("Checkpoint guardado. Puedes reiniciar el script para continuar.")
     wandb.finish()
     
-    logging.info("Experimento completado. Métricas para boxplots listas.")
+    logger.debug("Experimento completado. Métricas para boxplots listas.")
 
 
 if __name__ == "__main__":
