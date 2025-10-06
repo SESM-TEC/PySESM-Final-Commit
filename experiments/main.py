@@ -24,12 +24,12 @@ def load_checkpoint(checkpoint_dir="./checkpoints"):
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.joblib")
     
     if os.path.exists(checkpoint_path):
-        logging.info(f"🔄 Checkpoint encontrado en {checkpoint_path}. Cargando...")
+        logging.info(f"Checkpoint encontrado en {checkpoint_path}. Cargando...")
         checkpoint = joblib.load(checkpoint_path)
-        logging.info(f"✅ Checkpoint cargado. Progreso: {len(checkpoint['progress_tracker'])} combinaciones completadas.")
+        logging.info(f"Checkpoint cargado. Progreso: {len(checkpoint['progress_tracker'])} combinaciones completadas.")
         return checkpoint['all_metrics_dim'], checkpoint['progress_tracker'], checkpoint.get('experiment_config_data', None)
     else:
-        logging.info("🆕 No se encontró checkpoint. Iniciando desde cero.")
+        logging.info("No se encontró checkpoint. Iniciando desde cero.")
         return {}, set(), None
 
 
@@ -51,7 +51,7 @@ def save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data, c
     joblib.dump(checkpoint, temp_path)
     os.replace(temp_path, checkpoint_path)
     
-    logging.info(f"💾 Checkpoint guardado: {len(progress_tracker)} combinaciones completadas.")
+    logging.info(f"Checkpoint guardado: {len(progress_tracker)} combinaciones completadas.")
 
 
 def is_combination_done(progress_tracker, function_name, dim, n, run_idx):
@@ -110,159 +110,155 @@ def main():
         }
     )
     
-    try:
-        for function in functions:
-            function_name = function.__name__
+    for function in functions:
+        function_name = function.__name__
+        
+        # Inicializar all_metrics_dim para esta función si no existe
+        if function_name not in all_metrics_dim:
+            all_metrics_dim[function_name] = {}
+        
+        for dim in dimensions:
+            # Inicializar configuraciones de modelos
+            svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
+            nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d": dim}
+            pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
             
-            # Inicializar all_metrics_dim para esta función si no existe
-            if function_name not in all_metrics_dim:
-                all_metrics_dim[function_name] = {}
+            sparse_coding_config = ISTAConfig(
+                epochs=110,
+                alpha=0.1,
+                lambd=5e-4,
+                step_size_method=StepSizeMethod.FROBENIUS,
+                power_iterations=10,
+                n_functions=8**dim,
+                criterion=torch.nn.MSELoss(),
+                device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            )
+
+            dict_config = GaussianDictConfig(
+                epochs=300,
+                alpha=0.001107722632753506,
+                criterion=torch.nn.MSELoss(),
+                optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
+                mu_epochs=1, 
+                rho_epochs=1, 
+                split_mu_rho=False,
+                eig_range=[0.05, 0.2],
+                regularization_func=GaussianDictLayer.electrostatic_regularization,
+                regularization_gamma=2e-8,
+                device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            )
+
+            [x1lim, x2lim] = function_limits[function_name]
+            partition_config = UniformPartitionConfig(
+                T=1,
+                initial_bounds=torch.tensor([[x1lim for i in range(dim)], [x2lim for i in range(dim)]], dtype=torch.float32),
+                activity_threshold=0, overlap_ratio=0.1
+            )
+
+            ssesm_config = SSESMConfig(
+                n_features=dim, 
+                model_epochs=50,
+                sparse_coding_config=sparse_coding_config,
+                dict_config=dict_config,
+                partition_config=partition_config,
+                log_interval=25,
+                permutation_times=1,
+                seed=45,
+                device="cuda" if torch.cuda.is_available() else "cpu"
+            )
+
+            # Inicializar all_metrics para esta dimensión si no existe
+            if dim not in all_metrics_dim[function_name]:
+                all_metrics_dim[function_name][dim] = defaultdict(list)
             
-            for dim in dimensions:
-                # Inicializar configuraciones de modelos
-                svr_config = {"kernel": 'rbf', "C": 0.01, "gamma": 'auto', "epsilon": 0.1}
-                nn_config = {"epochs": 500, "lr": 0.01, "hidden_dim": 16, "input_d": dim}
-                pf_config = {"order": 3, "alpha": 0.01, "include_bias": True, "max_iter": 10000}
-                
-                sparse_coding_config = ISTAConfig(
-                    epochs=110,
-                    alpha=0.1,
-                    lambd=5e-4,
-                    step_size_method=StepSizeMethod.FROBENIUS,
-                    power_iterations=10,
-                    n_functions=8**dim,
-                    criterion=torch.nn.MSELoss(),
-                    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                )
+            all_metrics = all_metrics_dim[function_name][dim]
 
-                dict_config = GaussianDictConfig(
-                    epochs=300,
-                    alpha=0.001107722632753506,
-                    criterion=torch.nn.MSELoss(),
-                    optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
-                    mu_epochs=1, 
-                    rho_epochs=1, 
-                    split_mu_rho=False,
-                    eig_range=[0.05, 0.2],
-                    regularization_func=GaussianDictLayer.electrostatic_regularization,
-                    regularization_gamma=2e-8,
-                    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                )
-
-                [x1lim, x2lim] = function_limits[function_name]
-                partition_config = UniformPartitionConfig(
-                    T=1,
-                    initial_bounds=torch.tensor([[x1lim for i in range(dim)], [x2lim for i in range(dim)]], dtype=torch.float32),
-                    activity_threshold=0, overlap_ratio=0.1
-                )
-
-                ssesm_config = SSESMConfig(
-                    n_features=dim, 
-                    model_epochs=50,
-                    sparse_coding_config=sparse_coding_config,
-                    dict_config=dict_config,
-                    partition_config=partition_config,
-                    log_interval=100,
-                    permutation_times=1,
-                    seed=45,
-                    device="cuda" if torch.cuda.is_available() else "cpu"
-                )
-
-                # Inicializar all_metrics para esta dimensión si no existe
-                if dim not in all_metrics_dim[function_name]:
-                    all_metrics_dim[function_name][dim] = defaultdict(list)
-                
-                all_metrics = all_metrics_dim[function_name][dim]
-
-                # Calcular tamaños de datasets por dimensión
-                n_samples_dim = [int(n**dim) for n in n_samples]
-                
-                for n_idx, n in enumerate(n_samples_dim):
-                    # Inicializar chunk_metrics para este n si no existen las listas
-                    # Necesitamos verificar si ya hay datos para este n_idx
-                    needs_initialization = False
-                    if len(all_metrics) == 0:
+            # Calcular tamaños de datasets por dimensión
+            n_samples_dim = [int(n**dim) for n in n_samples]
+            
+            for n_idx, n in enumerate(n_samples_dim):
+                # Inicializar chunk_metrics para este n si no existen las listas
+                # Necesitamos verificar si ya hay datos para este n_idx
+                needs_initialization = False
+                if len(all_metrics) == 0:
+                    needs_initialization = True
+                else:
+                    # Verificar si alguna métrica tiene datos para este n_idx
+                    sample_key = list(all_metrics.keys())[0]
+                    if len(all_metrics[sample_key]) <= n_idx:
                         needs_initialization = True
-                    else:
-                        # Verificar si alguna métrica tiene datos para este n_idx
-                        sample_key = list(all_metrics.keys())[0]
-                        if len(all_metrics[sample_key]) <= n_idx:
-                            needs_initialization = True
+                
+                if needs_initialization:
+                    # Agregar listas vacías para este n a todas las métricas existentes
+                    for key in ['MSE_SESM', 'MSE_SVR', 'MSE_NN', 'MSE_PF',
+                                'MAE_SESM', 'MAE_SVR', 'MAE_NN', 'MAE_PF',
+                                'TIME_SESM', 'TIME_SVR', 'TIME_NN', 'TIME_PF']:
+                        if len(all_metrics[key]) <= n_idx:
+                            all_metrics[key].append([])
+                
+                for j in range(num_runs_per_set):
+                    # VERIFICAR SI ESTA COMBINACIÓN YA FUE COMPLETADA
+                    if is_combination_done(progress_tracker, function_name, dim, n, j):
+                        logging.info(f"Saltando: {function_name}, dim={dim}, n={n}, run={j+1} (ya completado)")
+                        continue
                     
-                    if needs_initialization:
-                        # Agregar listas vacías para este n a todas las métricas existentes
-                        for key in ['MSE_SESM', 'MSE_SVR', 'MSE_NN', 'MSE_PF',
-                                   'MAE_SESM', 'MAE_SVR', 'MAE_NN', 'MAE_PF',
-                                   'TIME_SESM', 'TIME_SVR', 'TIME_NN', 'TIME_PF']:
-                            if len(all_metrics[key]) <= n_idx:
-                                all_metrics[key].append([])
+                    logging.info(rf"""
+                    =================================================================================
+                                                ,___,      Repetition:      {j+1}/{num_runs_per_set}
+                            0/     (\(\         (O.o)      Dataset size:    {n}                      
+                            <|      (-.-)        /),,)      Dimension:       {dim}             
+                            / \     o_(")(")      " "       Function:        {function_name}    
+                    =================================================================================
+                    """)
                     
-                    for j in range(num_runs_per_set):
-                        # VERIFICAR SI ESTA COMBINACIÓN YA FUE COMPLETADA
-                        if is_combination_done(progress_tracker, function_name, dim, n, j):
-                            logging.info(f"⏭️  Saltando: {function_name}, dim={dim}, n={n}, run={j+1} (ya completado)")
-                            continue
-                        
-                        logging.info(rf"""
-                        =================================================================================
-                                                  ,___,      Repetition:      {j+1}/{num_runs_per_set}
-                              0/     (\(\         (O.o)      Dataset size:    {n}                      
-                             <|      (-.-)        /),,)      Dimension:       {dim}             
-                             / \     o_(")(")      " "       Function:        {function_name}    
-                        =================================================================================
-                        """)
-                        
-                        torch.manual_seed(j)
-                        
-                        # Generar dataset
-                        dataset_config = {
-                            "n_samples": n,
-                            "n_dimensions": dim, 
-                            "function": function,
-                            "limits": function_limits[function_name]
-                        }
-                        train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
+                    torch.manual_seed(j)
+                    
+                    # Generar dataset
+                    dataset_config = {
+                        "n_samples": n,
+                        "n_dimensions": dim, 
+                        "function": function,
+                        "limits": function_limits[function_name]
+                    }
+                    train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
 
-                        # Entrenar y testear
-                        experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
-                        experiment.setup_dataset(train_data, test_data)
-                        experiment.train_all()
-                        experiment.test_all()
-                        metrics = experiment.metrics
+                    # Entrenar y testear
+                    experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
+                    experiment.setup_dataset(train_data, test_data)
+                    experiment.train_all()
+                    experiment.test_all()
+                    metrics = experiment.metrics
 
-                        # Guardar métricas de este run en all_metrics
-                        for key, value in metrics.items():
-                            all_metrics[key][n_idx].append(value)
-                        
-                        # MARCAR ESTA COMBINACIÓN COMO COMPLETADA
-                        mark_combination_done(progress_tracker, function_name, dim, n, j)
-                        
-                        # GUARDAR CHECKPOINT DESPUÉS DE CADA RUN
-                        save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data)
+                    # Guardar métricas de este run en all_metrics
+                    for key, value in metrics.items():
+                        all_metrics[key][n_idx].append(value)
+                    
+                    # MARCAR ESTA COMBINACIÓN COMO COMPLETADA
+                    mark_combination_done(progress_tracker, function_name, dim, n, j)
+                    
+                    # GUARDAR CHECKPOINT DESPUÉS DE CADA RUN
+                    save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data)
             
-            # Guardar resultados finales de esta función (compatibilidad con código original)
-            joblib.dump(all_metrics_dim[function_name], "./plots/metrics/metrics_"+str(function_name)+".joblib")
-            joblib.dump(n_samples, "./plots/metrics/n_samples.joblib")
-        
-        # GUARDAR CONFIGURACIONES DEL EXPERIMENTO
-        joblib.dump(experiment_config_data, "./plots/config/config_experiment.joblib")
-        
-        # Guardar configs de modelos (usando el último experiment)
-        if 'experiment' in locals():
-            experiment.save_configs()
-        
-        # Limpiar checkpoint al finalizar exitosamente
-        checkpoint_path = "./checkpoints/checkpoint.joblib"
-        if os.path.exists(checkpoint_path):
-            os.remove(checkpoint_path)
-            logging.info("🎉 Experimento completado exitosamente. Checkpoint eliminado.")
-        
-    except Exception as e:
-        logging.error(f"❌ Error durante el experimento: {e}")
-        logging.info("💾 Checkpoint guardado. Puedes reiniciar el script para continuar.")
-        raise
-    finally:
-        wandb.finish()
+        # Guardar resultados finales de esta función (compatibilidad con código original)
+        joblib.dump(all_metrics_dim[function_name], "./plots/metrics/metrics_"+str(function_name)+".joblib")
+        joblib.dump(n_samples, "./plots/metrics/n_samples.joblib")
+    
+    # GUARDAR CONFIGURACIONES DEL EXPERIMENTO
+    joblib.dump(experiment_config_data, "./plots/config/config_experiment.joblib")
+    
+    # Guardar configs de modelos (usando el último experiment)
+    if 'experiment' in locals():
+        experiment.save_configs()
+    
+    # Limpiar checkpoint al finalizar exitosamente
+    checkpoint_path = "./checkpoints/checkpoint.joblib"
+    if os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
+        logging.info(" Experimento completado exitosamente. Checkpoint eliminado.")
+    
+    logging.error(f"Error durante el experimento: {e}")
+    logging.info("Checkpoint guardado. Puedes reiniciar el script para continuar.")
+    wandb.finish()
     
     logging.info("Experimento completado. Métricas para boxplots listas.")
 
