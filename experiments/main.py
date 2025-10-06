@@ -15,6 +15,7 @@ from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.metric_loggers import *
 from pysesm.utils.loggers import setup_logger
+import gc
 
 def load_checkpoint(checkpoint_dir="./checkpoints"):
     """
@@ -204,7 +205,7 @@ def main():
                         logger.debug("Saltando: %s, dim=%d, n=%d, run=%d (ya completado)",function_name,dim,n,j+1)
                         continue
                     
-                    logger.debug("""
+                    logger.debug(r"""
                     =================================================================================
                                                 ,___,      Repetition:      %d/%d
                             0/     (\(\         (O.o)      Dataset size:    %d                      
@@ -240,7 +241,9 @@ def main():
                     
                     # GUARDAR CHECKPOINT DESPUÉS DE CADA RUN
                     save_checkpoint(all_metrics_dim, progress_tracker, experiment_config_data)
-            
+                    del experiment, train_data, test_data
+                    torch.cuda.empty_cache()  # seguro aunque estés en CPU
+                    gc.collect()
         # Guardar resultados finales de esta función (compatibilidad con código original)
         joblib.dump(all_metrics_dim[function_name], "./plots/metrics/metrics_"+str(function_name)+".joblib")
         joblib.dump(n_samples, "./plots/metrics/n_samples.joblib")
