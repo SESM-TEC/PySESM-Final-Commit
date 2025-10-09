@@ -1,0 +1,16 @@
+examples/one_block_example.py
+
+   This example is the simples one: fit SESM to three fixed gaussians.
+
+   Following the README.md, you have to install the dependencies from the
+   project directory PySESM/
+
+   > cd PySESM
+   > pip install -e . --use-pep517  
+
+   With the conda/mamba python environment ready, just run
+
+     > cd PySESM/examples
+     > python one_block_example.py
+
+   or use your favorite debugger.

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysesm"
+version = "0.1.0"
+description = "SESM (sparse encoded surrogate model) optimization tool"
+requires-python = ">=3.12"
+authors = [
+    {name = "Cindy Calderón", email = "ccalderon@itcr.ac.cr"},
+    {name = "Juan Pablo Soto", email = "jusoto@itcr.ac.cr"},
+    {name = "Pablo Alvarado", email = "palvarado@itcr.ac.cr"},
+    {name = "Joshua Gamboa", email = "joshgc.19@gmail.com"},
+    {name = "Aldo Cambronero", email = "cambroneroaldo03@gmail.com"},
+    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"},
+    {name = "Aaron Salas", email = "aasalas@estudiantec.cr"}
+]
+dependencies = [
+    "numpy",
+    "matplotlib>=3.9.1",
+    "torch",
+    "scipy",
+    "logger",
+    "scikit-learn",
+    "plotly",
+    "pandas",
+    "pytest"
+]
+
+[tool.setuptools]
+packages = ["pysesm"]  # Replace with your actual package names
