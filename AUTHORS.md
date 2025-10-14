@@ -19,6 +19,7 @@ Project is maintained by the SESM Team.
 - Joshua Gamboa Calvo
 - Aldo Cambronero
 - Hender Samuel Valdivia Mejías
+- Aarón Salas Alvarado
 
 For a full list of contributors, see:
 https://github.com/SESM-TEC/PySESM/
