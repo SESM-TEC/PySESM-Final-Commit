@@ -9,7 +9,7 @@ contexts, enhancing model flexibility and performance.
 
 With `conda` or `micromamba`, create your working environment with
 
-    > conda create -n "sesm" python=3.9
+    > conda create -n "sesm" python=3.12
     
 Install your PyTorch according to your hardware configuration.  For
 instance, if you only have CPU:
