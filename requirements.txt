@@ -1,5 +1,30 @@
-numpy
-matplotlib
-torch
-scipy
-logger
+# -----------------------------------------------------------------
+# Core requirements for the PySESM library and its examples.
+#
+# DEPRECATED
+#
+# PySESM uses pyproject.toml for its configuration
+#
+# You should install the core and optional dependencies with
+#
+# > pip install -e .
+# > pip install -e ".[dev]"
+#
+# Install using: pip install -r requirements.txt
+# -----------------------------------------------------------------
+
+# --- Core Scientific Computing & ML ---
+torch>=2.0.0      # The deep learning framework used for all core model components.
+numpy             # Fundamental package for numerical operations and data structures.
+scipy             # Used for statistical functions, primarily in dataset generation (e.g., multivariate_normal).
+scikit-learn      # Used for performance metrics (e.g., mean_squared_error) and baseline models (SVR, Lasso).
+pandas            # Used for data manipulation, particularly in some utility and plotting functions.
+
+# --- Visualization & Experiment Tracking ---
+matplotlib        # Primary library for generating static plots and the visualization hook frames.
+wandb             # Used for hyperparameter sweeps and experiment tracking.
+plotly            # Used for creating interactive plots in some utility functions.
+
+# --- Utilities ---
+imageio           # Required by the VisualizerHook to compile saved frames into a video.
+joblib            # Used in the experiment scripts for saving/loading metrics and baseline models.
