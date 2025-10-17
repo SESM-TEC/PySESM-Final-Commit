@@ -14,6 +14,7 @@ import logging
 from typing import Optional
 
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 from pysesm.base_types import BaseConfig, TensorBatch
 
 
@@ -21,13 +22,14 @@ from pysesm.base_types import BaseConfig, TensorBatch
 class DictConfig(BaseConfig):
     """Base configuration for all dictionary types"""
     epochs: int
+    batch_size: int | None = None
     alpha: float
     criterion: torch.nn.Module | None = None
     # Custom regularization function that takes the layer instance as input
     regularization_func: Optional[Callable[[DictBaseLayer], torch.Tensor]] = None
     regularization_gamma: float = 0.01
     optimizer_factory: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] | None = None
-
+    
 
 class DictBaseLayer(torch.nn.Module, ABC):
     """
@@ -157,6 +159,19 @@ class DictBaseLayer(torch.nn.Module, ABC):
                                                            lr=self.config.alpha)
             
     def _train_epoch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
+                        log_losses: bool, **eval_kwargs) -> None:
+
+        if self.config.batch_size is not None:
+            full_dataset= TensorDataset(X,y)
+            data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=True, )
+            for x_batch, y_batch in data_loader:
+                x_batch.to(self.device)
+                y_batch.to(self.device)
+                self._train_epoch_for_batch(x_batch, y_batch, h, log_losses, **eval_kwargs)
+        else:
+            self._train_epoch_for_batch(X, y, h, log_losses, **eval_kwargs)
+
+    def _train_epoch_for_batch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
                     log_losses: bool, **eval_kwargs) -> None:
         """
         Perform a single training epoch with batch input support.
@@ -168,7 +183,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         # Ensure all components within TensorBatch are on the correct device if not already
         # This is handled by evaluation_func and criterion expecting device-correct tensors.
         # No need for explicit .to(self.device) here on X, y, h directly.
-        
+
         self.optimizer.zero_grad()
         
         # self.dictionary will be a TensorBatch (output of psi.__call__)

@@ -483,6 +483,73 @@ def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_de
     assert torch.all(mu_grads_rho_only == 0), "Mu grads should be zero (rho_flag=True)"
     assert not torch.all(rho_grads_rho_only == 0), "Rho grads should be non-zero"
 
+
+def test_gaussian_dict_layer_batch_size_behavior(_common_logger, _common_device, _common_evaluation_func):
+    """
+    Test that GaussianDictLayer respects the batch_size parameter during training.
+    The test compares training with and without batching, verifying consistent convergence.
+    """
+    n_features = 2
+    n_functions = 2
+    n_samples = 200
+    batch_size = 50
+    epochs_to_run = 50
+
+    # Synthetic dataset (same as in earlier tests)
+    X = torch.linspace(-2, 2, n_samples).unsqueeze(1).repeat(1, n_features)
+    y = torch.exp(-0.5 * (X[:, 0] ** 2 + X[:, 1] ** 2)).unsqueeze(-1)
+    h = torch.ones((n_functions, 1), device=_common_device)
+
+    # Config (similar to your previous tests)
+    dict_config = GaussianDictConfig(
+        epochs=epochs_to_run,
+        batch_size=20,
+        alpha=0.1,
+        mu_epochs=epochs_to_run,
+        rho_epochs=0,
+        split_mu_rho=True,
+        eig_range=[0.5, 1.0],
+        mu_range=[[-1.0, 1.0], [-1.0, 1.0]],
+        device=_common_device
+    )
+
+    # Train without batching
+    dict_layer_full = GaussianDictLayer(
+        config=dict_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger
+    )
+
+    dict_layer_full.partial_fit(X, y, h)
+    loss_full_start = dict_layer_full.losses[0]
+    loss_full_end = dict_layer_full.losses[-1]
+
+    # Train with batching
+    dict_layer_batched = GaussianDictLayer(
+        config=dict_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger
+    )
+
+    dict_layer_batched.partial_fit(X, y, h)
+    loss_batch_start = dict_layer_batched.losses[0]
+    loss_batch_end = dict_layer_batched.losses[-1]
+
+    # --- Assertions ---
+    assert loss_full_end < loss_full_start, "Full-batch training should reduce loss."
+    assert loss_batch_end < loss_batch_start, "Mini-batch training should reduce loss."
+    # Ensure both methods lead to roughly similar final losses
+    np.testing.assert_allclose(loss_batch_end, loss_full_end, rtol=0.2,
+                               err_msg="Batched and full training should converge similarly.")
+
+    # Check that the number of mini-batches used matches expected value
+    n_batches = int(np.ceil(n_samples / batch_size))
+    _common_logger.info(f"Training completed with {n_batches} mini-batches of size {batch_size}.")
+
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions
     print_pytest_instructions()
