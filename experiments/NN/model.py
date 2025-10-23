@@ -23,17 +23,6 @@ class NN(nn.Module):
         return self.layers(x)
     
 
-        
-    def save(self, path: str):
-        torch.save(self.state_dict(), path)
-
-    def load(self, path: str = 'nn_model.pth') -> 'NN':
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.load_state_dict(torch.load(path, map_location=device))
-        return self
-
-
-
     def train_nn(self, xtrain, ytrain, xtest, ytest):
 
         # ENTRENAMIENTO
@@ -65,26 +54,17 @@ class NN(nn.Module):
             
             if (epoch + 1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{self.epochs}], "
-                    f"mse_train: {loss.item():.4f}, "
-                    f"mse_val: {test_loss.item():.4f}")
+                    f"mse_train: {loss.item():.6f}, "
+                    f"mse_val: {test_loss.item():.6f}")
         end_time = time.time()
-
-
-        # GUARDAR MODELO
-        path = "nn_model.pth"
-        self.save(path)
 
         return end_time - start_time
 
     def test(self, xtest):
         print("\n Testing NN...")
-        model_path = "nn_model.pth"
-        self.load(model_path)
-
-        
-        # 4. Pasar el tensor normalizado a la red neuronal para la predicción
+        # Evaluación
         predictions = self.layers(xtest)
-        # 5. El resto del código es correcto para la salida
-        predictions = predictions.detach().cpu().numpy().squeeze()
+        # Conversion a numpy
+        predictions = predictions.detach().cpu()
         return predictions
         
