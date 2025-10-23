@@ -162,20 +162,13 @@ class DictBaseLayer(torch.nn.Module, ABC):
                         log_losses: bool, **eval_kwargs) -> None:
 
         if self.config.batch_size is not None:
-            # 1. Include h in the TensorDataset
-            full_dataset = TensorDataset(X, y, h)
-            data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=True)
-            
-            # 2. Unpack h_batch from the data_loader
-            for x_batch, y_batch, h_batch in data_loader:
-                x_batch = x_batch.to(self.device)
-                y_batch = y_batch.to(self.device)
-                h_batch = h_batch.to(self.device) # Also move h_batch to the correct device
-                
-                # 3. Pass the h_batch to the training step function
-                self._train_epoch_for_batch(x_batch, y_batch, h_batch, log_losses, **eval_kwargs)
+            full_dataset= TensorDataset(X,y)
+            data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=True )
+            for x_batch, y_batch in data_loader:
+                x_batch.to(self.device)
+                y_batch.to(self.device)
+                self._train_epoch_for_batch(x_batch, y_batch, h, log_losses, **eval_kwargs)
         else:
-            # The non-batched case remains the same
             self._train_epoch_for_batch(X, y, h, log_losses, **eval_kwargs)
 
     def _train_epoch_for_batch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
