@@ -158,16 +158,36 @@ class DictBaseLayer(torch.nn.Module, ABC):
             self.optimizer = self.config.optimizer_factory([self.theta_params],
                                                            lr=self.config.alpha)
             
+    def recursive_cat(self, tb_list):
+        """
+        Recursively concatenate a list of TensorBatch objects along dim=0 (batch dim).
+        Works for dicts, sequences, or single tensors.
+        """
+        tb0 = tb_list[0]
+        if isinstance(tb0, torch.Tensor):
+            return torch.cat(tb_list, dim=0)
+        elif isinstance(tb0, dict):
+            return {k: self.recursive_cat([tb[k] for tb in tb_list]) for k in tb0}
+        elif isinstance(tb0, (list, tuple)):
+            # Preserve type (list or tuple)
+            return type(tb0)(self.recursive_cat([tb[i] for tb in tb_list]) for i in range(len(tb0)))
+        else:
+            raise TypeError(f"Unsupported type for concatenation: {type(tb0)}")
+
     def _train_epoch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
                         log_losses: bool, **eval_kwargs) -> None:
 
         if self.config.batch_size is not None:
             full_dataset= TensorDataset(X,y)
             data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=True )
+            all_dicts = []
             for x_batch, y_batch in data_loader:
                 x_batch.to(self.device)
                 y_batch.to(self.device)
                 self._train_epoch_for_batch(x_batch, y_batch, h, log_losses, **eval_kwargs)
+                all_dicts.append(self.dictionary)
+
+            self.dictionary = self.recursive_cat(all_dicts)
         else:
             self._train_epoch_for_batch(X, y, h, log_losses, **eval_kwargs)
 
@@ -201,7 +221,7 @@ class DictBaseLayer(torch.nn.Module, ABC):
         loss_recon = self._calculate_batch_loss(y_pred, y)
 
         # Calculate regularization loss if a function was provided
-        loss_reg = torch.tensor(0.0, device=self.device)
+        loss_reg = torch.tensor(0.0, device=self.device, dtype=torch.float32, requires_grad=True)
         if self.config.regularization_func is not None:
             loss_reg = self.config.regularization_func(self)
 

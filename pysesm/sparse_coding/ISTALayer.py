@@ -175,6 +175,7 @@ class ISTALayer(SparseCodingBaseLayer):
             
             # Compute gradient for MSE: 2 * D^T * (y_pred - y)
             error = y_pred - y
+
             gradient = 2 * torch.matmul(dictionary.T, error)
             
             # ISTA update: h = soft_threshold(h - alpha * gradient, alpha * lambda)
