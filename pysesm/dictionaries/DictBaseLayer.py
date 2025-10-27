@@ -173,20 +173,19 @@ class DictBaseLayer(torch.nn.Module, ABC):
             return type(tb0)(self.recursive_cat([tb[i] for tb in tb_list]) for i in range(len(tb0)))
         else:
             raise TypeError(f"Unsupported type for concatenation: {type(tb0)}")
-
+            
     def _train_epoch(self, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
-                        log_losses: bool, **eval_kwargs) -> None:
-
+                    log_losses: bool, **eval_kwargs) -> None:
         if self.config.batch_size is not None:
-            full_dataset= TensorDataset(X,y)
-            data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=True )
+            full_dataset = TensorDataset(X, y)
+            data_loader = DataLoader(full_dataset, self.config.batch_size, shuffle=False)
             all_dicts = []
             for x_batch, y_batch in data_loader:
-                x_batch.to(self.device)
-                y_batch.to(self.device)
+                x_batch = x_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
+                
                 self._train_epoch_for_batch(x_batch, y_batch, h, log_losses, **eval_kwargs)
                 all_dicts.append(self.dictionary)
-
             self.dictionary = self.recursive_cat(all_dicts)
         else:
             self._train_epoch_for_batch(X, y, h, log_losses, **eval_kwargs)
