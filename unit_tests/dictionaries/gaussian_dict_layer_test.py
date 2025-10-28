@@ -595,6 +595,7 @@ def test_train_epoch_refactor_equivalence(_common_logger, _common_device, _commo
             assert tb1.shape == tb2.shape, f"Shape mismatch at {path}: {tb1.shape} vs {tb2.shape}"
             assert tb1.device == tb2.device, f"Device mismatch at {path}: {tb1.device} vs {tb2.device}"
             # Optional: check gradients if requires_grad
+            assert torch.allclose(tb1,tb2)
             if tb1.requires_grad:
                 assert tb1.grad is None or tb1.grad.shape == tb1.shape, f"Gradient shape mismatch at {path}"
         elif isinstance(tb1, dict):
