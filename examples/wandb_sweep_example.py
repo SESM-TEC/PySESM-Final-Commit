@@ -107,8 +107,8 @@ def train():
     run_number = run.name.split('-')[-1]
     technical_name = f"run_{int(run_number):03d}-funcs_{cfg.n_functions}-sc_e_{cfg.sc_epochs}-dict_e_{cfg.dict_epochs}"
     wandb.run.name = technical_name
-    # Save the new name to the summary, which is useful for tables in W&B reports
-    wandb.run.save()
+    # Deprecated: Save the new name to the summary, which is useful for tables in W&B reports
+    # wandb.run.save() # This is not necessary any more
     
     # Access the hyperparameters for this run from wandb.config
     cfg = wandb.config
@@ -137,19 +137,19 @@ def train():
     )
 
     partition_config = UniformPartitionConfig(
-        T=1,
+        T=3,
         initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
         device=device
     )
 
     ssesm_config = SSESMConfig(
         n_features=2,
-        model_epochs=1000, # Fixed number of epochs for all runs
+        model_epochs=100, # Fixed number of epochs for all runs
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
-        log_interval=200, # Log less frequently during sweeps
-        permutation_times=1,
+        log_interval=50, # Log less frequently during sweeps
+        permutation_times=10,
         device=device
     )
 
