@@ -35,7 +35,7 @@ class KDTree():
         device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
-        self.root: Node = Node(data.to(self.device), y, data_wrapper)
+        self.root: Node = Node(data.to(self.device), y, data_wrapper, self.device)
         self.maxNodeSize: int = maxNodeSize
         self.data_wrapper : Callable = data_wrapper
         self.split: bool = False
