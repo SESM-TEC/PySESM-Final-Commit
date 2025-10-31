@@ -13,7 +13,7 @@ class SESMData():
     Encapsulates data as needed by the kd-tree to hold a level-wise 
     access to data in SESM.
     """
-    def __init__(self, X, y):
+    def __init__(self, X, y, device):
         self.X: torch.Tensor = X
         self.y: torch.Tensor = y
         self.split_point: torch.Tensor = None
@@ -27,7 +27,7 @@ class SESMData():
                 self.bounds[0],
                 (1,),
                 self.bounds[1]-self.bounds[0],
-                device=None)
+                device=device)
 
     def greatestVarDim(self) -> int:
         """Returns the dimension with the greatest variance of the dataset, 

@@ -13,6 +13,7 @@ from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
+from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
 from pysesm.utils.metric_loggers import *
 from pysesm.utils.loggers import setup_logger
 import gc
@@ -152,10 +153,8 @@ def main():
             )
 
             [x1lim, x2lim] = function_limits[function_name]
-            partition_config = UniformPartitionConfig(
-                T=1,
-                initial_bounds=torch.tensor([[x1lim for i in range(dim)], [x2lim for i in range(dim)]], dtype=torch.float32),
-                activity_threshold=0, overlap_ratio=0.1
+            partition_config = AdaptativePartitionConfig(
+                overlap_ratio=0.1
             )
 
             ssesm_config = SSESMConfig(
@@ -229,6 +228,7 @@ def main():
                     experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
                     experiment.setup_dataset(train_data, test_data)
                     experiment.train_all()
+                    logger.debug("Debug, device: %s", experiment.SESM_model.partition_manager.kdtree.device)
                     experiment.test_all()
                     metrics = experiment.metrics
 

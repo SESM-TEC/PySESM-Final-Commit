@@ -59,8 +59,8 @@ class KDTree():
         # Create mask of data over threshold only once and reuse its inverse
         mask = data[:, node.Data.dim] >= node.Data.split_point
         not_mask = ~mask
-        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper)
-        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper)        
+        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper, self.device)
+        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper, self.device)        
 
         node.Data.empty_data()
         
