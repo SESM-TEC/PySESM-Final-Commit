@@ -1,14 +1,14 @@
+import logging
 import pytest
+
 import torch
 import numpy as np
-import logging
+
 
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.dictionaries import GaussianDictConfig # O cualquier DictConfig
 from pysesm.sparse_coding import ISTAConfig # O cualquier SparseCodingConfig
-from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 # --- Logger y Fixtures (puedes adaptarlos o usar los que ya tienes) ---
 logger = logging.getLogger("test_amplitude_prediction")
@@ -20,28 +20,23 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 @pytest.fixture(scope="module")
-def device_manager_fixture():
-    # Ajusta los dispositivos según sea necesario
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu"
-    }
-    return DeviceManager(logger=logger, default_device="cpu", device_map=device_map)
+def device_fixture():
+    """Provides a device string for the tests."""
+    return "cpu"
 
 # --- Clase MockableSSESM para la Prueba ---
 class MockableSSESM(SSESM):
-    def __init__(self, config: SSESMConfig, logger: logging.Logger, device_manager: DeviceManager, **kwargs):
-        super().__init__(config, logger, device_manager, **kwargs)
+    def __init__(self, config: SSESMConfig, logger: logging.Logger, **kwargs):
+        super().__init__(config, logger, **kwargs)
         # Este diccionario mapeará block_index a la salida mockeada para ese bloque
         self.mock_eval_outputs_per_block = {}
 
     def set_mock_eval_output(self, block_index_tuple, output_value):
         """Define la salida mockeada para un bloque específico."""
+        device = self.dictionary_layer.device
         # Aseguramos que la salida sea un tensor 2D (n_samples_in_block, 1)
         self.mock_eval_outputs_per_block[block_index_tuple] = torch.tensor([[output_value]],
-                                                                       device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
+                                                                       device=device,
                                                                        dtype=torch.float32)
 
     # Sobrescribimos _predict_block para interceptar y usar el mock si está definido
@@ -53,7 +48,7 @@ class MockableSSESM(SSESM):
             # El valor mockeado ya está en la "escala de target".
             # Aseguramos que el número de "muestras" en la salida mock coincida con X.
             # Si block.normalized_X tiene N muestras, la salida debe ser (N,1)
-            num_samples_in_block = block.normalized_X.shape[0]
+            num_samples_in_block = block.normalized_X.get_for_device(self.dictionary_layer.device).shape[0]
             mock_output_for_one_sample = self.mock_eval_outputs_per_block[block_idx_tuple]
             
             # Si el mock es para una sola muestra, lo repetimos si hay más.
@@ -67,13 +62,13 @@ class MockableSSESM(SSESM):
             return super()._predict_block(block, custom_h)
 
 
-def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
+def test_ssesm_predict_amplitude_denormalization(device_fixture):
     """
     Verifica que SSESM.predict use correctamente el factor de amplitud
     para desnormalizar la predicción cruda del modelo.
     Usa el escenario de espacio de entrada de -2 a 2 y 2x2 bloques.
     """
-    device = device_manager_fixture.get_device(DeviceTarget.GLOBAL)
+    device = device_fixture
 
     # 1. Configuración del SSESM (con MockableSSESM)
     n_features = 2
@@ -84,7 +79,8 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     partition_conf = UniformPartitionConfig(
         T=torch.tensor([2, 2], device=device, dtype=torch.int),
         initial_bounds=np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32),
-        activity_threshold=0
+        activity_threshold=0,
+        device=device
     )
     dict_conf = GaussianDictConfig(epochs=1, alpha=0.1, eig_range=[0.1,1.0], mu_range=[-1.0,1.0])
     sc_conf = ISTAConfig(n_functions=n_functions, epochs=1, alpha=0.1, lambd=0.01)
@@ -97,7 +93,7 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
         partition_config=partition_conf,
         permutation_times=1
     )
-    model = MockableSSESM(config=ssesm_conf, logger=logger, device_manager=device_manager_fixture)
+    model = MockableSSESM(config=ssesm_conf, logger=logger)
 
     # 2. Datos de "Entrenamiento" para establecer amplitudes
     # Bloque (0,0): Origen conceptual [-2,-2]. Datos y>1 -> amplitude < 1
@@ -122,10 +118,10 @@ def test_ssesm_predict_amplitude_denormalization(device_manager_fixture):
     assert block00_train.is_active
     assert block11_train.is_active
     assert pytest.approx(block00_train.amplitude) == 1.0 / 5.0 # 0.2
-    assert pytest.approx(block00_train.target[0].item()) == 1.0 # 5.0 * 0.2
+    assert pytest.approx(block00_train.target.get_for_device(device)[0].item()) == 1.0 # 5.0 * 0.2
     
     assert pytest.approx(block11_train.amplitude) == 1.0
-    assert pytest.approx(block11_train.target[0].item()) == 0.8 # 0.8 * 1.0
+    assert pytest.approx(block11_train.target.get_for_device(device)[0].item()) == 0.8 # 0.8 * 1.0
 
     # Necesario para que retrieve_test_active_blocks copie las capas SC (aunque no las usemos activamente)
     model.partition_manager.init_sparse_coding_per_block(config=ssesm_conf.sparse_coding_config, evaluation_func=model.evaluation_func)

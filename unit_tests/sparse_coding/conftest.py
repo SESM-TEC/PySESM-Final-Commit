@@ -1,12 +1,9 @@
 # tests/unit_test/sparse_coding/conftest.py
+import logging
+
 import pytest
 import torch
-import logging
 import numpy as np
-
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingConfig 
 
 # --- Common Fixtures for Sparse Coding Tests ---
 
@@ -23,26 +20,20 @@ def common_logger():
     return logger
 
 @pytest.fixture(scope="module")
-def common_device_manager(common_logger):
-    """Provides a shared DeviceManager instance for sparse coding tests."""
-    # Configure all layers to run on CPU for consistent testing environment
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu"
-    }
-    return DeviceManager(common_logger, default_device="cpu", device_map=device_map)
+def common_device():
+    """Provides a common device string ('cpu') for tests."""
+    return "cpu"
+
 
 @pytest.fixture(scope="module")
 def common_evaluation_func():
     """Provides a standard evaluation function (matrix multiplication) for D and h."""
     # This function defines how dictionary D and sparse code h combine to form prediction y.
     # For this test, D is (n_samples x n_functions), h is (n_functions x 1), result is (n_samples x 1).
-    return lambda d, h: torch.matmul(d, h)
+    return torch.matmul
 
 @pytest.fixture
-def sparse_coding_data_generator(common_device_manager):
+def sparse_coding_data_generator(common_device):
     """
     Generates synthetic data (dictionary D, true h, and target y) for sparse coding tests.
     
@@ -62,7 +53,7 @@ def sparse_coding_data_generator(common_device_manager):
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
 
-        device = common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+        device = common_device
         
         # Dictionary D (n_samples x n_functions)
         # This is a matrix where each column is a 'word' evaluated at n_samples points.

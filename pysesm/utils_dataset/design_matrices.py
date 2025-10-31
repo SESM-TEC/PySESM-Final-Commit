@@ -63,8 +63,8 @@ def create_design_matrix_test(xx, yy, zz, dtype=torch.float32):
     y_values = yy.ravel()
     z_values = zz.ravel()
 
-    x_tensor = torch.tensor(x_values,dtype=dtype)
-    y_tensor = torch.tensor(y_values,dtype=dtype)
+    x_tensor = torch.as_tensor(x_values,dtype=dtype)
+    y_tensor = torch.as_tensor(y_values,dtype=dtype)
     X_test = torch.stack((x_tensor, y_tensor), dim=1)
 
     return X_test, z_values

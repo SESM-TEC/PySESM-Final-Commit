@@ -7,7 +7,6 @@ from . import models
 from . import utils
 from . import blocks
 from . import factories
-from . import device_manager
 from . import enums
 from . import functions
 from . import sparse_coding
@@ -29,7 +28,6 @@ __all__ = [
     "utils",
     "blocks",
     "factories",
-    "device_manager",
     "enums",
     "functions",
     "sparse_coding",

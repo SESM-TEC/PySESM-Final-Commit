@@ -9,7 +9,7 @@ adapts itself depending on the data it has.
 Author: Hender Valdivia
 '''
 from dataclasses import dataclass
-from typing import Union, Callable
+from collections.abc import Callable
 
 import logging
 import torch
@@ -19,12 +19,12 @@ from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.device_manager.DeviceManager import DeviceManager
+from pysesm.base_types import TensorProxy
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
 
-@dataclass
+@dataclass(kw_only=True)
 class AdaptativePartitionConfig(BlockManagerConfig):
     """Configuration for AdaptativePartitionManager.
     
@@ -52,7 +52,6 @@ class AdaptativePartitionManager(BlockManager):
         self,
         config: AdaptativePartitionConfig,
         logger: logging.Logger,
-        device_manager: DeviceManager =None,
         sparse_coding_layer_hook=None
     ):
         """
@@ -66,7 +65,7 @@ class AdaptativePartitionManager(BlockManager):
                 If not provided, bounds are automatically derived from the data.
             threshold (float, optional): Threshold for determining block activity.
         """
-        super().__init__(config=config, logger=logger, device_manager=device_manager)
+        super().__init__(config=config, logger=logger)
         
         self.logger = logger
         self.maxNodeSize = config.maxNodeSize
@@ -78,10 +77,9 @@ class AdaptativePartitionManager(BlockManager):
         self.total_blocks: int = 0
         self.splits: int = 0
         self.initial_bounds = None
-        self.kdtree: KDTree = None
-        self.device_manager: DeviceManager = device_manager              
+        self.kdtree: KDTree = None            
 
-    def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:
+    def _find_block(self, x: torch.Tensor) -> PartitionBlock | None:
         """
         Finds the block corresponding to a given point.
 
@@ -190,10 +188,7 @@ class AdaptativePartitionManager(BlockManager):
         
         vectorized_normalize = np.vectorize(lambda block: block.normalize_points())
         vectorized_normalize(x)
-        
-        for block in x:
-           aspect_ratio = block.block_size / block.block_size.max()
-           block.normalized_X = block.normalized_X * aspect_ratio
+
 
     def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = False):
         """
@@ -271,7 +266,6 @@ class AdaptativePartitionManager(BlockManager):
                 block.sparse_coding_layer = SparseCodingFactory.create(
                     config = config,
                     logger = self.logger,
-                    device= self.device,
                     parameter_hook=self.sparse_coding_layer_hook,
                     evaluation_func=evaluation_func
             )

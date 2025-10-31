@@ -1,16 +1,14 @@
+import logging
+
 import pytest
 import torch
-import logging
-from pysesm.utils.loggers import setup_logger
+
 import numpy as np
-from typing import Union, Optional
 
 # Adjust imports based on your new directory structure
 from pysesm.blocks.UniformPartitionManager import UniformPartitionManager, UniformPartitionConfig
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig # Example sparse coding layer for init_sparse_coding_per_block
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
 
 # Configure logger once at the module level
 logger = logging.getLogger("test_uniform_partition_manager")
@@ -19,27 +17,21 @@ logger.setLevel(logging.DEBUG) # Set a higher level to see debug/info messages i
 # or ensure a handler is attached to the logger in your test runner config.
 
 # --- Fixtures ---
-
 @pytest.fixture(scope="module")
-def common_device_manager():
-    """Provides a shared DeviceManager instance for all tests in this module."""
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu" # Assuming TargetDevice is an alias for DeviceTarget
-    }
-    # Using a unique logger for the DeviceManager fixture to avoid conflicts
-    return DeviceManager(logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+def common_device():
+    """Provides a device string for the tests."""
+    return "cpu"
+
+# pylint: disable=redefined-outer-name
 
 @pytest.fixture
-def create_manager(common_device_manager):
+def create_manager(common_device):
     """
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
     """
-    def _creator(T_val: Union[int, torch.Tensor],
-                 initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None,
+    def _creator(T_val: int | torch.Tensor,
+                 initial_bounds_val: np.ndarray | torch.Tensor | None = None,
                  threshold_val: float=0):
         # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
         if isinstance(initial_bounds_val, torch.Tensor):
@@ -50,12 +42,12 @@ def create_manager(common_device_manager):
         config = UniformPartitionConfig(
             T=T_val,
             initial_bounds=initial_bounds_np,
-            activity_threshold=threshold_val
+            activity_threshold=threshold_val,
+            device=common_device
         )
         return UniformPartitionManager(
             config=config,
-            logger=logger, # Use the module-level logger for the manager
-            device_manager=common_device_manager
+            logger=logger # Use the module-level logger for the manager
         )
     return _creator
 
@@ -159,12 +151,16 @@ def test_add_points_full_workflow(create_manager):
     Test the complete add_points workflow (arrangement, mapping, normalization).
     This is the main entry point for data insertion.
     """
-    T = torch.tensor([2, 2], device='cpu')
+
+    device='cpu'
+
+
+    T = torch.tensor([2, 2], device=device)
     initial_bounds = torch.tensor([[0, 0], [1, 1]], dtype=torch.float32)
     manager = create_manager(T_val=T, initial_bounds_val=initial_bounds)
 
-    X = torch.tensor([[0.1, 0.2], [0.6, 0.7], [0.3, 0.3]], device='cpu', dtype=torch.float32)
-    y = torch.tensor([[1.0], [2.0], [3.0]], device='cpu', dtype=torch.float32)
+    X = torch.tensor([[0.1, 0.2], [0.6, 0.7], [0.3, 0.3]], device=device, dtype=torch.float32)
+    y = torch.tensor([[1.0], [2.0], [3.0]], device=device, dtype=torch.float32)
 
     manager.add_points(X, y) # This calls _update_block_arrangement, _map_points, _vectorized_normalization
 
@@ -184,14 +180,14 @@ def test_add_points_full_workflow(create_manager):
 
         # Verify normalization: e.g., (0.1, 0.2) in block (0,0) with size (0.5,0.5) from origin (0,0)
         # Normalized should be (0.1/0.5, 0.2/0.5) = (0.2, 0.4)
-        if block.block_index == (0,0) and torch.allclose(block.X[0], torch.tensor([0.1, 0.2], device='cpu')):
-            assert torch.allclose(block.normalized_X[0], torch.tensor([0.2, 0.4], device='cpu'), atol=1e-6)
+        if block.block_index == (0,0) and torch.allclose(block.X[0], torch.tensor([0.1, 0.2], device=device)):
+            assert torch.allclose(block.normalized_X.get_for_device(device)[0], torch.tensor([0.2, 0.4], device=device), atol=1e-6)
 
         # Verify amplitude/target
-        if block.block_index == (1,1) and torch.allclose(block.y[0], torch.tensor([2.0], device='cpu')):
+        if block.block_index == (1,1) and torch.allclose(block.y[0], torch.tensor([2.0], device=device)):
             # y=2.0 -> amplitude=0.5 -> target=1.0
             assert pytest.approx(block.amplitude, rel=1e-6) == 0.5
-            assert torch.allclose(block.target, torch.tensor([[1.0]], device='cpu'))
+            assert torch.allclose(block.target.get_for_device(device), torch.tensor([[1.0]], device=device))
 
 
 def test_init_sparse_coding_per_block_initializes_layers(create_manager):
@@ -440,11 +436,11 @@ def test_retrieve_test_active_blocks_isolation(create_manager):
     # Get references to specific original sparse coding layers and their 'h'
     original_sc_layer_0_0 = original_blocks_ref[0, 0].sparse_coding_layer
     original_h_0_0_ref = original_sc_layer_0_0.h # Reference to the Parameter object for (0,0)
-    original_h_0_0_data_ref = original_h_0_0_ref.data # Reference to the underlying tensor data for (0,0)
+    # original_h_0_0_data_ref = original_h_0_0_ref.data # Reference to the underlying tensor data for (0,0)
 
     original_sc_layer_1_1 = original_blocks_ref[1, 1].sparse_coding_layer
     original_h_1_1_ref = original_sc_layer_1_1.h # Reference to the Parameter object for (1,1)
-    original_h_1_1_data_ref = original_h_1_1_ref.data # Reference to the underlying tensor data for (1,1)
+    # original_h_1_1_data_ref = original_h_1_1_ref.data # Reference to the underlying tensor data for (1,1)
 
 
     # Test data to be mapped into the test blocks
@@ -529,7 +525,10 @@ def test_add_points_with_n_dimensional_input(create_manager):
     Test add_points with a 3D input space (n_features=3).
     Ensures N-dimensional indexing and calculations are correct.
     """
-    T_3D = torch.tensor([2, 2, 2], device='cpu')
+
+    device='cpu'
+
+    T_3D = torch.tensor([2, 2, 2], device=device)
     initial_bounds_3D_np = torch.tensor([[0,0,0],[1,1,1]], dtype=torch.float32).cpu().numpy()
     manager = create_manager(T_val=T_3D, initial_bounds_val=initial_bounds_3D_np)
 
@@ -538,14 +537,14 @@ def test_add_points_with_n_dimensional_input(create_manager):
         [0.6, 0.1, 0.1], # Block (1,0,0) -> Normalized (0.2, 0.2, 0.2)
         [0.1, 0.6, 0.1], # Block (0,1,0) -> Normalized (0.2, 0.2, 0.2)
         [0.6, 0.6, 0.6]  # Block (1,1,1) -> Normalized (0.2, 0.2, 0.2)
-    ], device='cpu', dtype=torch.float32)
-    y_3D = torch.tensor([[1.0],[2.0],[3.0],[4.0]], device='cpu', dtype=torch.float32)
+    ], device=device, dtype=torch.float32)
+    y_3D = torch.tensor([[1.0],[2.0],[3.0],[4.0]], device=device, dtype=torch.float32)
 
     manager.add_points(X_3D, y_3D)
 
     assert manager.blocks.shape == (2, 2, 2)
     assert manager.block_size.shape == (3,)
-    assert torch.allclose(manager.block_size, torch.tensor([0.5, 0.5, 0.5], device='cpu'))
+    assert torch.allclose(manager.block_size, torch.tensor([0.5, 0.5, 0.5], device=device))
 
     active_blocks = manager.retrieve_active_blocks()
     assert len(active_blocks) == 4 # All 4 points should map to unique blocks
@@ -556,23 +555,26 @@ def test_add_points_with_n_dimensional_input(create_manager):
     block_0_0_0 = manager.blocks[0, 0, 0]
     assert len(block_0_0_0.X) == 1
     assert torch.allclose(block_0_0_0.X[0], X_3D[0])
-    assert torch.allclose(block_0_0_0.normalized_X[0], torch.tensor([0.2, 0.2, 0.2], device='cpu'), atol=1e-6)
+    assert torch.allclose(block_0_0_0.normalized_X.get_for_device(device)[0], torch.tensor([0.2, 0.2, 0.2], device=device), atol=1e-6)
     
     # Block (1,1,1)
     block_1_1_1 = manager.blocks[1, 1, 1]
     assert len(block_1_1_1.X) == 1
     assert torch.allclose(block_1_1_1.X[0], X_3D[3])
-    assert torch.allclose(block_1_1_1.normalized_X[0], torch.tensor([0.2, 0.2, 0.2], device='cpu'), atol=1e-6)
+    assert torch.allclose(block_1_1_1.normalized_X.get_for_device(device)[0], torch.tensor([0.2, 0.2, 0.2], device=device), atol=1e-6)
 
 
 def test_map_points_y_scalar(create_manager):
     """
     Test _map_points with scalar y values (shape [1]) and ensure they are handled correctly.
     """
-    manager = create_manager(T_val=torch.tensor([2, 2], device='cpu'), initial_bounds_val=torch.tensor([[0,0],[1,1]], dtype=torch.float32).cpu().numpy())
 
-    X = torch.tensor([[0.1, 0.1]], device='cpu', dtype=torch.float32)
-    y_scalar_input = torch.tensor([1.0], device='cpu', dtype=torch.float32) # Single scalar, will be dim 1
+    device='cpu'
+
+    manager = create_manager(T_val=torch.tensor([2, 2], device=device), initial_bounds_val=torch.tensor([[0,0],[1,1]], dtype=torch.float32).cpu().numpy())
+
+    X = torch.tensor([[0.1, 0.1]], device=device, dtype=torch.float32)
+    y_scalar_input = torch.tensor([1.0], device=device, dtype=torch.float32) # Single scalar, will be dim 1
 
     manager._update_block_arrangement(X)
     manager._map_points(X, y_scalar_input)
@@ -586,7 +588,7 @@ def test_map_points_y_scalar(create_manager):
     # After calculate_amplitude_and_target, target should be (n_samples, output_dim) -> (1,1)
     assert block.target is not None
     assert block.target.shape == (1, 1)
-    assert torch.allclose(block.target, torch.tensor([[1.0]], device='cpu'), atol=1e-6) # Assuming amplitude=1.0
+    assert torch.allclose(block.target.get_for_device(device), torch.tensor([[1.0]], device=device), atol=1e-6) # Assuming amplitude=1.0
 
     
 if __name__ == "__main__":

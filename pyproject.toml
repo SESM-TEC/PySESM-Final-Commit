@@ -6,21 +6,32 @@ build-backend = "setuptools.build_meta"
 name = "pysesm"
 version = "0.1.0"
 description = "SESM (sparse encoded surrogate model) optimization tool"
+requires-python = ">=3.12"
 authors = [
     {name = "Cindy Calderón", email = "ccalderon@itcr.ac.cr"},
     {name = "Juan Pablo Soto", email = "jusoto@itcr.ac.cr"},
     {name = "Pablo Alvarado", email = "palvarado@itcr.ac.cr"},
     {name = "Joshua Gamboa", email = "joshgc.19@gmail.com"},
     {name = "Aldo Cambronero", email = "cambroneroaldo03@gmail.com"},
-    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"}
+    {name = "Hender Valdivia", email = "hvaldivia@estudiantec.cr"},
+    {name = "Aaron Salas", email = "asalas@estudiantec.cr"}
 ]
+
 dependencies = [
     "numpy",
-    "matplotlib>=3.9.1",
-    "torch",
+    "torch>=2.0.0",
+    ]
+
+[project.optional-dependencies]
+# Dependencies needed only for running examples, experiments, and tests.
+# Install with: pip install ".[dev]"
+dev = [
+    "matplotlib",
     "scipy",
-    "logger",
     "scikit-learn",
+    "wandb",
+    "imageio",
+    "joblib",
     "plotly",
     "pandas",
     "pytest"

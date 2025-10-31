@@ -21,16 +21,14 @@ import torch
 
 from ..dictionaries.DictBaseLayer import DictBaseLayer, DictConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from ..enums.DeviceTargetEnum import DeviceTarget
 from ..factories.SparseCodingFactory import SparseCodingFactory
 from ..factories.DictFactory import DictFactory
 from ..factories.BlockManagerFactory import BlockManagerFactory
 from ..blocks.PartitionBlock import PartitionBlock
 from ..blocks.BlockManager import BlockManager, BlockManagerConfig
-from ..base_types import BaseConfig
-from ..device_manager.DeviceManager import DeviceManager
+from ..base_types import BaseConfig, TensorProxy
 
-@dataclass
+@dataclass(kw_only=True)
 class SESMConfig(BaseConfig):
     """
     Configuration for SESM model.
@@ -64,7 +62,7 @@ class SESMConfig(BaseConfig):
             functions, or a custom callable with signature (dictionary, h) -> predictions.
             Default is EVAL_DEFAULT which uses standard matrix multiplication.
         
-        log_interva (int): Every how many epochs of the main SESM loop should we log progress.
+        log_interval (int): Every how many epochs of the main SESM loop should we log progress.
     """
     n_features: int
     model_epochs: int
@@ -112,9 +110,7 @@ class SESM(torch.nn.Module, ABC):
         
         logger (logging.Logger): Logger instance for runtime information.
         
-        device_manager: Manages device allocation for different components.
-                
-        elapsed_time (float): Total training time in seconds.
+        training_time (float): Total training time in seconds.
         
         partial_fit_count (int): Number of partial_fit calls made.
     """
@@ -131,14 +127,13 @@ class SESM(torch.nn.Module, ABC):
     seed: int
     log_interval: int
     logger: logging.Logger
-    elapsed_time: float
+    training_time: float
     partial_fit_count: int
 
     def __init__(
             self,
             config: SESMConfig,
             logger: logging.Logger,
-            device_manager=None,
             dict_layer_hook: Callable[[dict], None] | None = None,
             sparse_coding_layer_hook: Callable[[dict], None] | None = None,  
             sesm_hook: Callable[[dict], None] | None = None,
@@ -153,9 +148,6 @@ class SESM(torch.nn.Module, ABC):
             
             logger (logging.Logger): Logger instance for recording runtime information,
                 debugging, and monitoring during model execution.
-            
-            device_manager (optional): Device manager for GPU/CPU allocation. If provided,
-                manages device placement for dictionary and sparse coding layers.
             
             dict_layer_hook (Callable[[dict], None], optional): Callback function called
                 during dictionary training. Receives a dict with information like parameters,
@@ -182,14 +174,15 @@ class SESM(torch.nn.Module, ABC):
         self.dict_config = config.dict_config
         self.seed = config.seed
         self.logger = logger
-        
-        
-        if device_manager is None:
-            self.device_manager = DeviceManager(logger=self.logger, default_device="cpu")
-            self.logger.info("No DeviceManager provided. Creating a default DeviceManager (CPU only).")
-        else:
-            self.device_manager = device_manager
-        
+
+        # The 'device' in SESMConfig acts as the global default.
+        global_device = config.device or "cpu"
+
+        # Assign devices to component configs, respecting overrides.
+        self.dict_config.device = self.dict_config.device or global_device
+        self.sparse_coding_config.device = self.sparse_coding_config.device or global_device
+        self.config.partition_config.device = self.config.partition_config.device or global_device
+
         # Store hooks for monitoring
         self.sesm_hook = sesm_hook
         self.dict_layer_hook = dict_layer_hook
@@ -200,7 +193,7 @@ class SESM(torch.nn.Module, ABC):
             torch.manual_seed(self.seed)
 
         # Initialize tracking variables
-        self.elapsed_time = 0
+        self.training_time = 0
         self.partial_fit_count = 0
 
         # Lists for epoch-wise losses
@@ -225,7 +218,6 @@ class SESM(torch.nn.Module, ABC):
             evaluation_func=self.evaluation_func,
             logger=self.logger,
             parameter_hook=self.dict_layer_hook,
-            device=self.device_manager.get_device(DeviceTarget.DICTIONARY_LAYER),
             **kwargs
         )
         self.logger.info(f"Dictionary Layer: {type(self.dictionary_layer).__name__}")
@@ -234,7 +226,6 @@ class SESM(torch.nn.Module, ABC):
         self.partition_manager = BlockManagerFactory.create(
             config.partition_config,
             logger=self.logger,
-            device_manager=self.device_manager,
             sparse_coding_layer_hook=self.sparse_coding_layer_hook)
         self.logger.info(f"Block Manager: {type(self.partition_manager).__name__}")
 
@@ -302,22 +293,25 @@ class SESM(torch.nn.Module, ABC):
                 config=self.sparse_coding_config,
                 evaluation_func=self.evaluation_func,
                 logger=self.logger,
-                parameter_hook=self.sparse_coding_layer_hook,
-                device=self.device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER) if self.device_manager else None
+                parameter_hook=self.sparse_coding_layer_hook
             )
 
         # Initialize layers
-        self.dictionary_layer.setup(X)
+        X_proxy = TensorProxy(X)
+        y_proxy = TensorProxy(y)
+
+        self.dictionary_layer.setup(X_proxy.get_for_device(self.dictionary_layer.device).detach())
+
         self.sparse_coding_layer.setup(h)
 
         # Main training loop
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self._train_step(X, y, self.sparse_coding_layer, epoch)
+            self._train_step(X_proxy, y_proxy, self.sparse_coding_layer, epoch)
 
             epoch_end_time = time.time()
-            self.elapsed_time += epoch_end_time - epoch_start_time
+            self.training_time += epoch_end_time - epoch_start_time
 
             self.logger.info(
                 f"Epoch {epoch + 1} - Fit: Loss Sparse Coding: {self.sparse_coding_layer_losses[-1]:.6f}, "
@@ -366,8 +360,10 @@ class SESM(torch.nn.Module, ABC):
             This method modifies the dictionary_layer parameters and the block's
             sparse_coding_layer.h in place.
         """
-        # Setup dictionary if this is the first block
-        self.dictionary_layer.setup(block.normalized_X.clone().detach().requires_grad_(False))
+        # Setup dictionary if this is the first block with the proxy's tensor
+        #  on the correct device
+        dict_device = self.dictionary_layer.device
+        self.dictionary_layer.setup(block.normalized_X.get_for_device(dict_device).detach())
         
         # Ensure sparse coding layer is initialized with block's h
         if not hasattr(block.sparse_coding_layer, 'h') or block.sparse_coding_layer.h is None:
@@ -376,18 +372,21 @@ class SESM(torch.nn.Module, ABC):
                 "is not initialized yet."
             )
 
-        # Ensure the target y have the proper dimensions
-        if block.target.dim() == 1:
-            block.target = block.target.unsqueeze(-1)
+        # Ensure the target y has the proper dimensions
+        # if block.target.dim() == 1:
+        #    block.target = block.target.unsqueeze(-1)
 
         # Train for the specified number of epochs
         
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
-            self._block_train_step(block=block,epoch=permutation+epoch)
+            self._train_step(X=block.normalized_X,
+                             y=block.target,
+                             sparsecoding=block.sparse_coding_layer,
+                             epoch=permutation + epoch)
 
-            self.elapsed_time += time.time() - epoch_start_time
+            self.training_time += time.time() - epoch_start_time
             
             if ( (self.config.log_interval>0) and
                  ( (epoch + 1) % self.config.log_interval == 0 or
@@ -396,28 +395,14 @@ class SESM(torch.nn.Module, ABC):
                 self.logger.info(
                     f"Block {block.block_index} - Epoch {epoch + 1}/{self.model_epochs}: "
                     f"Dict Loss: {self.dictionary_layer_losses[-1]:.6f}, "
-                    f"SC Loss: {block.sparse_coding_layer.losses[-1]:.6f}"
+                    f"SC Loss: {self._sparse_coding_losses[-1]:.6f}"
                 )
                 
         self.partial_fit_count += 1
 
-    def _block_train_step(self,
-                          block: PartitionBlock,
-                          epoch: int):
-        """
-        Perform a single training step through the SESM model for one block.
-        """
-
-        # X = block.normalized_X.clone().detach().requires_grad_(False)
-        X = block.normalized_X
-        y = block.target if block.target.dim() == 2 else block.target.unsqueeze(-1)
-        
-        self._train_step(X=X,y=y,sparsecoding=block.sparse_coding_layer,epoch=epoch)
-
-
     def _train_step(self,
-                    X: torch.Tensor,
-                    y: torch.Tensor,
+                    X: TensorProxy,
+                    y: TensorProxy,
                     sparsecoding: SparseCodingBaseLayer,
                     epoch: int
     ):
@@ -432,53 +417,62 @@ class SESM(torch.nn.Module, ABC):
         (e.g., GaussianDictLayer alternates between mu and rho parameters).
 
         Args:
-            X (torch.Tensor): Input data of shape (n_samples, n_features).
+            X (TensorProxy): Input data of shape (n_samples, n_features) through proxy.
             
-            y (torch.Tensor): Target data of shape (n_samples,) or (n_samples, 1).
+            y (TensorProxy): Target data of shape (n_samples,) or (n_samples, 1) through proxy.
 
             sparsecoding (SparseCodingBaseLayer): The sparse coding layer responsible for.
             
             epoch (int): number of epoch this training step belongs to.
         """
-        # Step 1: Optimize dictionary with fixed h
-        # Detach h to prevent gradient flow during dictionary optimization
-        # Ensure y is 2D for consistent matrix operations
 
-        h_detached = sparsecoding.h.detach().clone()
+        # --- Phase 1: Optimize dictionary ---
+        dict_device = self.dictionary_layer.device
+        X_dict = X.get_for_device(dict_device)
+        y_dict = y.get_for_device(dict_device)
+        h_detached_dict = sparsecoding.h.detach().to(dict_device)
 
-        # Train dictionary layer with its own training strategy
-        self.dictionary_layer.partial_fit(
-            X=X,
-            y=y,
-            h=h_detached
-        )
+        self.dictionary_layer.partial_fit(X=X_dict, y=y_dict, h=h_detached_dict)
 
         self._dict_losses.append(self.dictionary_layer.losses[-1])
         
-        # Step 2: Optimize h with fixed dictionary
-        # Detach dictionary to prevent gradient flow during sparse coding
-        dictionary_for_sparse = self.dictionary_layer.dictionary.detach()
-        sparsecoding.partial_fit(y=y, 
-                                 dictionary=dictionary_for_sparse,
-                                 reset_state=(epoch==0))
+        # --- Phase 2: Optimize sparse coding ---
+        sc_device = sparsecoding.device
+        y_sc = y.get_for_device(sc_device)
+        dictionary_for_sparse = self.dictionary_layer.dictionary.detach().to(sc_device)
 
-        self._sparse_coding_losses.append(sparsecoding.losses[-1])
+
+        if sparsecoding.config.epochs > 0:
+            sparsecoding.partial_fit(y=y_sc,
+                                     dictionary=dictionary_for_sparse,
+                                     #reset_state=(epoch == 0))
+                                     reset_state=True)
+            self._sparse_coding_losses.append(sparsecoding.losses[-1])
+        else:
+            # If no training happened, calculate the current forward loss with the fixed h
+            with torch.no_grad():
+                loss = sparsecoding.forward(y=y_sc, dictionary=dictionary_for_sparse, log_losses=False)
+                self._sparse_coding_losses.append(loss.item())       
+        
         
         # Call SESM hook if provided for monitoring
         if self.sesm_hook is not None:
-            hook_info = {
-                'partial_fit_count': self.partial_fit_count,
-                'sparse_coding_losses': sparsecoding.losses[-sparsecoding.config.epochs:],
-                'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
-                'h': sparsecoding.h.detach().clone(),
-                'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
-                'model_epoch': epoch
-            }
-            self.sesm_hook(hook_info)
+            if self.config.log_interval > 0 and (epoch + 1) % self.config.log_interval == 0:
+                hook_info = {
+                    'partial_fit_count': self.partial_fit_count,
+                    # Pass the last computed sparse coding loss, which is always available now.
+                    # Wrap it in a list to maintain the expected type for the hook.
+                    'sparse_coding_losses': [self._sparse_coding_losses[-1]],
+                    'dictionary_losses': self.dictionary_layer_losses[-self.dictionary_layer.config.epochs:],
+                    'h': sparsecoding.h.detach().clone(),
+                    'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
+                    'model_epoch': epoch
+                }
+                self.sesm_hook(hook_info)
             
     def predict(self,
                 X: torch.Tensor,
-                y: torch.Tensor = None) -> torch.Tensor:
+                custom_h: torch.Tensor | None = None) -> torch.Tensor:
         """
         Generate predictions using the trained SESM model with fit, i.e. a single block.
         
@@ -488,7 +482,7 @@ class SESM(torch.nn.Module, ABC):
         Args:
             X (torch.Tensor): Input data of shape (n_samples, n_features) where
                 predictions are needed.
-            y (torch.Tensor, optional): Custom sparse vector to use for
+            custom_h (torch.Tensor, optional): Custom sparse vector to use for
                 predictions instead of the learned h. Shape should be (n_functions, 1).
                 Useful for evaluating different sparse representations.
 
@@ -499,13 +493,13 @@ class SESM(torch.nn.Module, ABC):
         Raises:
             ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        return self._predict(X,self.sparse_coding_layer,y)
+        return self._predict(X,self.sparse_coding_layer,custom_h)
 
     def _predict(
             self,
             X: torch.Tensor,
             sparsecoding: SparseCodingBaseLayer,
-            y: torch.Tensor = None
+            custom_h: torch.Tensor | None = None
     ) -> torch.Tensor:
         """
         Generate predictions using the trained SESM model, but for one block only.
@@ -523,7 +517,7 @@ class SESM(torch.nn.Module, ABC):
             sparsecoding (SparseCodingBaseLayer): the sparse coding layer of the block
                 in charge of the X points.
             
-            y (torch.Tensor, optional): Custom sparse vector to use for
+            custom_h (torch.Tensor, optional): Custom sparse vector to use for
                 predictions instead of the learned h. Shape should be (n_functions, 1).
                 Useful for evaluating different sparse representations.
 
@@ -534,19 +528,22 @@ class SESM(torch.nn.Module, ABC):
         Raises:
             ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        device = self.device_manager.get_device(DeviceTarget.GLOBAL) if self.device_manager else X.device
+        # Prediction should happen on the dictionary's device.
+        device = self.dictionary_layer.device
+        X = X.to(device)
 
         # Evaluate dictionary at input points
         with torch.no_grad():
             self.dictionary_layer.dictionary = self.dictionary_layer.forward(X)
 
-        dictionary = self.dictionary_layer.dictionary.to(device)
-        
+        # The dictionary is already on the correct device from the forward pass.
+        dictionary = self.dictionary_layer.dictionary
+
         # Determine which h to use
-        if y is not None:
-            h = y.to(device)
-        elif sparsecoding.h is not None:
-            h = sparsecoding.h.to(device)
+        if custom_h is not None:
+            h = custom_h.to(device).detach()
+        elif sparsecoding is not None and sparsecoding.h is not None:
+            h = sparsecoding.h.to(device).detach()
         else:
             raise ValueError("No sparse vector available for prediction. Train the model first or provide custom_h.")
         
@@ -578,6 +575,7 @@ class SESM(torch.nn.Module, ABC):
         Raises:
             ValueError: If no sparse vector is available (neither trained nor custom_h).
         """
-        X = block.normalized_X.clone().detach().requires_grad_(False)
+        # Get the tensor on the dictionary's device for prediction.
+        X = block.normalized_X.get_for_device(self.dictionary_layer.device).detach()
         return self._predict(X,block.sparse_coding_layer,custom_h)
     

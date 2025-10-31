@@ -34,7 +34,7 @@ class MomentumScheme(Enum):
     ORIGINAL = auto()   # Standard FISTA scheme: t_{k+1} = (1 + sqrt(1 + 4*t_k^2)) / 2
     MONOTONIC = auto()  # Alternative scheme for better stability: t_{k+1} = (1 + sqrt(1 + 8*t_k^2)) / 4
     
-@dataclass
+@dataclass(kw_only=True)
 class FISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the FISTA algorithm.
@@ -80,7 +80,6 @@ class FISTALayer(SparseCodingBaseLayer):
         logger (logging.Logger): Logger for recording debug information.
         debug (bool): Whether to enable detailed debug logging.
         parameter_hook (Callable): Optional callback function to monitor internal state.
-        device: Device to run computations on.
         t (float): Momentum parameter for FISTA.
         z (torch.Tensor): Auxiliary variable for momentum acceleration.
         prev_h (torch.Tensor): Previous iteration's sparse vector.
@@ -97,8 +96,7 @@ class FISTALayer(SparseCodingBaseLayer):
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Callable[[dict], None] | None = None,
-            device = None):
+            parameter_hook: Callable[[dict], None] | None = None):
         """
         Initializes the FISTALayer with the specified hyperparameters and components.
 
@@ -107,14 +105,12 @@ class FISTALayer(SparseCodingBaseLayer):
             logger (logging.Logger, optional): Logger for recording debug information.
             debug (bool, optional): Whether to enable detailed debug logging.
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
-            device: Device to run computations on.
         """
         super().__init__(config=config,
                          evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
-                         parameter_hook=parameter_hook,
-                         device=device)
+                         parameter_hook=parameter_hook)
 
         self.losses = []
         self.last_eigenvector = None  # For warm starting calculations
@@ -272,7 +268,7 @@ class FISTALayer(SparseCodingBaseLayer):
             # Call parameter hook if provided
             if self.parameter_hook is not None:
                 hook_info = {
-                    'h': self.h.detach().clone(),
+                    'h': self.h.detach().clone(), # pylint: disable=not-callable
                     'z': self.z.detach().clone(),
                     't': self.t,
                     'gradient': gradient.detach().clone(),

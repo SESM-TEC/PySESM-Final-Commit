@@ -1,13 +1,12 @@
 # tests/unit_test/sparse_coding/base_sparse_coding_test.py
-import pytest
-import torch
-import logging
 from abc import ABC, abstractmethod
 from unittest.mock import MagicMock
 
+import pytest
+import torch
+
 # Import base class and config for type hinting
-from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
-from pysesm.enums.DeviceTargetEnum import DeviceTarget # For device manager tests
+# from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 
 # This file defines the base tests that all specific sparse coding layers should pass.
 # It focuses on "programming correctness" rather than numerical convergence.
@@ -21,7 +20,7 @@ class BaseSparseCodingTest(ABC):
 
     @pytest.fixture(autouse=True)
     @abstractmethod
-    def layer_factory(self, common_logger, common_device_manager, common_evaluation_func):
+    def layer_factory(self, common_logger, common_device, common_evaluation_func):
         """
         Abstract factory fixture that concrete test classes must implement.
         It should return an object with:
@@ -36,14 +35,14 @@ class BaseSparseCodingTest(ABC):
         #             config=config,
         #             evaluation_func=common_evaluation_func,
         #             logger=common_logger,
-        #             device=common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+        #             device=common_device
         #         )
         # return SpecificLayerFactory()
-        pass
+
 
     # --- Common Tests Focusing on Programming Correctness ---
 
-    def test_initialization_of_h_tensor_properties(self, layer_factory, common_device_manager):
+    def test_initialization_of_h_tensor_properties(self, layer_factory, common_device):
         """
         Verify that `h` is initialized as a PyTorch Parameter, is on the correct device,
         and has `requires_grad=False`.
@@ -55,11 +54,11 @@ class BaseSparseCodingTest(ABC):
         assert isinstance(layer.h, torch.nn.Parameter), "`h` should be a torch.nn.Parameter"
         assert layer.h.requires_grad is False, "`h` should not require gradients in sparse coding"
         # CORRECTED: Convert torch.device object to string for comparison
-        assert str(layer.h.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
-            f"`h` should be on the correct device. Expected {common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)}, got {layer.h.device}"
+        assert str(layer.h.device) == common_device, \
+            f"`h` should be on the correct device. Expected {common_device}, got {layer.h.device}"
         assert layer.h.shape == (n_functions, 1), "`h` should have shape (n_functions, 1)"
 
-    def test_setup_with_custom_h(self, layer_factory, common_device_manager):
+    def test_setup_with_custom_h(self, layer_factory, common_device):
         """
         Verify that `setup()` correctly initializes `h` with a custom tensor if provided.
         """
@@ -67,7 +66,7 @@ class BaseSparseCodingTest(ABC):
         custom_h_val = torch.randn(n_functions, 1)
         
         # Test 1: Initialize config with initial_h
-        config = layer_factory.config_class(n_functions=n_functions, initial_h=custom_h_val)
+        config = layer_factory.config_class(n_functions=n_functions, initial_h=custom_h_val, device=common_device)
         layer = layer_factory.create(config)
         assert torch.allclose(layer.h.cpu(), custom_h_val), "Layer should initialize h with provided `initial_h` from config"
         assert layer.h.requires_grad is False # Still no gradients
@@ -135,7 +134,7 @@ class BaseSparseCodingTest(ABC):
             assert info_dict['h'].requires_grad is False, "'h' in hook info should be detached"
             assert isinstance(info_dict['loss'], float), "'loss' in hook info should be a float"
 
-    def test_device_placement_during_training(self, layer_factory, sparse_coding_data_generator, common_device_manager):
+    def test_device_placement_during_training(self, layer_factory, sparse_coding_data_generator, common_device):
         """
         Verify that tensors are moved to the correct device during training steps.
         """
@@ -151,12 +150,12 @@ class BaseSparseCodingTest(ABC):
         layer = layer_factory.create(config)
         
         # Ensure layer itself is on the correct device
-        assert str(next(layer.parameters()).device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
-        assert str(layer.h.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER)
+        assert str(next(layer.parameters()).device) == common_device
+        assert str(layer.h.device) == common_device
 
         # Mock the `forward` method of the actual criterion object to observe its inputs
         # The criterion is already initialized by the layer's constructor (e.g., as MSELoss)
-        original_criterion_forward = layer.criterion.forward # Store original to restore later if needed
+        # original_criterion_forward = layer.criterion.forward # Store original to restore later if needed
         mock_criterion_forward = MagicMock(side_effect=lambda x, y: torch.tensor(0.0, device=x.device))
         layer.criterion.forward = mock_criterion_forward # Mock only the forward method
                 
@@ -164,9 +163,9 @@ class BaseSparseCodingTest(ABC):
         
         # Verify inputs to criterion are on the correct device
         called_y_pred, called_target_y = mock_criterion_forward.call_args[0]
-        assert str(called_y_pred.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+        assert str(called_y_pred.device) == common_device, \
             "Predicted y in criterion should be on correct device"
-        assert str(called_target_y.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+        assert str(called_target_y.device) == common_device, \
             "Target y in criterion should be on correct device"
 
         # Dynamically check type to avoid import cycle for ADMMLayer and FISTALayer
@@ -178,10 +177,10 @@ class BaseSparseCodingTest(ABC):
             ADMMLayer = FISTALayer = type(None) # Use a dummy type if not available
         
         if isinstance(layer, (ADMMLayer, FISTALayer)):
-            assert str(layer.z.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+            assert str(layer.z.device) == common_device, \
                 "Auxiliary variable `z` should be on correct device"
             if isinstance(layer, ADMMLayer): # ADMM specific
-                assert str(layer.u.device) == common_device_manager.get_device(DeviceTarget.SPARSE_CODING_LAYER), \
+                assert str(layer.u.device) == common_device, \
                     "Auxiliary variable `u` should be on correct device"
 
     def test_criterion_is_used(self, layer_factory, sparse_coding_data_generator):
@@ -267,4 +266,4 @@ class BaseSparseCodingTest(ABC):
         This is a workaround specific to Python's import system if direct imports cause issues.
         """
         # This can remain a placeholder or be removed if not strictly necessary and direct imports are fine.
-        pass
+

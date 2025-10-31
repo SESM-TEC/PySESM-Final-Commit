@@ -24,7 +24,7 @@ from .sparse_coding_utils import StepSizeMethod, soft_threshold, calculate_step_
 
 __all__ = ['ISTALayer', 'ISTAConfig', 'StepSizeMethod']
 
-@dataclass
+@dataclass(kw_only=True)
 class ISTAConfig(SparseCodingConfig):
     """
     Configuration parameters for the ISTA algorithm.
@@ -66,7 +66,6 @@ class ISTALayer(SparseCodingBaseLayer):
         logger (logging.Logger): Logger for recording debug information.
         debug (bool): Whether to enable detailed debug logging.
         parameter_hook (Callable): Optional callback function to monitor internal state.
-        device: Device to run computations on.
         last_eigenvector (torch.Tensor): Last computed eigenvector for warm-starting calculations.
     """
 
@@ -78,8 +77,7 @@ class ISTALayer(SparseCodingBaseLayer):
             evaluation_func:  Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
             logger: logging.Logger | None = None,
             debug: bool = False,
-            parameter_hook: Callable[[dict], None] | None = None,
-            device = None):
+            parameter_hook: Callable[[dict], None] | None = None):
         """
         Initializes the ISTALayer with the specified hyperparameters and components.
 
@@ -88,14 +86,12 @@ class ISTALayer(SparseCodingBaseLayer):
             logger (logging.Logger, optional): Logger for recording debug information.
             debug (bool, optional): Whether to enable detailed debug logging.
             parameter_hook (Callable, optional): Callback function to inspect the current parameter state.
-            device: Device for computation (CPU/GPU).
         """
         super().__init__(config=config,
                          evaluation_func=evaluation_func,
                          logger=logger,
                          debug=debug,
-                         parameter_hook=parameter_hook,
-                         device=device)
+                         parameter_hook=parameter_hook)
 
         self.losses = []
         self.last_eigenvector = None  # For warm starting calculations
@@ -191,7 +187,7 @@ class ISTALayer(SparseCodingBaseLayer):
             # Call parameter hook if provided
             if self.parameter_hook is not None:
                 hook_info = {
-                    'h': self.h.detach().clone(),
+                    'h': self.h.detach().clone(), # pylint: disable=not-callable
                     'gradient': gradient.detach().clone(),
                     'loss': loss.item(),
                     'alpha': step_size
@@ -243,6 +239,7 @@ class ISTALayer(SparseCodingBaseLayer):
             y (torch.Tensor): Target vector.
             dictionary (torch.Tensor): Dictionary matrix.
             log_losses (bool): Whether to log losses.
+            reset_state (bool): if False, keep internal state for eigenvector computation
         """
         epochs = self.config.epochs
 

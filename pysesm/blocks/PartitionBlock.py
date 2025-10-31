@@ -10,14 +10,14 @@ Authors: The SESM Team
 License: 
 '''
 
-from typing import Tuple, Optional
-
 import torch
+
+
+from pysesm.base_types import TensorProxy
+
 
 # Import the specific base class for type hinting
 from pysesm.sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer
-
-# TODO: Why is X a list of tensors and not simply a tensor?  
 
 class PartitionBlock:
     """
@@ -27,6 +27,8 @@ class PartitionBlock:
     input space and manages the data points (X, y) that fall within its boundaries.
     It holds references to its own data, an associated sparse coding layer,
     and properties needed for local model evaluation.
+
+    X and y are implemented as lists of tensors to optimize adding points to them.
 
     Attributes:
     - space_origin (torch.Tensor): The minimum coordinates (origin) of the entire
@@ -44,12 +46,12 @@ class PartitionBlock:
     - X (list[torch.Tensor]): List of original, unnormalized input data points (features)
                               that have been assigned to this block. Each element is
                               a tensor of shape (n_features,).
-    - normalized_X (Optional[torch.Tensor]): Stacked and normalized (0 to 1) version of X,
+    - normalized_X (Optional[TensorProxy]): Stacked and normalized (0 to 1) version of X,
                                           relative to the block's `block_scope`.
                                           Shape: (n_samples_in_block, n_features).
     - y (list[torch.Tensor]): List of original, unnormalized target values (outputs)
                               corresponding to points in X. Each element is a tensor.
-    - target (Optional[torch.Tensor]): Stacked and amplitude-scaled version of y.
+    - target (Optional[TensorProxy]): Stacked and amplitude-scaled version of y.
                                     This is the target used for sparse coding.
                                     Shape: (n_samples_in_block, output_dim).
     - positions (list[int]): List of original indices of points added to this block,
@@ -64,7 +66,7 @@ class PartitionBlock:
     def __init__(
         self,
         space_origin: torch.Tensor,
-        block_index: Tuple[int, ...], # Use Tuple for clarity
+        block_index: tuple[int, ...], # Use Tuple for clarity
         block_size: torch.Tensor,
         device: torch.device,
     ):
@@ -87,12 +89,15 @@ class PartitionBlock:
         
         self.amplitude: float = 1.0
         self.X: list[torch.Tensor] = []
-        self.normalized_X: Optional[torch.Tensor] = None
+        self.normalized_X: TensorProxy | None = None
         self.y: list[torch.Tensor] = []
-        self.target: Optional[torch.Tensor] = None
+        self.target: TensorProxy | None = None
         self.positions: list[int] = []
         self.predicted_output: list = []
-        self.sparse_coding_layer: Optional[SparseCodingBaseLayer] = None
+        self.sparse_coding_layer: SparseCodingBaseLayer | None = None
+
+        # Cache for device-specific data copies
+        self._device_data_cache = {}
         
     def new_point(self, point_x: torch.Tensor, point_y: torch.Tensor, pos: int):
         """
@@ -148,6 +153,7 @@ class PartitionBlock:
         self.y = []
         self.target = None
         self.positions = []
+        self._device_data_cache.clear()
 
 
     def is_active(self,threshold=0) -> bool:
@@ -158,8 +164,9 @@ class PartitionBlock:
             bool: True if the block has points, False otherwise.
         """
         return len(self.X) > threshold
+    
 
-    def normalize_points(self):
+    def normalize_points(self, preserve_aspect_ratio: bool = True):
         """
         Normalizes the X coordinates of all points within the block to a [0, 1] range,
         relative to the block's own `block_scope`.
@@ -174,14 +181,19 @@ class PartitionBlock:
         min_vals = self.block_scope[0].to(self.device)
         sizes = self.block_size.to(self.device) 
 
+        if preserve_aspect_ratio:
+            divisor = sizes.max()
+        else:
+            divisor = sizes
+
         # Protect against division by zero for any dimension that has zero size.
         # This might indicate malformed block sizes or degenerate dimensions.
-        sizes[sizes == 0] = 1.0 
+        divisor[divisor == 0] = 1.0 if isinstance(divisor, torch.Tensor) else (1.0 if divisor == 0 else divisor)
 
-        self.normalized_X = (tensor_X - min_vals) / sizes
+        self.normalized_X = TensorProxy((tensor_X - min_vals) / divisor)
 
 
-    def _create_target_tensor(self) -> Optional[torch.Tensor]:
+    def _create_target_tensor(self) -> torch.Tensor | None:
         """
         Private helper: Stacks and formats 'y' data into a 2D tensor,
         then scales it by `self.amplitude`. Does NOT calculate amplitude.
@@ -235,7 +247,8 @@ class PartitionBlock:
             self.amplitude = 1.0
 
         # Now, use the new helper method to create the target tensor
-        self.target = self._create_target_tensor()
+        target_tensor = self._create_target_tensor()
+        self.target = TensorProxy(target_tensor) if target_tensor is not None else None
         
     def prepare_target_for_inference(self):
         """
@@ -248,4 +261,5 @@ class PartitionBlock:
             return
 
         # Directly use the helper method; self.amplitude is assumed to be set already.
-        self.target = self._create_target_tensor()
+        target_tensor = self._create_target_tensor()
+        self.target = TensorProxy(target_tensor) if target_tensor is not None else None

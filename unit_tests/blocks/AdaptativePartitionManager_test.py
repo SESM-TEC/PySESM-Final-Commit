@@ -5,32 +5,23 @@ import pytest
 from typing import Union, Optional
 
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager,AdaptativePartitionConfig
-from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks import KDTree
 from pysesm.blocks import Node
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
-from pysesm.device_manager.DeviceManager import DeviceManager
 from pysesm.utils.loggers import setup_logger
 from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig
 
 logger = logging.getLogger("test_uniform_partition_manager")
 logger.setLevel(logging.DEBUG)
 
+# pylint: disable=redefined-outer-name
 
 @pytest.fixture(scope="module")
-def common_device_manager():
-    """Provides a shared DeviceManager instance for all tests in this module."""
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu" # Assuming TargetDevice is an alias for DeviceTarget
-    }
-    # Using a unique logger for the DeviceManager fixture to avoid conflicts
-    return DeviceManager(logging.getLogger("test_device_manager_fixture"), default_device="cpu", device_map=device_map)
+def common_device():
+    """Provides a default device."""
+    return "cpu"
 
 @pytest.fixture
-def create_manager(common_device_manager):
+def create_manager(common_device):
     """
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
@@ -47,12 +38,12 @@ def create_manager(common_device_manager):
         config = AdaptativePartitionConfig(
             maxNodeSize=5,
             maxSplitsBeforeRestart=5,
-            overlap_ratio=None
+            overlap_ratio=None,
+            device=common_device
         )
         return AdaptativePartitionManager(
             config=config,
-            logger=logger, # Use the module-level logger for the manager
-            device_manager=common_device_manager
+            logger=logger # Use the module-level logger for the manager            
         )
     return _creator
 
@@ -168,14 +159,14 @@ def test_map_points(create_manager):
     assert torch.equal(in_blocks,sort_X)
     assert torch.equal(in_blocks_y,sort_y)
 
-def test_add_points(create_manager, common_device_manager):
+def test_add_points(create_manager, common_device):
     n_features=5
     X1 = torch.randn(500, n_features)
     maxNodeSize=5
     maxSplitsBeforeRestart=5
     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
 
-    device = common_device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
+    device = common_device
 
     y = torch.randn(500, 1)
 
@@ -252,7 +243,7 @@ def test_init_sparse_coding_per_block_initializes_layers(create_manager):
         assert block.sparse_coding_layer.h is not None
         assert block.sparse_coding_layer.h.shape == (5, 1) # Check h shape based on n_functions
 
-def test_retrieve_active_blocks(create_manager, common_device_manager):
+def test_retrieve_active_blocks(create_manager, common_device):
 
     n_features=5
     X1 = torch.randn(500, n_features)

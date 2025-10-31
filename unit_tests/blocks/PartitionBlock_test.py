@@ -1,18 +1,23 @@
-from pysesm.blocks.PartitionBlock import PartitionBlock
-import numpy as np
-import torch
 import copy
 import pytest
+
+import numpy as np
+import torch
+
+from pysesm.blocks.PartitionBlock import PartitionBlock
 
 DEFAULT_BLOCKS_PER_DIM = 4
 
 def test_partition_block_initialization():
     """Test the initialization of a PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
+ 
+    device='cpu'
 
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+    space_origin = torch.tensor([0.0, 0.0], device=device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=device)
+
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
 
     assert block.block_index == block_index
     assert torch.allclose(block.block_size, block_size)
@@ -32,13 +37,16 @@ def test_partition_block_initialization():
 
 def test_add_point_to_block():
     """Test adding a point to the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+ 
+    device='cpu'
 
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
+    space_origin = torch.tensor([0.0, 0.0], device=device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+
+    point_x = torch.tensor([0.5, 0.5], device=device)
+    point_y = torch.tensor([1.0], device=device)
     pos = 0
 
     block.new_point(point_x, point_y, pos)
@@ -50,13 +58,16 @@ def test_add_point_to_block():
 
 def test_clear_points():
     """Test clearing all points from the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
 
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+
+    point_x = torch.tensor([0.5, 0.5], device=device)
+    point_y = torch.tensor([1.0], device=device)
     pos = 0
 
     block.new_point(point_x, point_y, pos)
@@ -69,15 +80,18 @@ def test_clear_points():
 
 def test_is_active():
     """Test the is_active property of the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
+
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
 
     assert not block.is_active()
 
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
+    point_x = torch.tensor([0.5, 0.5], device=device)
+    point_y = torch.tensor([1.0], device=device)
     pos = 0
 
     block.new_point(point_x, point_y, pos)
@@ -86,54 +100,60 @@ def test_is_active():
 
 def test_normalize():
     """Test the normalization of points within the block."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
 
-    point_x = torch.tensor([0.5, 0.5], device='cpu')
-    point_y = torch.tensor([1.0], device='cpu')
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+
+    point_x = torch.tensor([0.5, 0.5], device=device)
+    point_y = torch.tensor([1.0], device=device)
     pos = 0
 
     block.new_point(point_x, point_y, pos)
     block.normalize_points()
 
     assert block.normalized_X is not None
-    assert torch.allclose(block.normalized_X, torch.tensor([[0.5, 0.5]], device='cpu'))
+    assert torch.allclose(block.normalized_X.get_for_device(device), torch.tensor([[0.5, 0.5]], device=device))
 
 
 def test_normalize_extreme_block_sizes():
     """Test normalization with very small and very large block sizes."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
+
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     
     # Very small block size
-    block_size_small = torch.tensor([1e-6, 1e-6], device='cpu')
-    block_small = PartitionBlock(space_origin, block_index, block_size_small, device='cpu')
+    block_size_small = torch.tensor([1e-6, 1e-6], device=device)
+    block_small = PartitionBlock(space_origin, block_index, block_size_small, device=device)
     
-    point_small = torch.tensor([0.5e-6, 0.5e-6], device='cpu')
-    block_small.new_point(point_small, torch.tensor([1.0], device='cpu'), 0)
+    point_small = torch.tensor([0.5e-6, 0.5e-6], device=device)
+    block_small.new_point(point_small, torch.tensor([1.0], device=device), 0)
     block_small.normalize_points()
     
-    min_vals = block_small.block_scope[0].to('cpu')
-    sizes = block_small.block_size.to('cpu')
+    min_vals = block_small.block_scope[0].to(device)
+    sizes = block_small.block_size.to(device)
     expected_normalized_small = (point_small - min_vals) / sizes
     
-    assert torch.allclose(block_small.normalized_X, expected_normalized_small, rtol=1e-5, atol=1e-8)
+    assert torch.allclose(block_small.normalized_X.get_for_device(device), expected_normalized_small, rtol=1e-5, atol=1e-8)
 
     # Very large block size
-    block_size_large = torch.tensor([1e6, 1e6], device='cpu')
-    block_large = PartitionBlock(space_origin, block_index, block_size_large, device='cpu')
+    block_size_large = torch.tensor([1e6, 1e6], device=device)
+    block_large = PartitionBlock(space_origin, block_index, block_size_large, device=device)
     
-    point_large = torch.tensor([0.5e6, 0.5e6], device='cpu')
-    block_large.new_point(point_large, torch.tensor([1.0], device='cpu'), 0)
+    point_large = torch.tensor([0.5e6, 0.5e6], device=device)
+    block_large.new_point(point_large, torch.tensor([1.0], device=device), 0)
     block_large.normalize_points()
     
-    min_vals = block_large.block_scope[0].to('cpu')
-    sizes = block_large.block_size.to('cpu')
+    min_vals = block_large.block_scope[0].to(device)
+    sizes = block_large.block_size.to(device)
     expected_normalized_large = (point_large - min_vals) / sizes
     
-    assert torch.allclose(block_large.normalized_X, expected_normalized_large, rtol=1e-5, atol=1e-8)
+    assert torch.allclose(block_large.normalized_X.get_for_device(device), expected_normalized_large, rtol=1e-5, atol=1e-8)
 
 
 def test_partition_block_calculate_amplitude_and_target():
@@ -142,7 +162,7 @@ def test_partition_block_calculate_amplitude_and_target():
     computes amplitude and scales target values.
     """
 
-    cpu_device=torch.device('cpu');
+    cpu_device=torch.device("cpu");
     
     # 1. Setup a dummy PartitionBlock
     # These spatial parameters don't affect amplitude/target, but are required for init.
@@ -175,7 +195,7 @@ def test_partition_block_calculate_amplitude_and_target():
     # Original y values: [1.5, -2.0, 0.5]
     # Expected target values: [1.5 * 0.5, -2.0 * 0.5, 0.5 * 0.5] = [0.75, -1.0, 0.25]
     expected_target_values = torch.tensor([[0.75], [-1.0], [0.25]], device=cpu_device) # Uniques to -1 for 2D
-    assert torch.allclose(block.target, expected_target_values, atol=1e-6)
+    assert torch.allclose(block.target.get_for_device(cpu_device), expected_target_values, atol=1e-6)
 
     # --- Test Case 2: Max absolute y value <= 1 ---
     # Clear previous points for the next test case
@@ -195,7 +215,7 @@ def test_partition_block_calculate_amplitude_and_target():
 
     # Assertions for target (scaled y values - no change as amplitude is 1.0)
     expected_target_values_2 = torch.tensor([[0.3], [-0.5], [0.1]], device=cpu_device)
-    assert torch.allclose(block.target, expected_target_values_2, atol=1e-6)
+    assert torch.allclose(block.target.get_for_device(cpu_device), expected_target_values_2, atol=1e-6)
 
     # --- Test Case 3: Empty block ---
     block.clear_points()
@@ -208,7 +228,7 @@ def test_partition_block_calculate_amplitude_and_target():
     block.new_point(torch.tensor([0.1, 0.1], device=cpu_device), torch.tensor(2.5, device=cpu_device), 0)
     block.calculate_amplitude_and_target()
     assert pytest.approx(block.amplitude, rel=1e-6) == 1.0 / 2.5
-    assert torch.allclose(block.target, torch.tensor([[1.0]], device=cpu_device), atol=1e-6)
+    assert torch.allclose(block.target.get_for_device(cpu_device), torch.tensor([[1.0]], device=cpu_device), atol=1e-6)
 
 
     # --- Test Case 5: Single multi-dim y value in list ---
@@ -216,20 +236,23 @@ def test_partition_block_calculate_amplitude_and_target():
     block.new_point(torch.tensor([0.1, 0.1], device=cpu_device), torch.tensor([1.0, 3.0], device=cpu_device), 0)
     block.calculate_amplitude_and_target()
     assert pytest.approx(block.amplitude, rel=1e-6) == 1.0 / 3.0
-    assert torch.allclose(block.target, torch.tensor([[1.0/3.0, 1.0]], device=cpu_device), atol=1e-6)
+    assert torch.allclose(block.target.get_for_device(cpu_device), torch.tensor([[1.0/3.0, 1.0]], device=cpu_device), atol=1e-6)
 
 
 # En tests/unit_test/blocks/PartitionBlock_test.py
 
 def test_append_points_to_block():
     """Test appending multiple points to the PartitionBlock."""
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
-    block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
 
-    points_x = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
-    points_y = torch.tensor([[1.0], [2.0], [3.0]], device='cpu')
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
+    block_index = (0, 0)
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+
+    points_x = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device=device)
+    points_y = torch.tensor([[1.0], [2.0], [3.0]], device=device)
     positions = [0, 1, 2]
 
     block.append_points(points_x, points_y, positions)
@@ -240,8 +263,8 @@ def test_append_points_to_block():
     assert block.positions == positions
 
     # Test appending more points
-    more_points_x = torch.tensor([[0.2, 0.2], [0.8, 0.8]], device='cpu')
-    more_points_y = torch.tensor([[4.0], [5.0]], device='cpu')
+    more_points_x = torch.tensor([[0.2, 0.2], [0.8, 0.8]], device=device)
+    more_points_y = torch.tensor([[4.0], [5.0]], device=device)
     more_positions = [3, 4]
 
     block.append_points(more_points_x, more_points_y, more_positions)
@@ -255,22 +278,25 @@ def test_append_points_dimension_mismatch_raises_error():
     """
     Test that append_points raises ValueError if input dimensions mismatch.
     """
-    space_origin = torch.tensor([0.0, 0.0], device='cpu')
+
+    device='cpu'
+
+    space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
-    block_size = torch.tensor([1.0, 1.0], device='cpu')
-    block = PartitionBlock(space_origin, block_index, block_size, device='cpu')
+    block_size = torch.tensor([1.0, 1.0], device=device)
+    block = PartitionBlock(space_origin, block_index, block_size, device=device)
 
     # Mismatch: points_x (3 samples), points_y (2 samples)
-    points_x_mismatch = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
-    points_y_mismatch = torch.tensor([[1.0], [2.0]], device='cpu')
+    points_x_mismatch = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device=device)
+    points_y_mismatch = torch.tensor([[1.0], [2.0]], device=device)
     positions_mismatch = [0, 1, 2]
 
     with pytest.raises(ValueError, match="Dimension mismatch"):
         block.append_points(points_x_mismatch, points_y_mismatch, positions_mismatch)
 
     # Mismatch: points_x (3 samples), positions (2 samples)
-    points_x_mismatch2 = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device='cpu')
-    points_y_mismatch2 = torch.tensor([[1.0], [2.0], [3.0]], device='cpu')
+    points_x_mismatch2 = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device=device)
+    points_y_mismatch2 = torch.tensor([[1.0], [2.0], [3.0]], device=device)
     positions_mismatch2 = [0, 1]
 
     with pytest.raises(ValueError, match="Dimension mismatch"):

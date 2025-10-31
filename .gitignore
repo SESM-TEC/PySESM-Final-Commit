@@ -166,3 +166,6 @@ wandb/
 .am*
 .ipynb*checkpoints
 *~
+
+#Pytorch models
+*.pth

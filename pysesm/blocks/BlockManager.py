@@ -11,7 +11,8 @@ License:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Union, Callable, Optional
+from typing import Union
+from collections.abc import Callable
 
 import logging
 import warnings
@@ -24,11 +25,8 @@ from pysesm.base_types import BaseConfig, TensorBatch
 from .PartitionBlock import PartitionBlock
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 
-from ..enums.DeviceTargetEnum import DeviceTarget # Assuming this is in pysesm.enums
-from ..device_manager.DeviceManager import DeviceManager # Assuming this is in pysesm.device_manager
 
-
-@dataclass
+@dataclass(kw_only=True)
 class BlockManagerConfig(BaseConfig):
     """Base configuration for all block manager configurations"""
     # Inherited classes should define their specific attributes
@@ -61,8 +59,7 @@ class BlockManager(ABC):
     @abstractmethod
     def __init__(self,
                  config: BlockManagerConfig,
-                 logger: logging.Logger, # Assume all block managers need a logger
-                 device_manager: Optional[DeviceManager] = None):
+                 logger: logging.Logger): 
         """
         Abstract initializer for the BlockManager.
 
@@ -78,8 +75,8 @@ class BlockManager(ABC):
         # Store these base attributes
         self.config = config
         self.logger = logger
-        self.device = device_manager.get_device(DeviceTarget.PARTITION_MANAGER)
-        self.blocks = None #
+        self.device = torch.device(config.device) if config.device else torch.device('cpu')
+        self.blocks = None
 
     @abstractmethod
     def _find_block(self, x: torch.Tensor) -> Union[PartitionBlock, None]:

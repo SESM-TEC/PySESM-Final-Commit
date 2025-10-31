@@ -9,6 +9,10 @@ import torch
 from pysesm.blocks.PartitionBlock import PartitionBlock
 
 class SESMData():
+    """
+    Encapsulates data as needed by the kd-tree to hold a level-wise 
+    access to data in SESM.
+    """
     def __init__(self, X, y):
         self.X: torch.Tensor = X
         self.y: torch.Tensor = y

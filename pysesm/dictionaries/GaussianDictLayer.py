@@ -18,13 +18,14 @@ from pysesm.functions.GaussianFunction import GaussianFunction
 from pysesm.base_types import TensorBatch
 from .DictBaseLayer import DictBaseLayer, DictConfig
 
-@dataclass
+@dataclass(kw_only=True)
 class GaussianDictConfig(DictConfig):
     """Configuration specific to Gaussian dictionaries"""
     mu_epochs: int = 10
     rho_epochs: int = 10
     split_mu_rho: bool = True
     # Parameters for GaussianFunction initialization
+    # Note: mu_range and eig_range operate in the NORMALIZED block space (e.g., [0, 1]).
     eig_range: list = None
     mu_range: list = None
 
@@ -42,7 +43,6 @@ class GaussianDictLayer(DictBaseLayer):
         evaluation_func: Callable[[TensorBatch, TensorBatch], TensorBatch],
         logger: logging.Logger,
         parameter_hook: Callable[[dict], None] | None = None,
-        device = None,
         **kwargs
     ):
         # Create the Gaussian surrogate function
@@ -61,7 +61,6 @@ class GaussianDictLayer(DictBaseLayer):
             evaluation_func=evaluation_func,
             logger=logger,
             parameter_hook=parameter_hook,
-            device=device,
             **kwargs
         )
 
@@ -71,8 +70,8 @@ class GaussianDictLayer(DictBaseLayer):
         """
         Initializes the parameters (theta) for the Gaussian functions using self.psi.
         """
-        # self.psi is the GaussianFunction instance
-        return self.psi.initialize().to(self.device)
+        # self.psi is the GaussianFunction instance         
+        return torch.nn.Parameter(self.psi.initialize().data)
 
 
     def _evaluate_dictionary(self, X: TensorBatch, parameters: torch.Tensor, **kwargs) -> TensorBatch:
@@ -144,7 +143,6 @@ class GaussianDictLayer(DictBaseLayer):
     def electrostatic_regularization(layer: "GaussianDictLayer") -> torch.Tensor:
         """Penalizes the closeness of Gaussian means using an efficient proxy."""
         n_features = layer.n_features
-        n_functions = layer.n_functions
         epsilon = 1e-8
         
         num_rho_params = n_features * (n_features + 1) // 2

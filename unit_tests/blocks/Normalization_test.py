@@ -6,8 +6,6 @@ import logging
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks.UniformPartitionManager import UniformPartitionManager, UniformPartitionConfig
 from pysesm.sparse_coding.ISTALayer import ISTAConfig # Para inicializar SC layers
-from pysesm.device_manager.DeviceManager import DeviceManager
-from pysesm.enums.DeviceTargetEnum import DeviceTarget
 
 # Configuración básica de logger para las pruebas
 logger = logging.getLogger("test_normalization_pysesm_v2")
@@ -20,21 +18,15 @@ if not logger.handlers:
 
 # --- Fixtures Comunes ---
 @pytest.fixture(scope="module")
-def device_manager_fixture():
-    """Proporciona una instancia de DeviceManager para las pruebas."""
-    device_map = {
-        DeviceTarget.GLOBAL: "cpu",
-        DeviceTarget.SPARSE_CODING_LAYER: "cpu",
-        DeviceTarget.DICTIONARY_LAYER: "cpu",
-        DeviceTarget.PARTITION_MANAGER: "cpu"
-    }
-    return DeviceManager(logger=logger, default_device="cpu", device_map=device_map)
-
+def device_fixture():
+    """Proporciona el device para las pruebas."""
+    return "cpu"
+    
 @pytest.fixture
-def partition_block_factory(device_manager_fixture):
+def partition_block_factory(device_fixture):
     """Factory para crear instancias de PartitionBlock."""
     def _create_block(space_origin_coords, block_idx_tuple, block_size_coords, custom_eps=None): # custom_eps for specific tests
-        device = device_manager_fixture.get_device(DeviceTarget.PARTITION_MANAGER)
+        device = device_fixture
         space_origin = torch.tensor(space_origin_coords, device=device, dtype=torch.float32)
         block_size = torch.tensor(block_size_coords, device=device, dtype=torch.float32)
         
@@ -46,18 +38,18 @@ def partition_block_factory(device_manager_fixture):
     return _create_block
 
 @pytest.fixture
-def uniform_manager_factory(device_manager_fixture):
+def uniform_manager_factory(device_fixture):
     """Factory para crear instancias de UniformPartitionManager."""
     def _create_manager(T_val, initial_bounds_val_np, threshold_val=0):
         config = UniformPartitionConfig(
             T=T_val,
             initial_bounds=initial_bounds_val_np,
-            activity_threshold=threshold_val
+            activity_threshold=threshold_val,
+            device=device_fixture
         )
         return UniformPartitionManager(
             config=config,
-            logger=logger,
-            device_manager=device_manager_fixture
+            logger=logger
         )
     return _create_manager
 
@@ -76,7 +68,7 @@ def test_pb_normalize_basic_conceptual(partition_block_factory):
     #            = [0.5, 0.25]
     expected_normalized = torch.tensor([0.5, 0.25], device=block.device)
     assert block.normalized_X is not None
-    assert torch.allclose(block.normalized_X[0], expected_normalized, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_normalized, atol=1e-7)
 
 def test_pb_normalize_negative_origin_conceptual(partition_block_factory):
     """Prueba la normalización con origen de espacio negativo (límites conceptuales)."""
@@ -90,7 +82,7 @@ def test_pb_normalize_negative_origin_conceptual(partition_block_factory):
     #            = [0.5, 0.25]
     expected_normalized = torch.tensor([0.5, 0.25], device=block.device)
     assert block.normalized_X is not None
-    assert torch.allclose(block.normalized_X[0], expected_normalized, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_normalized, atol=1e-7)
 
 def test_pb_normalize_mixed_origin_and_index_conceptual(partition_block_factory):
     """Prueba la normalización con origen de espacio negativo e índice > 0 (límites conceptuales)."""
@@ -105,7 +97,7 @@ def test_pb_normalize_mixed_origin_and_index_conceptual(partition_block_factory)
     #            = [0.5, 0.25]
     expected_normalized = torch.tensor([0.5, 0.25], device=block.device)
     assert block.normalized_X is not None
-    assert torch.allclose(block.normalized_X[0], expected_normalized, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_normalized, atol=1e-7)
 
 def test_pb_normalize_points_at_conceptual_boundaries_strict(partition_block_factory):
     """Prueba la normalización de puntos en los límites conceptuales ESTRICTOS del bloque."""
@@ -119,10 +111,10 @@ def test_pb_normalize_points_at_conceptual_boundaries_strict(partition_block_fac
     block.normalize_points()
 
     expected_lower_norm = torch.tensor([0.0, 0.0], device=block.device)
-    assert torch.allclose(block.normalized_X[0], expected_lower_norm, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_lower_norm, atol=1e-7)
 
     expected_upper_norm = torch.tensor([1.0, 1.0], device=block.device)
-    assert torch.allclose(block.normalized_X[1], expected_upper_norm, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[1], expected_upper_norm, atol=1e-7)
 
 def test_pb_normalize_points_outside_conceptual_inside_scope(partition_block_factory):
     """
@@ -151,14 +143,14 @@ def test_pb_normalize_points_outside_conceptual_inside_scope(partition_block_fac
     # Normalización de point_before_conceptual_origin:
     # ([-0.5eps, -0.5eps] - [0,0]) / [1,1] = [-0.5eps, -0.5eps]
     expected_norm_before = torch.tensor([0.5 * machine_eps, 0.5 * machine_eps], device=block.device)
-    assert torch.allclose(block.normalized_X[0], expected_norm_before, atol=1e-9) # Usar atol más pequeño para eps
-    assert torch.all(block.normalized_X[0] > 0.0)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_norm_before, atol=1e-9) # Usar atol más pequeño para eps
+    assert torch.all(block.normalized_X.get_for_device(block.device)[0] > 0.0)
 
     # Normalización de point_after_conceptual_end:
     # ([1-0.5eps, 1-0.5eps] - [0,0]) / [1,1] = [1-0.5eps, 1-0.5eps]
     expected_norm_after = torch.tensor([1.0 - 0.5 * machine_eps, 1.0 - 0.5 * machine_eps], device=block.device)
-    assert torch.allclose(block.normalized_X[1], expected_norm_after, atol=1e-9)
-    assert torch.all(block.normalized_X[1] < 1.0)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[1], expected_norm_after, atol=1e-9)
+    assert torch.all(block.normalized_X.get_for_device(block.device)[1] < 1.0)
 
 
 def test_pb_normalize_zero_block_size_dimension_conceptual(partition_block_factory):
@@ -176,23 +168,23 @@ def test_pb_normalize_zero_block_size_dimension_conceptual(partition_block_facto
     # normalized = ([0.5, 0.0] - [0,0]) / [1,1] (effective_sizes)
     #            = [0.5, 0.0]
     expected_normalized_1 = torch.tensor([0.5, 0.0], device=block.device)
-    assert torch.allclose(block.normalized_X[0], expected_normalized_1, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[0], expected_normalized_1, atol=1e-7)
 
     # Para point_x_orig_y_offset ([0.5, 0.1]):
     # normalized = ([0.5, 0.1] - [0,0]) / [1,1] (effective_sizes)
     #            = [0.5, 0.1]
     expected_normalized_2 = torch.tensor([0.5, 0.1], device=block.device)
-    assert torch.allclose(block.normalized_X[1], expected_normalized_2, atol=1e-7)
+    assert torch.allclose(block.normalized_X.get_for_device(block.device)[1], expected_normalized_2, atol=1e-7)
 
 
 # --- Pruebas para UniformPartitionManager (enfocadas en retrieve_test_active_blocks) ---
 
-def test_manager_retrieve_test_blocks_normalization_values_conceptual(uniform_manager_factory, device_manager_fixture):
+def test_manager_retrieve_test_blocks_normalization_values_conceptual(uniform_manager_factory, device_fixture):
     """
     Prueba exhaustiva de la normalización (conceptual) de datos de prueba en UniformPartitionManager.
     Verifica que X_test se normalice correctamente relativo a los límites conceptuales de cada bloque de prueba.
     """
-    device = device_manager_fixture.get_device(DeviceTarget.PARTITION_MANAGER)
+    device = device_fixture
     
     initial_bounds_np = np.array([[-2.0, -2.0], [2.0, 2.0]], dtype=np.float32)
     T_tensor = torch.tensor([2, 2], device=device, dtype=torch.int)
@@ -206,12 +198,12 @@ def test_manager_retrieve_test_blocks_normalization_values_conceptual(uniform_ma
     train_block_0_0 = manager.blocks[0,0] # Conceptual: x,y en [-2,0]
     # Origen conceptual de bloque (0,0) es [-2,-2]. Punto es [-1,-1]. Tamaño de bloque es [2,2].
     # Normalizado = ([-1,-1] - [-2,-2]) / [2,2] = [1,1]/[2,2] = [0.5,0.5]
-    assert torch.allclose(train_block_0_0.normalized_X[0], torch.tensor([0.5,0.5], device=device), atol=1e-7)
+    assert torch.allclose(train_block_0_0.normalized_X.get_for_device(device)[0], torch.tensor([0.5,0.5], device=device), atol=1e-7)
 
     train_block_1_1 = manager.blocks[1,1] # Conceptual: x,y en [0,2]
     # Origen conceptual de bloque (1,1) es [0,0]. Punto es [1,1]. Tamaño de bloque es [2,2].
     # Normalizado = ([1,1] - [0,0]) / [2,2] = [1,1]/[2,2] = [0.5,0.5]
-    assert torch.allclose(train_block_1_1.normalized_X[0], torch.tensor([0.5,0.5], device=device), atol=1e-7)
+    assert torch.allclose(train_block_1_1.normalized_X.get_for_device(device)[0], torch.tensor([0.5,0.5], device=device), atol=1e-7)
 
     sc_config = ISTAConfig(n_functions=3, epochs=1)
     def dummy_eval_func(D, h): return torch.matmul(D,h)
@@ -260,12 +252,12 @@ def test_manager_retrieve_test_blocks_normalization_values_conceptual(uniform_ma
         assert torch.allclose(calculated_expected_normalized_value, expected_normalized_values[block_idx], atol=1e-7), \
             f"Error en el cálculo manual del valor normalizado esperado para el bloque {block_idx}"
 
-        assert test_block.normalized_X is not None
-        assert torch.allclose(test_block.normalized_X[0], expected_normalized_values[block_idx], atol=1e-7), \
+        assert test_block.normalized_X.get_for_device(device) is not None
+        assert torch.allclose(test_block.normalized_X.get_for_device(device)[0], expected_normalized_values[block_idx], atol=1e-7), \
             f"Normalized_X incorrecto para el bloque {block_idx}. Esperado: {expected_normalized_values[block_idx]}, Obtenido: {test_block.normalized_X[0]}"
 
-        assert torch.all(test_block.normalized_X[0] >= 0.0) and torch.all(test_block.normalized_X[0] <= 1.0), \
-             f"Valor normalizado fuera de [0,1] para el bloque {block_idx}: {test_block.normalized_X[0]}"
+        assert torch.all(test_block.normalized_X.get_for_device(device)[0] >= 0.0) and torch.all(test_block.normalized_X.get_for_device(device)[0] <= 1.0), \
+             f"Valor normalizado fuera de [0,1] para el bloque {block_idx}: {test_block.normalized_X.get_for_device(device)[0]}"
 
 
 if __name__ == "__main__":
