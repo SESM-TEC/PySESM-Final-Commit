@@ -196,8 +196,8 @@ class AdaptativePartitionManager(BlockManager):
         """
         treeNodes=self.kdtree.get_leaves()
 
-        X=torch.Tensor()
-        Y=torch.Tensor()
+        X=torch.Tensor().to(self.device)
+        Y=torch.Tensor().to(self.device)
         for node in treeNodes:
             X=torch.cat((node.Data.X, X))
             Y=torch.cat((node.Data.y, Y))

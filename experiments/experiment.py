@@ -3,11 +3,12 @@ from NN.model import NN
 from PF.model import PF
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-import joblib
 import torch
+import logging
+import joblib
+
 from pysesm.models.SSESM import SSESM
 from pysesm.utils.loggers import setup_logger
-import logging
 
 
 
@@ -29,6 +30,16 @@ class EXPERIMENT:
         self.nn_model = NN(**nn_config)
         self.PF=PF(**pf_config)
 
+        self.metrics = {}
+
+        # Para guardar las configuraciones y luego serializarlas
+        self.sparse_coding_config = sesm_config.sparse_coding_config
+        self.dict_config = sesm_config.dict_config
+        self.ssesm_config = sesm_config
+        self.svr_config = svr_config
+        self.nn_config = nn_config
+        self.pf_config = pf_config
+
 
         
 
@@ -45,82 +56,89 @@ class EXPERIMENT:
         self.xtest_orig = xtest.clone()
         self.ytest_orig = ytest.clone()       
 
-        meanx = torch.mean(xtrain, dim=0)
-        stdx = torch.std(xtrain, dim=0)
-        meany = torch.mean(ytrain)
-        stdy = torch.std(ytrain)
+        self.meanx = torch.mean(xtrain, dim=0)
+        self.stdx = torch.std(xtrain, dim=0)
+        self.meany = torch.mean(ytrain)
+        self.stdy = torch.std(ytrain)
 
-        self.xtrain = (xtrain - meanx) / stdx
-        self.ytrain = (ytrain - meany) / stdy
-        self.xtest = (xtest - meanx) / stdx
-        self.ytest = (ytest - meany) / stdy
+        self.xtrain = (xtrain - self.meanx) / self.stdx
+        self.ytrain = (ytrain - self.meany) / self.stdy
+        self.xtest = (xtest - self.meanx) / self.stdx
+        self.ytest = (ytest - self.meany) / self.stdy
 
 
 
 
     def train_all(self):
         # ENTRENAMIENTO
-        times = {}
-        times['svr_time'] = self.SVR_model.train(self.xtrain, self.ytrain)
-        times['nn_time'] = self.nn_model.train_nn(self.xtrain, self.ytrain, self.xtest, self.ytest)
-        times['pf_time'] = self.PF.train(self.xtrain, self.ytrain)
-        
         self.SESM_model.partial_fit(self.xtrain_orig, self.ytrain_orig)
-        times['sesm_time'] = self.SESM_model.training_time
-
-        print("\n Training times (s):")
-        for key, value in times.items():
-            print(f"{key}: {value} ")
-
-        return times
+        self.metrics['TIME_SESM'] = self.SESM_model.training_time
+        self.metrics['TIME_SVR'] = self.SVR_model.train(self.xtrain, self.ytrain)
+        self.metrics['TIME_NN'] = self.nn_model.train_nn(self.xtrain, self.ytrain, self.xtest, self.ytest)
+        self.metrics['TIME_PF'] = self.PF.train(self.xtrain, self.ytrain)
         
+        return self.metrics
+
 
 
     def test_all(self):
-         # TESTING
-        svr_pred = self.SVR_model.test(self.xtest)
-        nn_pred = self.nn_model.test(self.xtest)
+        # TESTING
+        # SESM evalua el error en el espacio de entrada original
         SESM_pred, _, SESM_mse = self.SESM_model.performance_stats(self.xtest_orig, self.ytest_orig)
+
+        # El resto de modelos en el espacio normalizado
         pf_pred = self.PF.test(self.xtest)
+        nn_pred = self.nn_model.test(self.xtest)
+        svr_pred = self.SVR_model.test(self.xtest)
 
-        metrics = {
-            "SESM_MSE": SESM_mse,
-            "SVR_MSE": mean_squared_error(self.ytest, svr_pred),
-            "NN_MSE":  mean_squared_error(self.ytest, nn_pred),
-            "PF_MSE":  mean_squared_error(self.ytest, pf_pred),
+        # Se desnormalizan las predicciones de los modelos
+        pf_pred = pf_pred * self.stdy + self.meany
+        nn_pred = nn_pred * self.stdy + self.meany
+        svr_pred = svr_pred * self.stdy + self.meany
 
-            "SESM_MAE":mean_absolute_error(self.ytest_orig, SESM_pred),
-            "SVR_MAE": mean_absolute_error(self.ytest, svr_pred),
-            "NN_MAE":  mean_absolute_error(self.ytest, nn_pred),
-            "PF_MAE":  mean_absolute_error(self.ytest, pf_pred)
-        }
+        self.metrics.update({
+            "MSE_SESM": SESM_mse,
+            "MSE_SVR": mean_squared_error(self.ytest_orig, svr_pred),
+            "MSE_NN":  mean_squared_error(self.ytest_orig, nn_pred),
+            "MSE_PF":  mean_squared_error(self.ytest_orig, pf_pred),
+
+            "MAE_SESM": mean_absolute_error(self.ytest_orig, SESM_pred),
+            "MAE_SVR": mean_absolute_error(self.ytest_orig, svr_pred),
+            "MAE_NN":  mean_absolute_error(self.ytest_orig, nn_pred),
+            "MAE_PF":  mean_absolute_error(self.ytest_orig, pf_pred)
+        })
 
         print("\n Metrics:")
-        for key, value in metrics.items():
+        for key, value in self.metrics.items():
             print(f"{key}: {value}")
-      
-        return metrics
-    
 
 
-    # DE MOMENTO NO SE USA
-    def save_metrics(self, metrics, times, n_samples, function):
-        """ 
-        Esta funcion recibe 2 diccionarios y un vector
 
-        metrics (dict): Contiene las metricas obtenidas con una funcion en especifico,
-        la clave seria la dimension, en cada dimension se encuentran todos los errores registrados
+    def save_configs(self):
+        # Crear una copia de los diccionarios de configuración y eliminar los elementos problemáticos
+        sparse_coding_config_to_save = self.sparse_coding_config.__dict__.copy()
+        del sparse_coding_config_to_save["criterion"]
+
+        dict_config_to_save = self.dict_config.__dict__.copy()
+        del dict_config_to_save["criterion"]
+        del dict_config_to_save["optimizer_factory"]
+
+        # Crear una versión serializable de ssesm_config
+        ssesm_config_to_save = self.ssesm_config.__dict__.copy()
+        ssesm_config_to_save["sparse_coding_config"] = sparse_coding_config_to_save
+        ssesm_config_to_save["dict_config"] = dict_config_to_save
+
+        # GUARDAR CONFIGURACIONES DE LOS MODELOS
+        models_config_data = {
+            "SVR (Support Vector Regressor)": self.svr_config,
+            "PF (Polynomial Features)": self.pf_config,
+            "NN (Neural Network)": self.nn_config,
+            "SESM (Sparse Encoding Surrogate Model)": ssesm_config_to_save
+        }
+        # ...
+        joblib.dump(models_config_data, "./plots/config/config_models.joblib")
         
-        times (dict): la clave seria la dimension, en cada dimension se registran los tiempos
-        de entrenamiento de cada modelo con distintos tamaños de dataset
-
-        n_samples (list): contiene los tamaños de los datasets en 1 dimension, se usa para calcular 
-        el tamaño de dataset de otras dimensiones
-        """
-        joblib.dump(metrics, "./plots/all_metrics"+str(function.__name__)+".joblib")
-        joblib.dump(times, "./plots/all_times"+str(function.__name__)+".joblib")
-        joblib.dump(n_samples, "./plots/n_samples.joblib")
-
+        
 
 
 

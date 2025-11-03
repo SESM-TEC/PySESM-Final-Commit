@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 from scipy.stats import multivariate_normal
 import torch
-
+import copy
 # For debuggin and understanding >>>
 import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3D
@@ -482,6 +482,136 @@ def test_gaussian_dict_layer_train_with_nested_tensor(_common_logger, _common_de
     
     assert torch.all(mu_grads_rho_only == 0), "Mu grads should be zero (rho_flag=True)"
     assert not torch.all(rho_grads_rho_only == 0), "Rho grads should be non-zero"
+
+
+def test_train_epoch_refactor_equivalence(_common_logger, _common_device, _common_evaluation_func):
+    """
+    Verify that refactored _train_epoch + _train_epoch_for_batch produce identical
+    results to the original single-function version when batch_size=None.
+    """
+
+    torch.manual_seed(123)
+    n_features = 4
+    n_functions = 2
+    n_samples = 50
+    batch_size = 15
+    log_loss: bool = True
+    X = torch.randn(n_samples, n_features, device=_common_device)
+    y = torch.randn(n_samples, 1, device=_common_device)
+    h = torch.randn(n_functions, 1, device=_common_device)
+
+    # --- Build two layers with identical initial parameters ---
+    base_config = GaussianDictConfig(
+        epochs=100,  # just 1 epoch is enough
+        alpha=0.01,
+        mu_epochs=20,
+        rho_epochs=20,
+        split_mu_rho=True,
+        device=_common_device
+    )
+
+    layer_old = GaussianDictLayer(
+        config=base_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger
+    )
+    base_config.batch_size=batch_size
+
+    layer_new = GaussianDictLayer(
+        config=base_config,
+        n_features=n_features,
+        n_functions=n_functions,
+        evaluation_func=_common_evaluation_func,
+        logger=_common_logger
+    )
+
+    # Make sure both start from the same weights
+    # Keep the Parameter object and copy values
+    layer_new.theta_params.data.copy_(layer_old.theta_params.data)
+
+
+    # --- Run old training method manually (direct call to _train_epoch_for_batch logic) ---
+    def _train_epoch_old(layer_old, X: TensorBatch, y: TensorBatch, h: TensorBatch, 
+                    log_losses: bool, **eval_kwargs) -> None:
+        layer_old.optimizer.zero_grad()
+        layer_old.dictionary = layer_old.forward(X, **eval_kwargs)
+        h_detached = layer_old._detach_tensor_batch(h)
+        y_pred = layer_old.evaluation_func(layer_old.dictionary, h_detached)
+        
+        loss_recon = layer_old._calculate_batch_loss(y_pred, y)
+
+        loss_reg = torch.tensor(0.0, device=layer_old.device, dtype=torch.float32, requires_grad=True)
+
+        if layer_old.config.regularization_func is not None:
+            loss_reg = layer_old.config.regularization_func(layer_old)
+
+        total_loss = loss_recon + layer_old.config.regularization_gamma * loss_reg
+
+        total_loss.backward(retain_graph=False)
+        layer_old.optimizer.step()
+        
+        if log_losses:
+            layer_old.losses.append(total_loss.item())
+        
+        if layer_old.parameter_hook is not None:
+            hook_info = {
+                'epoch': len(layer_old.losses),
+                'theta_params': layer_old.theta_params.clone().detach(),
+                'loss': total_loss.item(),
+                'loss_reconstruction': loss_recon.item(),
+                'loss_regularization': loss_reg.item()
+            }
+            layer_old._add_hook_info(hook_info, **eval_kwargs)
+            layer_old.parameter_hook(hook_info)
+
+    # Run old
+    _train_epoch_old(layer_old, X, y, h, log_losses=log_loss)
+    layer_new._train_epoch(X, y, h, log_losses=log_loss)
+    # --- Checks ---
+
+    # 1. Check that losses are appended only if logging is enabled
+    assert bool(layer_old.losses) == log_loss
+    assert bool(layer_new.losses) == log_loss
+
+    # 2. Check theta_params shape, device, and that gradients exist
+    assert layer_old.theta_params.shape == layer_new.theta_params.shape, \
+        f"Theta shapes mismatch: old={layer_old.theta_params.shape}, new={layer_new.theta_params.shape}"
+    assert layer_old.theta_params.device == layer_new.theta_params.device, \
+        f"Theta devices mismatch: old={layer_old.theta_params.device}, new={layer_new.theta_params.device}"
+
+    # 3. Check dictionary outputs: TensorBatch structure, shapes, devices, gradients where applicable
+    def check_tensorbatch_struct(tb1, tb2, path="root"):
+        """
+        Recursively check that two TensorBatch objects match in structure, shapes, devices,
+        and optionally gradients if they exist.
+        """
+        # Same type
+        assert type(tb1) == type(tb2), f"Type mismatch at {path}: {type(tb1)} vs {type(tb2)}"
+
+        if isinstance(tb1, torch.Tensor):
+            # Compare shape and device
+            assert tb1.shape == tb2.shape, f"Shape mismatch at {path}: {tb1.shape} vs {tb2.shape}"
+            assert tb1.device == tb2.device, f"Device mismatch at {path}: {tb1.device} vs {tb2.device}"
+            # Optional: check gradients if requires_grad
+            assert torch.allclose(tb1,tb2)
+            if tb1.requires_grad:
+                assert tb1.grad is None or tb1.grad.shape == tb1.shape, f"Gradient shape mismatch at {path}"
+        elif isinstance(tb1, dict):
+            # Recurse on keys
+            assert tb1.keys() == tb2.keys(), f"Dict keys mismatch at {path}: {tb1.keys()} vs {tb2.keys()}"
+            for k in tb1:
+                check_tensorbatch_struct(tb1[k], tb2[k], path=f"{path}.{k}")
+        elif isinstance(tb1, (list, tuple)):
+            assert len(tb1) == len(tb2), f"Sequence length mismatch at {path}: {len(tb1)} vs {len(tb2)}"
+            for i, (v1, v2) in enumerate(zip(tb1, tb2)):
+                check_tensorbatch_struct(v1, v2, path=f"{path}[{i}]")
+        else:
+            raise TypeError(f"Unsupported type at {path}: {type(tb1)}")
+
+
+    check_tensorbatch_struct(layer_old.dictionary, layer_new.dictionary)
 
 if __name__ == "__main__":
     from pytest_helper import print_pytest_instructions

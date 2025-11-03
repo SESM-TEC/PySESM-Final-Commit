@@ -15,7 +15,7 @@ class SVR:
             C = C, 
             gamma = gamma, 
             epsilon = epsilon) 
-
+        self.path = "svr_model.joblib"
 
   
     def predict(self, X: torch.tensor) -> np.ndarray:
@@ -23,13 +23,12 @@ class SVR:
         return predictions
 
 
-    def save(self, path: str = 'svr_model.joblib'):
-        joblib.dump(self.model, path)
-        print(f"Model saved as {path}")
+    def save(self):
+        joblib.dump(self.model, self.path)
 
 
-    def load(self, path: str = 'svr_model.joblib'):
-        self.model = joblib.load(path)
+    def load(self):
+        self.model = joblib.load(self.path)
 
 
     def train(self, xtrain, ytrain):
@@ -42,8 +41,9 @@ class SVR:
         
         return end_time - start_time
 
+
     def test(self, xtest):
         print("\n Testing SVR...")
         ypred = self.predict(xtest)
-
+        ypred = torch.from_numpy(ypred)
         return ypred

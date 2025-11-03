@@ -35,7 +35,7 @@ class KDTree():
         device (string or None): Device where internal tensors will be stored.
         """
         self.device=device
-        self.root: Node = Node(data.to(self.device), y, data_wrapper)
+        self.root: Node = Node(data.to(self.device), y, data_wrapper, self.device)
         self.maxNodeSize: int = maxNodeSize
         self.data_wrapper : Callable = data_wrapper
         self.split: bool = False
@@ -59,8 +59,8 @@ class KDTree():
         # Create mask of data over threshold only once and reuse its inverse
         mask = data[:, node.Data.dim] >= node.Data.split_point
         not_mask = ~mask
-        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper)
-        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper)        
+        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper, self.device)
+        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper, self.device)        
 
         node.Data.empty_data()
         
