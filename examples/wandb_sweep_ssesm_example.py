@@ -41,12 +41,12 @@ sweep_config = {
             'distribution': 'q_uniform',
             'q': 1,
             'min': 10,
-            'max': 80
+            'max': 50
         },
         'dict_alpha': {
             'distribution': 'log_uniform_values',
-            'min': 1e-4,
-            'max': 1e-2
+            'min': 1e-6,
+            'max': 2e-4
         },
         'sc_lambd': {
             'distribution': 'log_uniform_values',
@@ -55,8 +55,8 @@ sweep_config = {
         },
         'reg_gamma': {
             'distribution': 'log_uniform_values',
-            'min': 1e-5,
-            'max': 5e-2
+            'min': 1e-7,
+            'max': 2e-4
         },
         'weight_decay': {
             'distribution': 'q_uniform',
@@ -72,9 +72,21 @@ sweep_config = {
         },
         'dict_epochs': {
             'distribution': 'q_uniform',
-            'q': 5,
-            'min': 100,
-            'max': 500
+            'q': 1,
+            'min': 1,
+            'max': 200
+        },
+        'iterations': {
+            'distribution': 'q_uniform',
+            'q' : 1,
+            'min': 1,
+            'max': 40
+        },
+        'permutations': {
+            'distribution': 'q_uniform',
+            'q' : 1,
+            'min': 1,
+            'max': 20
         }
     }
 }
@@ -107,8 +119,6 @@ def train():
     run_number = run.name.split('-')[-1]
     technical_name = f"run_{int(run_number):03d}-funcs_{cfg.n_functions}-sc_e_{cfg.sc_epochs}-dict_e_{cfg.dict_epochs}"
     wandb.run.name = technical_name
-    # Deprecated: Save the new name to the summary, which is useful for tables in W&B reports
-    # wandb.run.save() # This is not necessary any more
     
     # Access the hyperparameters for this run from wandb.config
     cfg = wandb.config
@@ -144,12 +154,12 @@ def train():
 
     ssesm_config = SSESMConfig(
         n_features=2,
-        model_epochs=100, # Fixed number of epochs for all runs
+        model_epochs=cfg.iterations, # Fixed number of epochs for all runs
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
         log_interval=50, # Log less frequently during sweeps
-        permutation_times=10,
+        permutation_times=cfg.permutations,
         device=device
     )
 
@@ -185,7 +195,9 @@ def train():
 # --- 5. START THE SWEEP ---
 if __name__ == "__main__":
     # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="pysesm-hyperparameter-optimization")
+    sweep_id = wandb.sweep(sweep_config,
+                           project="pysesm-hyperparameter-optimization",
+                           entity="sesm")
 
     # Start the sweep agent
     logger.info(f"Starting wandb sweep agent with ID: {sweep_id}")
