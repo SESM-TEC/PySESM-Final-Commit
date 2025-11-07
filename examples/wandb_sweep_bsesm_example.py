@@ -45,13 +45,13 @@ sweep_config = {
         },
         'dict_alpha': {
             'distribution': 'log_uniform_values',
-            'min': 1e-4,
-            'max': 1e-2
+            'min': 1e-6,
+            'max': 5e-2
         },
         'sc_lambd': {
             'distribution': 'log_uniform_values',
-            'min': 1e-4,
-            'max': 1e-2
+            'min': 1e-6,
+            'max': 1e-1
         },
         'reg_gamma': {
             'distribution': 'log_uniform_values',
@@ -62,7 +62,7 @@ sweep_config = {
             'distribution': 'q_uniform',
             'q': 5e-6,
             'min': 0,
-            'max': 1e-2
+            'max': 5e-2
         },
         'sc_epochs': {
             'distribution': 'q_uniform',
@@ -80,7 +80,7 @@ sweep_config = {
             'distribution': 'q_uniform',
             'q' : 1,
             'min': 1,
-            'max': 40
+            'max': 100
         }
     }
 }
@@ -195,5 +195,5 @@ if __name__ == "__main__":
     # Start the sweep agent
     logger.info(f"Starting wandb sweep agent with ID: {sweep_id}")
     # The 'count' argument specifies how many runs to execute.
-    wandb.agent(sweep_id, function=train, count=200)
+    wandb.agent(sweep_id, function=train, count=400)
     logger.info("Sweep finished.")
