@@ -121,7 +121,7 @@ ssesm_config = SSESMConfig(
     partition_config=partition_config,
     dict_config=dict_config,
     sparse_coding_config=sparse_coding_config,
-    log_interval=50,
+    log_interval=10,
     permutation_times=17,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
@@ -222,7 +222,7 @@ except KeyboardInterrupt:
 finally:
     # Ensure the video is created even if training is interrupted.
     if 'visual_hook' in locals() and visual_hook is not None:
-        visual_hook.create_video(video_name="one_block_evolution.mp4")
+        visual_hook.create_video(video_name="ssesm_evolution.mp4")
 
 print("\nDisplaying final plots. Close all plot windows to exit.")
 plt.show(block=True)
