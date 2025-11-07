@@ -37,8 +37,8 @@ class KDTree():
         self.device=device
         self.root: Node = Node(data.to(self.device), y, data_wrapper, self.device)
         self.maxNodeSize: int = maxNodeSize
-        self.data_wrapper : Callable = data_wrapper
-        self.split: bool = False
+        self.data_wrapper : callable = data_wrapper
+        self.split_after_add: bool = False
 
         self._splitDataInNodes(self.root)
         
@@ -101,10 +101,10 @@ class KDTree():
         node.Data.y=torch.cat((node.Data.y,y))
 
         if not (node.Data.X.size(0) <= self.maxNodeSize):
-            self.split=True
+            self.split_after_add=True
             self._splitDataInNodes(node)
     
-    def get_leaves(self,  leaves : list = None, node = None) -> list:
+    def get_leaves(self,  leaves : list = None, node = None) -> list[Node]:
         """
         Finds leaves of the tree and returns them in a list
 
