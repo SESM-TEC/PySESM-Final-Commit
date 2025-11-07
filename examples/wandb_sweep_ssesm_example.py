@@ -154,7 +154,7 @@ def train():
 
     ssesm_config = SSESMConfig(
         n_features=2,
-        model_epochs=cfg.iterations, # Fixed number of epochs for all runs
+        model_epochs=cfg.iterations, 
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
