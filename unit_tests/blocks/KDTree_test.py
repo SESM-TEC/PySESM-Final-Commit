@@ -9,6 +9,7 @@ from pysesm.blocks.Node import Node
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager, AdaptativePartitionConfig
+from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 
 logger = logging.getLogger("test_uniform_partition_manager")
 logger.setLevel(logging.DEBUG)
@@ -49,12 +50,15 @@ def create_manager(common_device):
             initial_bounds_np = initial_bounds_val.cpu().numpy()
         else:
             initial_bounds_np = initial_bounds_val # If already numpy or None
-
-        config = AdaptativePartitionConfig(
+        strategyConfig = KDTreeStrategyConfig(
             maxNodeSize=5,
-            maxSplitsBeforeRestart=5,
-            overlap_ratio=None,
+            data_wrapper=SESMData,
             device=common_device
+        )
+        strategy = KDTreeStrategy(strategyConfig)
+        config = AdaptativePartitionConfig(
+            partition_strategy=strategy,
+            overlap_ratio=None
         )
         return AdaptativePartitionManager(
             config=config,
@@ -69,7 +73,7 @@ def test_greatestVarDim(common_device):
     device = common_device
     x = torch.randn(20, 5).to(device)
     y = torch.randn(20, 1).to(device)    
-    node=Node(x,y, SESMData)
+    node=Node(x,y, SESMData, device)
     dim = node.Data.greatestVarDim()
 
     variances = x.var(dim=0)
@@ -137,7 +141,7 @@ def test_add_point(create_manager):
     y = torch.randn(500, 1)
     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
     partitionManager._update_block_arrangement(X, y)
-    kd=partitionManager.kdtree
+    kd=partitionManager.strategy.kdtree
     for _ in range(1):
         x=torch.rand(n_features)
         y=torch.rand(1)
