@@ -74,9 +74,8 @@ machine learning tasks.
 
 
 2.  **Dictionary Learning:** The model learns a global dictionary of basis functions (e.g., Gaussian functions). These functions, or "dictionary words," serve as the fundamental building blocks for approximating the target function. The dictionary is shared across all blocks.
-<p align="center">
-  <img src="pics/dictionary3.png" alt="Partition Config" width="400"/>
-</p>
+$$D(x) = \left( \underline{\phi_1} (x), \underline{\phi_2} (x), \underline{\phi_2} (x), ... ,  \underline{\phi_n} (x)  \right)$$
+
 <p align="center">
   <img src="pics/dictionary2.png" alt="Partition Config" width="400"/>
 </p>
@@ -85,10 +84,37 @@ machine learning tasks.
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
 
 
-The core idea is to approximate a target function `y` as `y ≈ D @ h`, where `D` is the dictionary and `h` is the sparse code.
-<p align="center">
-  <img src="pics/sparse encoding.png" alt="Partition Config" width="400"/>
-</p>
+The core idea is to approximate the ground truth signal $ \mathbf{y} $ as the product $ \mathbf{D}\mathbf{h} $ where $ \mathbf{D} $ is the learned **dictionary** and $ \mathbf{h} $ is the corresponding **sparse code**. In this formulation, $ \mathbf{y} \in \mathbb{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \mathbf{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \mathbf{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \mathbf{y} $.
+
+$$\underline{y} = D \underline{h}$$
+
+$$
+\underbrace{
+\begin{bmatrix}
+y_1 \\[3pt]
+y_2 \\[3pt]
+\vdots \\[3pt]
+y_{\text{m}}
+\end{bmatrix}
+}_{\mathbf{y} \in \mathbb{R}^{(\text{m},\,1)}}
+=
+\underbrace{
+\begin{bmatrix}
+| & | & & | \\
+\mathbf{\underline{\phi}}_1 & \mathbf{\underline{\phi}}_2 & \cdots & \mathbf{\underline{\phi}}_{\text{n}} \\
+| & | & & |
+\end{bmatrix}
+}_{\mathbf{D} \in \mathbb{R}^{(\text{m},\,\text{n})}}
+\;
+\underbrace{
+\begin{bmatrix}
+h_1 \\[3pt]
+h_2 \\[3pt]
+\vdots \\[3pt]
+h_{\text{n}}
+\end{bmatrix}
+}_{\mathbf{h} \in \mathbb{R}^{(\text{n},\,1)}}
+$$
 
 ## 4. Library Architecture
 
@@ -209,7 +235,7 @@ ssesm_config = SSESMConfig(
 
 ### Step 3: Generate Dataset
 
-PySESM provides utility functions to generate sample datasets in `PySESM\pysesm\utils_dataset\generate_dataset.py`. Here, we create a function composed of three non-diagonal Gaussians.
+PySESM provides utility functions to generate sample datasets in `PySESM\pysesm\utils_dataset\generate_dataset.py`. For example, we create a function composed of three non-diagonal Gaussians.
 
 
 
