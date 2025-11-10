@@ -69,7 +69,7 @@ def test_greatestVarDim(common_device):
     device = common_device
     x = torch.randn(20, 5).to(device)
     y = torch.randn(20, 1).to(device)    
-    node=Node(x,y, SESMData)
+    node=Node(x,y, SESMData, device)
     dim = node.Data.greatestVarDim()
 
     variances = x.var(dim=0)
