@@ -41,7 +41,9 @@ class KDTree():
         self.split_after_add: bool = False
 
         self._splitDataInNodes(self.root)
-        
+        leaves = self.get_leaves()
+        total_points = sum([0 if leaf.Data.X is None else leaf.Data.X.size(0) for leaf in leaves])
+        print(f"[KDTree init] leaves={len(leaves)}, total_points={total_points}")
     def _splitDataInNodes(self, node: Node) -> None:
         """
         Splits data based on the median of the greatest variance dimension. 
@@ -103,6 +105,10 @@ class KDTree():
         if not (node.Data.X.size(0) <= self.maxNodeSize):
             self.split_after_add=True
             self._splitDataInNodes(node)
+        leaves = self.get_leaves()
+        total_points = sum([0 if leaf.Data.X is None else leaf.Data.X.size(0) for leaf in leaves])
+        print(f"[KDTree add_point] after add total_leaves={len(leaves)}, total_points={total_points}")
+
     
     def get_leaves(self,  leaves : list = None, node = None) -> list[Node]:
         """

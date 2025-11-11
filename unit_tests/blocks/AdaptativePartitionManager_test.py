@@ -111,7 +111,6 @@ def test_combined_data_is_preserved(create_manager):
     assert torch.allclose(sorted_combined, sorted_from_tree, atol=1e-6), \
         "KDTree leaves should contain exactly all X points seen."
 
-
 def test_overlap_is_applied_correctly(create_manager):
     """Ensure that overlap values are applied to all blocks when configured."""
     overlap_ratio = 0.2

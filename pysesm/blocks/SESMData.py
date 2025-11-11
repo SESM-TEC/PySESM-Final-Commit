@@ -20,7 +20,6 @@ class SESMData():
 
         self.test_data: torch.Tensor = None
         self.test_y: torch.Tensor = None
-        self.overlap: torch.Tensor = None
         self._updateBounds()
         self.dim : int = self.greatestVarDim()
         self.block: PartitionBlock = PartitionBlock(

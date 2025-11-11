@@ -140,54 +140,56 @@ class AdaptativePartitionManager(BlockManager):
         Synchronizes the data points from the strategy's partitions into the manager's blocks.
 
         Args:
-            X (torch.Tensor): Data
-            y (torch.Tensor): Data
+            X (torch.Tensor): Data (not used in this implementation, but kept for API consistency).
+            y (torch.Tensor): Data (not used in this implementation, but kept for API consistency).
             expand_scope (bool): If True, blocks will map points from a wider area
                                 defined by their scope plus their overlap.
         """
-        # Clear all points from all blocks to ensure a fresh start.
-        for block in self.blocks:
-            block.clear_points()
+        partitions = self.strategy.get_partitions()
 
-        if not expand_scope:
-            partition_data_list = self.strategy.get_partitions()
+        # Si expand_scope es verdadero, necesitamos obtener todos los puntos para la reasignación.
+        all_X, all_Y = (self.strategy.get_all_points() if expand_scope else (None, None))
 
-            if len(self.blocks) != len(partition_data_list):
-                self.logger.error("Mismatch between manager blocks and strategy partitions!")
-                return
+        for partition in partitions:
+            # Siempre limpia los puntos del bloque antes de reasignar.
+            partition.block.clear_points()
 
-            for i, block in enumerate(self.blocks):
-                partition_data = partition_data_list[i]
-                if partition_data.X is not None and isinstance(partition_data.X, torch.Tensor):
-                    for j in range(partition_data.X.shape[0]):
-                        block.new_point(partition_data.X[j], partition_data.y[j], pos=j)
-        else:
-            all_X, all_y = self.strategy.get_all_points()
+            if expand_scope:
+                # FIX 2: Usar partition.block.overlap que no es None.
+                if partition.block.overlap is not None:
+                    # Calcula los límites expandidos sin modificar los bounds originales de la partición.
+                    expanded_bounds = partition.bounds + partition.block.overlap * torch.tensor([-1, 1], device=self.device).view(2, 1)
+                    partition.block.block_scope = expanded_bounds.detach().clone()
+                    
+                    # Crea una máscara para encontrar puntos dentro del alcance expandido.
+                    mask = (all_X >= expanded_bounds[0]) & (all_X <= expanded_bounds[1])
+                    mask_extended = mask.all(dim=1)
+                    
+                    X_selected = all_X[mask_extended]
+                    Y_selected = all_Y[mask_extended]
 
-            if all_X.shape[0] == 0:
-                return 
-
-            for block in self.blocks:
-                lower_bound = block.block_scope[0] - block.overlap
-                upper_bound = block.block_scope[1] + block.overlap
-
-                # Create a mask to find all points within the expanded bounds
-                mask = (all_X >= lower_bound) & (all_X <= upper_bound)
-                mask = mask.all(dim=1)
-
-                X_selected = all_X[mask]
-                y_selected = all_y[mask]
-
-                # Find original indices if needed, otherwise use a counter
-                original_indices = torch.where(mask)[0].tolist()
-
-                if X_selected.shape[0] > 0:
-                    # Again, an append_points would be ideal.
+                    # Agrega los puntos seleccionados al bloque.
                     for i in range(X_selected.shape[0]):
-                        block.new_point(X_selected[i], y_selected[i], pos=original_indices[i])
+                        partition.block.new_point(X_selected[i], Y_selected[i], i)
 
+                else: # Si no hay overlap, procede como si expand_scope fuera False.
+                    if partition.X is not None and partition.X.shape[0] > 0:
+                        for i in range(partition.X.shape[0]):
+                            partition.block.new_point(partition.X[i], partition.y[i], i)
+
+            else:
+                # FIX 1: Transferir directamente los puntos de la partición a su bloque.
+                # Esto es más robusto y evita la pérdida de puntos.
+                if partition.X is not None and partition.X.shape[0] > 0:
+                    for i in range(partition.X.shape[0]):
+                        partition.block.new_point(partition.X[i], partition.y[i], i)
+
+        # Actualiza la referencia de los bloques del manager.
+        self.blocks = np.array([p.block for p in partitions], dtype=object)
+
+        # Asegúrate de que los tensores 'y' tengan la forma correcta.
         for block in self.blocks:
-            if block.is_active():
+            if block.is_active:
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
 
     def _prepare_block_targets(self):

@@ -78,8 +78,11 @@ class KDTreeStrategy(PartitionStrategy):
             if self.split_count>self.config.maxSplitsBeforeRestart:
                 self.split_count = 0
                 self._restart_kdtree()
-            
+            all_X, all_y = self.get_all_points()
+            print(f"[KDTreeStrategy.add_points] get_all_points => {all_X.shape[0]} X points, {all_y.shape[0]} y points")
             return True
+        all_X, all_y = self.get_all_points()
+        print(f"[KDTreeStrategy.add_points-nonsplit] get_all_points => {all_X.shape[0]} X points, {all_y.shape[0]} y points")
         return False
 
     def _restart_kdtree(self):

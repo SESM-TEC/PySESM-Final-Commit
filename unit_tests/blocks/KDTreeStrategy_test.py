@@ -85,7 +85,7 @@ def test_get_partitions(create_kd_strategy):
     assert isinstance(partitions, list)
     assert len(partitions) == len(leaves)
     for p in partitions:
-        assert isinstance(p, PartitionBlock)
+        assert isinstance(p, strategy.config.data_wrapper)
 
 
 def test_find_partition_for_point(create_kd_strategy):

@@ -64,4 +64,3 @@ class PartitionStrategy(ABC):
     @abstractmethod
     def get_all_points(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Returns all data points (X, y) held by the strategy."""
-        pass
