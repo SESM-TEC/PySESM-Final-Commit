@@ -101,6 +101,7 @@ class KDTree():
         y=y.unsqueeze(0)
         node.Data.X=torch.cat((node.Data.X,x))
         node.Data.y=torch.cat((node.Data.y,y))
+        node.Data.updateBounds()
 
         if not (node.Data.X.size(0) <= self.maxNodeSize):
             self.split_after_add=True
@@ -134,13 +135,15 @@ class KDTree():
             leaves = self.get_leaves(leaves, node.right)
         return leaves
 
-    def _splitDataInNodes_test(self, node : Node):
+    def splitDataInNodes_test(self, node : Node = None):
         """
         Splits test data without changing the structure of the kdtree.
 
         Args:
             node (Node): Starting node, usually the root node
         """
+        if node is None:
+            node=self.root
         if node.Data.test_data is None or node.Data.X is not None:
             return
         test_Data=torch.cat((node.Data.test_data,node.Data.test_y),dim=1)
@@ -155,8 +158,8 @@ class KDTree():
         node.Data.test_data = None
         node.Data.test_y = None
         
-        self._splitDataInNodes_test(node.left)
-        self._splitDataInNodes_test(node.right)
+        self.splitDataInNodes_test(node.left)
+        self.splitDataInNodes_test(node.right)
         
         return
 

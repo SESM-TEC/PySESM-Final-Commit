@@ -46,15 +46,21 @@ class KDTreeStrategy(PartitionStrategy):
         super().__init__(config)
         self.split_count: int = 0
         
-    def build(self, X: torch.Tensor, y: torch.Tensor):
+    def build(self, X: torch.Tensor, y: torch.Tensor, test: bool = False):
         """
         Constructs the KD-tree using the input data.
 
         Args:
             X (torch.Tensor): Data tensor.
             y (torch.Tensor): Target tensor.
+            test (bool): Indicates if the structure must be build for testing.
         """
-        self.kdtree = KDTree(X, y, self.config.maxNodeSize, self.config.data_wrapper, self.config.device)
+        if not test:
+            self.kdtree = KDTree(X, y, self.config.maxNodeSize, self.config.data_wrapper, self.config.device)
+        else:
+            self.kdtree.root.Data.test_data=X
+            self.kdtree.root.Data.test_y=y
+            return self.kdtree.splitDataInNodes_test()
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor) -> bool:
         """
@@ -139,3 +145,4 @@ class KDTreeStrategy(PartitionStrategy):
             return torch.empty(0, device=self.config.device), torch.empty(0, device=self.config.device)
 
         return torch.cat(all_X, dim=0), torch.cat(all_y, dim=0)
+

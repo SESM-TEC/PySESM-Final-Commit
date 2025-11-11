@@ -28,25 +28,36 @@ def common_device():
 @pytest.fixture(scope="function")
 def create_manager(logger, common_device):
     """
-    Factory fixture to create AdaptativePartitionManager instances with
-    configurable KDTreeStrategy and overlap ratios.
+    Factory fixture para crear e inicializar instancias de AdaptativePartitionManager.
     """
-    def _creator(maxNodeSize=5, data_wrapper=SESMData,
-                overlap_ratio: Optional[float] = 0.1):
+    def _creator(
+        X: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
+        maxNodeSize: int = 5,
+        overlap_ratio: Optional[float] = 0.1
+    ):
         strategyConfig = KDTreeStrategyConfig(
             maxNodeSize=maxNodeSize,
-            data_wrapper=data_wrapper,
-            device=common_device
+            device=common_device,
+            data_wrapper=SESMData # data_wrapper es casi siempre el mismo
         )
         strategy = KDTreeStrategy(strategyConfig)
         config = AdaptativePartitionConfig(
             overlap_ratio=overlap_ratio,
             partition_strategy=strategy
         )
-        return AdaptativePartitionManager(
+        manager = AdaptativePartitionManager(
             config=config,
             logger=logger
         )
+
+        if X is not None:
+            if y is None:
+                y = torch.zeros(X.shape[0], 1, device=common_device)
+            manager._update_block_arrangement(X, y)
+            manager._map_points() 
+
+        return manager
     return _creator
 
 
@@ -56,11 +67,8 @@ def create_manager(logger, common_device):
 
 def test_initial_build_creates_blocks(create_manager):
     """Verify that the first _update_block_arrangement call builds the KDTree and blocks."""
-    manager = create_manager(overlap_ratio=None)
-
     X = torch.randn(20, 4)
-    y = torch.randn(20, 1)
-    manager._update_block_arrangement(X, y)
+    manager = create_manager(X=X, overlap_ratio=None)
 
     # Strategy should now have a KDTree built
     assert manager.strategy.kdtree is not None, "KDTree should be initialized after first update"
@@ -217,6 +225,17 @@ def test_map_points(create_manager):
     assert torch.allclose(sorted_X_blocks, sorted_X_added, atol=1e-6)
     assert torch.allclose(sorted_y_blocks, sorted_y_added, atol=1e-6)
 
+def test_map_points_with_zero_overlap(create_manager):
+    """Verify that when using overlap=0, the number of points mapped is the same"""
+    X = torch.randn(50, 3)
+    manager = create_manager(X=X, overlap_ratio=0.0)
+    
+    # Act
+    manager._map_points(expand_scope=True) # expand_scope no debería tener efecto
+    
+    # Assert
+    total_points_mapped = sum(len(block.X) for block in manager.blocks)
+    assert total_points_mapped == X.shape[0]
 
 def test_map_points_with_expand_scope(create_manager):
     """Test _map_points with expand_scope=True properly includes overlapped data."""
@@ -237,158 +256,150 @@ def test_map_points_with_expand_scope(create_manager):
     total_points_mapped = sum(all_counts)
     assert total_points_mapped >= X.shape[0], "With overlap, total mapped points should be >= original count"
 
-# def test_add_points(create_manager, common_device):
-#     n_features=5
-#     X1 = torch.randn(500, n_features)
-#     maxNodeSize=5
-#     maxSplitsBeforeRestart=5
-#     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+def test_add_points(create_manager, common_device):
+    n_features=5
+    X1 = torch.randn(500, n_features)
+    partitionManager=create_manager()
 
-#     device = common_device
+    device = common_device
 
-#     y = torch.randn(500, 1)
+    y = torch.randn(500, 1)
 
-#     partitionManager.add_points(X1, y)
-#     X2 = torch.randn(500, n_features)
+    partitionManager.add_points(X1, y)
+    X2 = torch.randn(500, n_features)
 
-#     partitionManager.add_points(X2, y)
+    partitionManager.add_points(X2, y)
 
-#     leaves = partitionManager.kdtree.get_leaves() 
+    partitions = partitionManager.strategy.get_partitions()
 
-#     X=torch.Tensor().to(device)
+    X=torch.Tensor().to(device)
 
-#     for node in leaves:
-#         assert node.Data.block is not None
-#         assert node.Data.block.X != []
-#         assert node.Data.block.y != []
-#         assert node.Data.block.positions != []
-#         for tensor in node.Data.block.X:
-#             assert tensor.device.type==device
-#         for tensor in node.Data.block.y:
-#             assert tensor.device.type==device
-#         for tensor in node.Data.block.space_origin:
-#             assert tensor.device.type==device
-#         for tensor in node.Data.block.block_size:
-#             assert tensor.device.type==device
-#         for tensor in node.Data.block.block_scope:
-#             assert tensor.device.type==device
-#         assert node.Data.y.device.type==device
-#         assert node.Data.X.device.type==device
+    for partition in partitions:
+        assert partition.block is not None
+        assert partition.block.X != []
+        assert partition.block.y != []
+        assert partition.block.positions != []
+        for tensor in partition.block.X:
+            assert tensor.device.type==device
+        for tensor in partition.block.y:
+            assert tensor.device.type==device
+        for tensor in partition.block.space_origin:
+            assert tensor.device.type==device
+        for tensor in partition.block.block_size:
+            assert tensor.device.type==device
+        for tensor in partition.block.block_scope:
+            assert tensor.device.type==device
+        assert partition.y.device.type==device
+        assert partition.X.device.type==device
 
-#         X=torch.cat((X,torch.stack(node.Data.block.X,dim=0)),dim=0)
-#     sortX, _ = torch.sort(X,0)   
-#     sortX2, _ = torch.sort(X2,0)
-#     sortX1, _ = torch.sort(X1,0)
-#     sortX2=sortX2.to(device)
-#     sortX1=sortX1.to(device)
-#     assert not torch.equal(sortX1,sortX2)
-#     assert not torch.equal(sortX,sortX1)
-#     assert not torch.equal(sortX,sortX2)
+        X=torch.cat((X,torch.stack(partition.block.X,dim=0)),dim=0)
+    sortX, _ = torch.sort(X,0)   
+    sortX2, _ = torch.sort(X2,0)
+    sortX1, _ = torch.sort(X1,0)
+    sortX2=sortX2.to(device)
+    sortX1=sortX1.to(device)
+    assert not torch.equal(sortX1,sortX2)
+    assert not torch.equal(sortX,sortX1)
+    assert not torch.equal(sortX,sortX2)
 
-#     X_added=torch.cat((X1,X2))
-#     X_added=X_added.to(device)
-#     sortX_added, _ = torch.sort(X_added,0)
-#     assert torch.equal(sortX_added,sortX)
+    X_added=torch.cat((X1,X2))
+    X_added=X_added.to(device)
+    sortX_added, _ = torch.sort(X_added,0)
+    assert torch.equal(sortX_added,sortX)
 
-# def test_init_sparse_coding_per_block_initializes_layers(create_manager):
-#     """Test that init_sparse_coding_per_block correctly initializes sparse coding layers."""
-#     T = torch.tensor([2, 2], device='cpu')
-#     initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], dtype=torch.float32)
-#     manager = create_manager(T_val=T, initial_bounds_val=initial_bounds)
+def test_init_sparse_coding_per_block_initializes_layers(create_manager):
+    """Test that init_sparse_coding_per_block correctly initializes sparse coding layers."""
+    manager = create_manager()
 
-#     X = torch.tensor([[0.1, 0.2], [0.6, 0.7]], device='cpu', dtype=torch.float32)
-#     y = torch.tensor([[1.0], [2.0]], device='cpu', dtype=torch.float32)
+    X = torch.tensor([[0.1, 0.2], [0.6, 0.7]], device='cpu', dtype=torch.float32)
+    y = torch.tensor([[1.0], [2.0]], device='cpu', dtype=torch.float32)
 
-#     manager.add_points(X, y) # Populates blocks and their data
+    manager.add_points(X, y) # Populates blocks and their data
 
-#     # Dummy evaluation function
-#     def dummy_eval_func(D: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-#         return torch.matmul(D, h) # Simple matmul for testing
+    # Dummy evaluation function
+    def dummy_eval_func(D: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+        return torch.matmul(D, h) # Simple matmul for testing
 
-#     # Example SparseCodingConfig
-#     sc_config = ISTAConfig(n_functions=5, epochs=50, alpha=0.01, lambd=0.1)
+    # Example SparseCodingConfig
+    sc_config = ISTAConfig(n_functions=5, epochs=50, alpha=0.01, lambd=0.1)
 
-#     manager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
+    manager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
 
-#     active_blocks = manager.retrieve_active_blocks()
-#     assert len(active_blocks) > 0 # Should have at least one active block
+    active_blocks = manager.retrieve_active_blocks()
+    assert len(active_blocks) > 0 # Should have at least one active block
 
-#     for block in active_blocks:
-#         assert block.sparse_coding_layer is not None
-#         assert isinstance(block.sparse_coding_layer, ISTALayer) # Assuming ISTALayer is the default for ISTAConfig
-#         assert block.sparse_coding_layer.config.n_functions == 5
-#         assert block.sparse_coding_layer.evaluation_func is dummy_eval_func # Check function identity
-#         assert block.sparse_coding_layer.h is not None
-#         assert block.sparse_coding_layer.h.shape == (5, 1) # Check h shape based on n_functions
+    for block in active_blocks:
+        assert block.sparse_coding_layer is not None
+        assert isinstance(block.sparse_coding_layer, ISTALayer) # Assuming ISTALayer is the default for ISTAConfig
+        assert block.sparse_coding_layer.config.n_functions == 5
+        assert block.sparse_coding_layer.evaluation_func is dummy_eval_func # Check function identity
+        assert block.sparse_coding_layer.h is not None
+        assert block.sparse_coding_layer.h.shape == (5, 1) # Check h shape based on n_functions
 
-# def test_retrieve_active_blocks(create_manager, common_device):
+def test_retrieve_active_blocks(create_manager, common_device):
 
-#     n_features=5
-#     X1 = torch.randn(500, n_features)
-#     y = torch.randn(500, 1)
-#     maxNodeSize=5
-#     maxSplitsBeforeRestart=5
-#     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+    n_features=5
+    X1 = torch.randn(500, n_features)
+    y = torch.randn(500, 1)
+    partitionManager=create_manager()
 
-#     partitionManager.add_points(X1, y)
-#     activeBlocks=partitionManager.retrieve_active_blocks()
+    partitionManager.add_points(X1, y)
+    activeBlocks=partitionManager.retrieve_active_blocks()
     
-#     for block in activeBlocks:
-#         assert block.X!=[]
-#         assert block.y!=[]
-#         assert block.sparse_coding_layer is None
+    for block in activeBlocks:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert block.sparse_coding_layer is None
 
-# def test_retrieve_test_active_blocks(create_manager):
+def test_retrieve_test_active_blocks(create_manager):
 
-#     n_features=5
-#     X1 = torch.randn(500, n_features)
-#     y = torch.randn(500, 1)
-#     maxNodeSize=5
-#     maxSplitsBeforeRestart=5
-#     partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
-#     partitionManager.add_points(X1, y)
-#     activeBlocks1=partitionManager.retrieve_active_blocks()
+    n_features=5
+    X1 = torch.randn(500, n_features)
+    y = torch.randn(500, 1)
+    partitionManager=create_manager()
+    partitionManager.add_points(X1, y)
+    activeBlocks1=partitionManager.retrieve_active_blocks()
     
-#     for block in activeBlocks1:
-#         assert block.X!=[]
-#         assert block.y!=[]
-#         assert block.sparse_coding_layer is None
-#     def dummy_eval_func(x, y):
-#         return torch.sum(x - y)
+    for block in activeBlocks1:
+        assert block.X!=[]
+        assert block.y!=[]
+        assert block.sparse_coding_layer is None
+    def dummy_eval_func(x, y):
+        return torch.sum(x - y)
 
-#     def dummy_optimizer(params, lr):
-#         return torch.optim.Adam(params, lr=lr)
-#     sc_config = ISTAConfig(n_functions=5, 
-#                             epochs=50, 
-#                             alpha=0.01, 
-#                             lambd=0.1)
+    def dummy_optimizer(params, lr):
+        return torch.optim.Adam(params, lr=lr)
+    sc_config = ISTAConfig(n_functions=5, 
+                            epochs=50, 
+                            alpha=0.01, 
+                            lambd=0.1)
 
-#     partitionManager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
+    partitionManager.init_sparse_coding_per_block(config=sc_config, evaluation_func=dummy_eval_func)
 
-#     Xt = torch.randn(500, n_features)
+    Xt = torch.randn(500, n_features)
 
-#     activeTestBlocks=partitionManager.retrieve_inference_blocks(Xt)
+    activeTestBlocks=partitionManager.retrieve_inference_blocks(Xt)
 
-#     X=torch.Tensor()
-#     for _, block in enumerate(activeTestBlocks):
-#         X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
+    X=torch.Tensor()
+    for _, block in enumerate(activeTestBlocks):
+        X=torch.cat((X,torch.stack(block.X,dim=0)),dim=0)
 
-#     sortX, _ = torch.sort(X,0)   
-#     sortXt, _ = torch.sort(Xt,0)    
-#     assert torch.equal(sortX,sortXt)
+    sortX, _ = torch.sort(X,0)   
+    sortXt, _ = torch.sort(Xt,0)    
+    assert torch.equal(sortX,sortXt)
     
-#     X_val=torch.Tensor()
-#     activeBlocks2=partitionManager.retrieve_active_blocks()
-#     for block in activeBlocks2:
-#         X_val=torch.cat((X_val,torch.stack(block.X,dim=0)),dim=0)
+    X_val=torch.Tensor()
+    activeBlocks2=partitionManager.retrieve_active_blocks()
+    for block in activeBlocks2:
+        X_val=torch.cat((X_val,torch.stack(block.X,dim=0)),dim=0)
     
-#     sortX1, _ = torch.sort(X1,0)   
-#     sortX_val, _ = torch.sort(X_val,0)
-#     assert sortX1.shape==sortX_val.shape
-#     assert torch.equal(sortX1,sortX_val)
+    sortX1, _ = torch.sort(X1,0)   
+    sortX_val, _ = torch.sort(X_val,0)
+    assert sortX1.shape==sortX_val.shape
+    assert torch.equal(sortX1,sortX_val)
 
-#     count=0
-#     for block in activeTestBlocks:
-#         count+=len(block.positions)
+    count=0
+    for block in activeTestBlocks:
+        count+=len(block.positions)
     
-#     assert count==Xt.shape[0]
+    assert count==Xt.shape[0]

@@ -138,6 +138,7 @@ class AdaptativePartitionManager(BlockManager):
     def _map_points(self, X: torch.Tensor = None, y: torch.Tensor = None, expand_scope: bool = False):
         """
         Synchronizes the data points from the strategy's partitions into the manager's blocks.
+        This version ensures no points are lost while validating that points lie within their partition's bounds.
 
         Args:
             X (torch.Tensor): Data (not used in this implementation, but kept for API consistency).
@@ -147,47 +148,42 @@ class AdaptativePartitionManager(BlockManager):
         """
         partitions = self.strategy.get_partitions()
 
-        # Si expand_scope es verdadero, necesitamos obtener todos los puntos para la reasignación.
-        all_X, all_Y = (self.strategy.get_all_points() if expand_scope else (None, None))
 
         for partition in partitions:
-            # Siempre limpia los puntos del bloque antes de reasignar.
             partition.block.clear_points()
 
             if expand_scope:
-                # FIX 2: Usar partition.block.overlap que no es None.
+                all_X, all_Y = self.strategy.get_all_points() 
                 if partition.block.overlap is not None:
-                    # Calcula los límites expandidos sin modificar los bounds originales de la partición.
                     expanded_bounds = partition.bounds + partition.block.overlap * torch.tensor([-1, 1], device=self.device).view(2, 1)
                     partition.block.block_scope = expanded_bounds.detach().clone()
                     
-                    # Crea una máscara para encontrar puntos dentro del alcance expandido.
                     mask = (all_X >= expanded_bounds[0]) & (all_X <= expanded_bounds[1])
                     mask_extended = mask.all(dim=1)
                     
                     X_selected = all_X[mask_extended]
                     Y_selected = all_Y[mask_extended]
 
-                    # Agrega los puntos seleccionados al bloque.
                     for i in range(X_selected.shape[0]):
                         partition.block.new_point(X_selected[i], Y_selected[i], i)
-
-                else: # Si no hay overlap, procede como si expand_scope fuera False.
+                else: # if no overlap defined
                     if partition.X is not None and partition.X.shape[0] > 0:
                         for i in range(partition.X.shape[0]):
                             partition.block.new_point(partition.X[i], partition.y[i], i)
 
             else:
-                # FIX 1: Transferir directamente los puntos de la partición a su bloque.
-                # Esto es más robusto y evita la pérdida de puntos.
                 if partition.X is not None and partition.X.shape[0] > 0:
+                    mask = (partition.X >= partition.bounds[0]) & (partition.X <= partition.bounds[1])
+
+                    assert mask.all(), "Error de consistencia: No todos los puntos de una partición están dentro de sus propios límites calculados."
+                    
                     for i in range(partition.X.shape[0]):
                         partition.block.new_point(partition.X[i], partition.y[i], i)
 
-        # Actualiza la referencia de los bloques del manager.
+        # update self.blocks reference array
         self.blocks = np.array([p.block for p in partitions], dtype=object)
 
-        # Asegúrate de que los tensores 'y' tengan la forma correcta.
+        # Make sure y has the correct shape
         for block in self.blocks:
             if block.is_active:
                 block.y = [yi.unsqueeze(0) if yi.dim() == 0 else yi for yi in block.y]
@@ -259,27 +255,27 @@ class AdaptativePartitionManager(BlockManager):
         the spatial properties, the learned sparse_coding_layer, and amplitude
         from the original training blocks. Clears data points (X, y, target, normalized_X).
         """
-        treeLeaves=self.kdtree.get_leaves()
+        partitions=self.strategy.get_partitions()
         test_blocks = np.empty_like(self.blocks, dtype=object)  
         
         #Clone blocks and map test data to each test_block    
         pos=0
         for index in np.ndindex(self.blocks.shape):
-            node=treeLeaves[index[0]]
-            if node.Data.test_data is not None:
-                node.Data.block.clear_points()
+            partition=partitions[index[0]]
+            if partition.test_data is not None:
+                partition.block.clear_points()
                 new_pb = PartitionBlock(    
-                    space_origin=node.Data.block.space_origin,
-                    block_index=node.Data.block.block_index,
-                    block_size=node.Data.block.block_size,
-                    device=node.Data.block.device
+                    space_origin=partition.block.space_origin,
+                    block_index=partition.block.block_index,
+                    block_size=partition.block.block_size,
+                    device=partition.block.device
                 )
                 # Transfer the learned sparse_coding_layer and amplitude from original training block
-                new_pb.sparse_coding_layer = node.Data.block.sparse_coding_layer
-                new_pb.amplitude = node.Data.block.amplitude
+                new_pb.sparse_coding_layer = partition.block.sparse_coding_layer
+                new_pb.amplitude = partition.block.amplitude
                 test_blocks[index] = new_pb
-                for i, _ in enumerate(node.Data.test_data):
-                    test_blocks[index].new_point(node.Data.test_data[i], node.Data.test_y[i],pos)
+                for i, _ in enumerate(partition.test_data):
+                    test_blocks[index].new_point(partition.test_data[i], partition.test_y[i],pos)
                     pos+=1
                 
 
@@ -325,10 +321,7 @@ class AdaptativePartitionManager(BlockManager):
             y = torch.zeros(X.shape[0], 1, device=device)
 
         # Configure data and start splitting without changing the tree
-        self.kdtree.root.Data.test_data=X
-        self.kdtree.root.Data.test_y=y
-        self.kdtree._splitDataInNodes_test(self.kdtree.root)
-              
+        self.strategy.build(X, y, test=True)
         blocks_structure=self._create_test_block_structure()
 
         assert blocks_structure.size > 0
