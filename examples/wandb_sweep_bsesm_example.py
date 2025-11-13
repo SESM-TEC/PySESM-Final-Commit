@@ -78,9 +78,9 @@ sweep_config = {
         },
         'iterations': {
             'distribution': 'q_uniform',
-            'q' : 1,
+            'q' : 10,
             'min': 1,
-            'max': 100
+            'max': 1000
         }
     }
 }
