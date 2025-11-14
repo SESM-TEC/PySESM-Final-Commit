@@ -29,7 +29,7 @@ if args.headless:
 
 
 import matplotlib.pyplot as plt
-   
+
 from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
 from pysesm.models.BSESM import BSESM, BSESMConfig
