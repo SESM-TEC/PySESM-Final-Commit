@@ -41,10 +41,11 @@ def create_manager(logger, common_device):
             device=common_device,
             data_wrapper=SESMData # data_wrapper es casi siempre el mismo
         )
-        strategy = KDTreeStrategy(strategyConfig)
+        strategy = KDTreeStrategy
         config = AdaptativePartitionConfig(
             overlap_ratio=overlap_ratio,
-            partition_strategy=strategy
+            partition_strategy=strategy,
+            strategy_config=strategyConfig
         )
         manager = AdaptativePartitionManager(
             config=config,

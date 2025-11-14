@@ -49,9 +49,10 @@ def create_manager(common_device):
             data_wrapper=SESMData,
             device=common_device
         )
-        strategy = KDTreeStrategy(strategyConfig)
+        strategy = KDTreeStrategy
         config = AdaptativePartitionConfig(
             partition_strategy=strategy,
+            strategy_config=strategyConfig,
             overlap_ratio=None
         )
         return AdaptativePartitionManager(

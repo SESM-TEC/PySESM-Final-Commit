@@ -17,7 +17,7 @@ import numpy as np
 
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
-from pysesm.blocks.PartitionStrategy import PartitionStrategy
+from pysesm.blocks.PartitionStrategy import PartitionStrategy, PartitionStrategyConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy
 from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.base_types import TensorProxy
@@ -34,7 +34,8 @@ class AdaptativePartitionConfig(BlockManagerConfig):
     adjacent blocks for smooth transitions.
     """
     overlap_ratio: float = 0.1
-    partition_strategy: PartitionStrategy = None
+    partition_strategy: Callable = None
+    strategy_config: PartitionStrategyConfig = None
     
 class AdaptativePartitionManager(BlockManager):
     
@@ -61,7 +62,7 @@ class AdaptativePartitionManager(BlockManager):
         
         self.logger = logger
         self.blocks: np.ndarray = np.empty(0, dtype=object)
-        self.strategy=config.partition_strategy
+        self.strategy=config.partition_strategy(config.strategy_config)
         self.sparse_coding_layer_hook = sparse_coding_layer_hook
         self.X: torch.Tensor = None
         self.y: torch.Tensor = None
