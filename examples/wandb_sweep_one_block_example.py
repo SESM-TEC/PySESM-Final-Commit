@@ -137,7 +137,7 @@ def train():
     )
 
     partition_config = UniformPartitionConfig(
-        T=3,
+        T=1,
         initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
         device=device
     )

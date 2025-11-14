@@ -34,7 +34,8 @@ class VisualizerHook:
     def __init__(self, model: SESM, ax: plt.Axes, X_train: torch.Tensor,
                  gt_mu: list, gt_sigma: list, 
                  output_dir: str = "animation_frames",
-                 plot_limits: tuple = ((-2.5, 2.5), (-2.5, 2.5))):
+                 plot_limits: tuple = ((-2.5, 2.5), (-2.5, 2.5)),
+                 headless: bool = False):
         self.model = model
         self.ax = ax
         self.X_train = X_train.detach().cpu()
@@ -42,10 +43,19 @@ class VisualizerHook:
         self.ground_truth_sigma = [s.cpu() for s in gt_sigma]
         self.plot_limits = plot_limits
         self.fig = ax.get_figure()
+        self.headless = headless
         
         # Attributes for video frame generation.
-        run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.frames_path = Path(output_dir) / f"run_{run_timestamp}"
+        provided_path = Path(output_dir)
+        if provided_path.is_dir():
+            # New behavior: A pre-created, unique directory was provided.
+            self.output_path = provided_path
+        else:
+            # Retro-compatible behavior: Create a unique sub-directory inside the base path.
+            run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.output_path = provided_path / f"run_{run_timestamp}"
+
+        self.frames_path = self.output_path / "frames"
         self.frames_path.mkdir(parents=True, exist_ok=True)
         self.frame_files = []
         self.frame_count = 0
@@ -172,37 +182,51 @@ class VisualizerHook:
                      fontfamily='monospace', verticalalignment='top', 
                      bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.9))
         
-        plt.pause(0.01)
+        if not self.headless:
+            plt.pause(0.01)
 
         # Save frame
+
+        # --- Proactive size enforcement to avoid rounding errors ---
+        # Define target size in pixels and a "clean" DPI to calculate exact inches.
+        # This prevents floating point rounding issues in Matplotlib's backend that
+        # can cause frames to have slightly different sizes (e.g., 1279 vs 1280 pixels).
+        TARGET_DPI = 160
+        TARGET_WIDTH_PX = 1280
+        TARGET_HEIGHT_PX = 960
+        width_inches = TARGET_WIDTH_PX / TARGET_DPI
+        height_inches = TARGET_HEIGHT_PX / TARGET_DPI
+        
         frame_filename = self.frames_path / f"frame_{self.frame_count:04d}.png"
-        self.fig.set_size_inches(1280 / 150, 960 / 150)
-        self.fig.savefig(frame_filename, dpi=150, facecolor='white')
-    
+
+        self.fig.set_size_inches(width_inches, height_inches)
+        self.fig.savefig(frame_filename, dpi=TARGET_DPI, facecolor='white')
+        
         self.frame_files.append(frame_filename)
         self.frame_count += 1
 
-    def create_video(self, video_name="dictionary_evolution.mp4", fps=10):
+    def create_video(self, video_name: str ="dictionary_evolution.mp4", fps=10):
         """Compiles the saved frames into a video and cleans up the files."""
         if not self.frame_files:
             logger.warning("No frames were saved, skipping video creation.")
             return
 
-        output_path = Path(video_name)
-        stem, suffix = output_path.stem, output_path.suffix
+        video_path = self.output_path / video_name
+        stem, suffix = video_path.stem, video_path.suffix
+        
         counter = 1
-        while output_path.exists():
-            output_path = Path(f"{stem}_{counter}{suffix}")
+        while video_path.exists():
+            video_path = self.output_path / f"{stem}_{counter}{suffix}"        
             counter += 1
 
-        logger.info(f"Creating video '{output_path}' from {len(self.frame_files)} frames...")
+        logger.info(f"Creating video '{video_path}' from {len(self.frame_files)} frames...")
         
-        with imageio.get_writer(output_path, fps=fps) as writer:
+        with imageio.get_writer(video_path, fps=fps) as writer:
             for filename in self.frame_files:
                 image = imageio.imread(str(filename))
                 writer.append_data(image)
         
-        logger.info(f"Video saved successfully to '{output_path.resolve()}'!")
+        logger.info(f"Video saved successfully to '{video_path.resolve()}'!")
         
         logger.info("Cleaning up temporary frame files...")
         for filename in self.frame_files:
