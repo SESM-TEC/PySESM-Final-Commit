@@ -63,7 +63,10 @@ class EnhancedJSONEncoder(json.JSONEncoder):
         if isinstance(o, torch.device):
             return str(o)
         if callable(o):
-            return f"<function {o.__name__}>"
+            if hasattr(o, '__name__'):
+                return f"<function {o.__name__}>"
+            # Handle callable class instances like torch.nn.MSELoss()
+            return f"<instance of {o.__class__.__name__}>"
         try:
             return super().default(o)
         except TypeError:
@@ -234,7 +237,7 @@ model = BSESM(**experiment, logger=logger)
 
 # Create and install the visualization hook using the imported, general-purpose class
 visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5, 5), (-5, 5)),
-                             output_dir=output_dir, headless=args.headless))
+                             output_dir=output_dir, headless=args.headless)
 model.sesm_hook = visual_hook
     
 # 6. TRAIN AND EVALUATE THE MODEL
