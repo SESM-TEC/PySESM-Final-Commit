@@ -69,16 +69,25 @@ machine learning tasks.
 1.  **Space Partitioning:** The input data space is divided into smaller, manageable regions called "blocks." This allows the model to focus on learning local features of a function, making it highly scalable and effective for complex, non-stationary functions.
 
 <p align="center">
-  <img src="pics/partition.png" alt="Partition Config" width="400"/>
+    <picture>
+        <!-- Fallback local asset kept for reliability -->
+        <source srcset="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/EbTQZoi21PZPsLlCbAVNjz8Bfg_A1Gbd6CTncMp4EuEW9w?download=1" type="image/png" />
+        <img src="pics/partition.png" alt="Partition Configuration (space partition example)" width="400" />
+    </picture>
 </p>
 
 
 2.  **Dictionary Learning:** The model learns a global dictionary of basis functions (e.g., Gaussian functions). These functions, or "dictionary words," serve as the fundamental building blocks for approximating the target function. The dictionary is shared across all blocks.
-$$D(x) = \left( \underline{\phi_1} (x), \underline{\phi_2} (x), \underline{\phi_2} (x), ... ,  \underline{\phi_n} (x)  \right)$$
+$$D(\underline{x}) = \left( \underline{\phi_1} (\underline{x}), \underline{\phi_2} (\underline{x}), \underline{\phi_2} (\underline{x}), ... ,  \underline{\phi_n} (\underline{x})  \right)$$
 
 <p align="center">
-  <img src="pics/dictionary2.png" alt="Partition Config" width="400"/>
+    <picture>
+        <!-- Fallback local asset kept for reliability -->
+        <source srcset="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/EfgItT_3qjZEj6Z6gGQ5XzoBITdyCfkyh_XLyMV1T_12zw?download=1" type="image/png" />
+        <img src="pics/dictionary2.png" alt="Dictionary example (learned basis functions)" width="400" />
+    </picture>
 </p>
+
 
 
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
@@ -288,95 +297,76 @@ logging.info(
 )
 ```
 
-## 4. Advanced Usage
+## 4. Advanced Examples
+### One block example `examples/one_block_example.py`
 
-### Multi-Block Partitioning
+
+The one-block configuration treats the whole input space as a single partition. This is the simplest setup and a good baseline before introducing multiple blocks.
+If the image does not load, verify the shared link has public (anonymous) view permissions.
+<p align="center">
+    <img src="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/Efmit7muVKNEhbu8S7AGBbYBOthIOp3p61QS_rY7mpzbpA?download=1" alt="One-block partition: entire domain as a single region" width="400" />
+</p>
+
+
+### Training Visualization example `examples/video_demo.py`
+
+Monitor the training in real time by attaching a `VisualizerHook`. This hook captures snapshots of the dictionary at each logging interval and compiles them into a video.
+
+To generate the training-evolution video, use the `example/video_demo.py` script. The script saves the `docs/pics/training_evolution.mp4` file, ready to be viewed.
+
+Run in Windows PowerShell:
+```powershell
+python examples/video_demo.py
+```
+
+<p align="center">
+    <video controls width="500" preload="metadata">
+        <source src="https://estudianteccr-my.sharepoint.com/:v:/g/personal/aasalas_estudiantec_cr/EQ5G2pMw2MBKphiiu02S9h4Bsgf8q0T5eqHM7hMTcsNpYw?download=1" type="video/mp4" />
+        Tu navegador no soporta video HTML5.
+    </video>
+</p>
+
+### Hyperparameter Tuning with Wandb example `example/wandb_sweep_example.py`
+
+The configuration-driven design of `pysesm` makes it perfect for hyperparameter optimization. The `wandb_sweep_example.py` shows how to integrate with `wandb` for a Bayesian sweep.
+
+```powershell
+python examples/wandb_sweep_example.py
+```
+
+### Multi-Block Partitioning example `examples/multi_block_example.py`
+
+Multi-block partitioning divides the input domain into several smaller regions (blocks) so the model can learn local behaviour in each block independently while sharing a global dictionary. This approach improves scalability and accuracy on complex, non-stationary functions because each block fits simpler local patterns. Use `UniformPartitionConfig` to create regular grids (or `AdaptativePartitionConfig` for data-driven splits), and tune `T` (blocks per dimension) and `overlap_ratio` to balance locality versus continuity between blocks.
 
 To handle more complex functions, you can easily partition the space into a grid. The only change required is in the `UniformPartitionConfig`.
 
 ```python
 # From multi_block_example.py
-# Create a 2x2 grid of blocks (4 total)
+
+# Create initial bounds for the N-dimensional space
+domain_limits = (-2.0, 2.0)
+initial_bounds_list = [[domain_limits[0]] * n_features, [domain_limits[1]] * n_features]
+initial_bounds_tensor = torch.tensor(initial_bounds_list, dtype=torch.float32)
+
+# Create T for an N-dimensional grid (e.g., 2 blocks per dimension)
+blocks_per_dim = 2
+t_list = [blocks_per_dim] * n_features
+t_tensor = torch.tensor(t_list)
+
 partition_config = UniformPartitionConfig(
-    T=2, # Or T=torch.tensor([2, 2]) for a 2x2 grid
-    initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    overlap_ratio=0.25 # Add 25% overlap between blocks for smoother transitions
+    T=t_tensor,
+    initial_bounds=initial_bounds_tensor,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
+
 ```
-The rest of the training pipeline remains the same. The `SSESM` model will automatically iterate through the four blocks during training.
+The rest of the training pipeline remains the same.
+
+### Train Sesm with n-dimensional functions `examples/n_dimensions_example`
+
+This example shows how to apply SESM to arbitrary-dimensional (N-D) functions. The script `examples/n_dimensions_example.py` generates a synthetic N-dimensional dataset (nd-paraboloid), creates a partition, sets up the dictionary and sparse encoder, and trains the model to evaluate. It is useful for validating its behavior and scalability beyond 2D
 
 
-### Training Visualization
-
-You can monitor the training process in real-time by attaching a `VisualizerHook`. This hook generates frames of the dictionary's state at each logging interval and can compile them into a video.
-
-```python
-# From visualization.py and any example script
-import matplotlib.pyplot as plt
-from visualization import VisualizerHook # Assumes visualization.py is in the same directory
-
-# ... (model and data setup)
-
-# 1. Create a matplotlib figure and axis
-fig_hook, ax_hook = plt.subplots(figsize=(10, 8))
-plt.ion() # Turn on interactive mode
-
-# 2. Instantiate the model
-model = SSESM(**experiment, logger=logger)
-
-# 3. Create and attach the visualization hook
-visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5, 5), (-5, 5)))
-model.sesm_hook = visual_hook
-
-# 4. Train the model (the hook will be called automatically)
-try:
-    model.partial_fit(X_train, y_train)
-finally:
-    # 5. Create a video from the saved frames after training
-    visual_hook.create_video(video_name="training_evolution.mp4")
-
-plt.show(block=True)
-```
-
-### Hyperparameter Tuning with Weights & Biases
-
-The configuration-driven design of `pysesm` makes it perfect for hyperparameter optimization. The `wandb_sweep_example.py` shows how to integrate with `wandb` for a Bayesian sweep.
-
-**Key Steps:**
-
-1.  **Define a `sweep_config` dictionary:** Specify the search method (`bayes`), the metric to optimize (`mse_value`), and the parameters to search over with their distributions.
-
-    ```python
-    sweep_config = {
-        'method': 'bayes',
-        'metric': {'name': 'mse_value', 'goal': 'minimize'},
-        'parameters': {
-            'n_functions': {'distribution': 'q_uniform', 'min': 10, 'max': 80},
-            'dict_alpha': {'distribution': 'log_uniform_values', 'min': 1e-4, 'max': 1e-2},
-            'sc_lambd': {'distribution': 'log_uniform_values', 'min': 1e-4, 'max': 1e-2},
-            # ... other parameters
-        }
-    }
-    ```
-
-2.  **Create a `train` function:** This function will be called by the `wandb` agent for each run. Inside this function:
-    *   Initialize `wandb` (`wandb.init()`).
-    *   Access the run's hyperparameters from `wandb.config`.
-    *   Build the `pysesm` configuration objects dynamically using these hyperparameters.
-    *   Instantiate and train the model.
-    *   Evaluate the model and log the result (`wandb.log({"mse_value": mse_value})`).
-
-3.  **Start the sweep agent:**
-
-    ```python
-    import wandb
-
-    # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="pysesm-hyperparameter-optimization")
-
-    # Start the agent to run the `train` function multiple times
-    wandb.agent(sweep_id, function=train, count=200)
-    ```
 
 ## 5. API Reference (Core Classes)
 
