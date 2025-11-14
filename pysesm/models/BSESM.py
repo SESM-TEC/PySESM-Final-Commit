@@ -328,7 +328,7 @@ class BSESM(SESM):
                 hook_info = {
                     'partial_fit_call_count': self.partial_fit_count,
                     'model_epoch': epoch,
-                    'dict_losses': self.dictionary_layer.losses,
+                    'dictionary_losses': self.dictionary_layer.losses,
                     'sparse_coding_losses': self._sparse_coding_losses,
                     'h_mega': self.global_sparse_coding_layer.h.detach().clone(),
                     'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
