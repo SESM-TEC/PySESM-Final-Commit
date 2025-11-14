@@ -297,14 +297,16 @@ logging.info(
 )
 ```
 
-## 4. Examples
+## 4. Advanced Examples
 ### One block example `examples/one_block_example.py`
 
+
+The one-block configuration treats the whole input space as a single partition. This is the simplest setup and a good baseline before introducing multiple blocks.
+If the image does not load, verify the shared link has public (anonymous) view permissions.
 <p align="center">
     <img src="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/Efmit7muVKNEhbu8S7AGBbYBOthIOp3p61QS_rY7mpzbpA?download=1" alt="One-block partition: entire domain as a single region" width="400" />
 </p>
-The one-block configuration treats the whole input space as a single partition. This is the simplest setup and a good baseline before introducing multiple blocks.
-If the image does not load, verify the shared link has public (anonymous) view permissions.
+
 
 ### Training Visualization example `examples/video_demo.py`
 
@@ -334,21 +336,35 @@ python examples/wandb_sweep_example.py
 
 ### Multi-Block Partitioning example `examples/multi_block_example.py`
 
+Multi-block partitioning divides the input domain into several smaller regions (blocks) so the model can learn local behaviour in each block independently while sharing a global dictionary. This approach improves scalability and accuracy on complex, non-stationary functions because each block fits simpler local patterns. Use `UniformPartitionConfig` to create regular grids (or `AdaptativePartitionConfig` for data-driven splits), and tune `T` (blocks per dimension) and `overlap_ratio` to balance locality versus continuity between blocks.
+
 To handle more complex functions, you can easily partition the space into a grid. The only change required is in the `UniformPartitionConfig`.
 
 ```python
 # From multi_block_example.py
-# Create a 2x2 grid of blocks (4 total)
+
+# Create initial bounds for the N-dimensional space
+domain_limits = (-2.0, 2.0)
+initial_bounds_list = [[domain_limits[0]] * n_features, [domain_limits[1]] * n_features]
+initial_bounds_tensor = torch.tensor(initial_bounds_list, dtype=torch.float32)
+
+# Create T for an N-dimensional grid (e.g., 2 blocks per dimension)
+blocks_per_dim = 2
+t_list = [blocks_per_dim] * n_features
+t_tensor = torch.tensor(t_list)
+
 partition_config = UniformPartitionConfig(
-    T=2, # Or T=torch.tensor([2, 2]) for a 2x2 grid
-    initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    overlap_ratio=0.25 # Add 25% overlap between blocks for smoother transitions
+    T=t_tensor,
+    initial_bounds=initial_bounds_tensor,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
+
 ```
-The rest of the training pipeline remains the same. The `SSESM` model will automatically iterate through the four blocks during training.
+The rest of the training pipeline remains the same.
 
 ### Train Sesm with n-dimensional functions `examples/n_dimensions_example`
 
+This example shows how to apply SESM to arbitrary-dimensional (N-D) functions. The script `examples/n_dimensions_example.py` generates a synthetic N-dimensional dataset (nd-paraboloid), creates a partition, sets up the dictionary and sparse encoder, and trains the model to evaluate. It is useful for validating its behavior and scalability beyond 2D
 
 
 
