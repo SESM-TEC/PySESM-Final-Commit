@@ -18,7 +18,7 @@ from pathlib import Path
 
 # --- Argument Parsing & Headless Setup ---
 # This must happen BEFORE importing matplotlib.pyplot
-parser = argparse.ArgumentParser(description="Run a BSESM experiment.")
+parser = argparse.ArgumentParser(description="Run a SSESM experiment.")
 parser.add_argument('--headless', action='store_true', 
                     help="Run in headless mode (no plots displayed, saves files).")
 args = parser.parse_args()
@@ -32,7 +32,6 @@ import matplotlib.pyplot as plt
 
 from pysesm.models.SESM import SESM
 from pysesm.models.SSESM import SSESM, SSESMConfig
-from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.sparse_coding.FISTALayer import FISTAConfig, RestartStrategy, MomentumScheme
 from pysesm.sparse_coding import ADMMConfig
@@ -49,7 +48,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # --- Directory and Config Setup ---
 run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-output_dir = Path(f"results/bsesm_run_{run_timestamp}")
+output_dir = Path(f"results/ssesm_run_{run_timestamp}")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 class EnhancedJSONEncoder(json.JSONEncoder):
@@ -178,10 +177,8 @@ ssesm_config = SSESMConfig(
 )
 
 # 3. DEFINE EXPERIMENT PARAMETERS
-which_sesm = "ssesm" # "ssesm" or "bsesm"
-
 experiment = {
-    "config": ssesm_config, # bsesm_config if which_sesm=="bsesm" else ssesm_config,
+    "config": ssesm_config, 
     "hyp_set": 1,
     "n_samples": 500,
     "seed": 45,
