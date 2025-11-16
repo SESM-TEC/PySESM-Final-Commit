@@ -68,25 +68,54 @@ machine learning tasks.
 
 1.  **Space Partitioning:** The input data space is divided into smaller, manageable regions called "blocks." This allows the model to focus on learning local features of a function, making it highly scalable and effective for complex, non-stationary functions.
 
-<p align="center">
-    <picture>
-        <!-- Fallback local asset kept for reliability -->
-        <source srcset="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/EbTQZoi21PZPsLlCbAVNjz8Bfg_A1Gbd6CTncMp4EuEW9w?download=1" type="image/png" />
-        <img src="pics/partition.png" alt="Partition Configuration (space partition example)" width="400" />
-    </picture>
-</p>
+
+<div align="center">
+  <svg width="400" height="400" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" 
+              refX="0" refY="3" orient="auto">
+        <polygon points="0 0, 6 3, 0 6" fill="black"/>
+      </marker>
+    </defs>
+    <rect x="20" y="60" width="80" height="80" fill="none" stroke="black"/>
+    <line x1="20" y1="80" x2="100" y2="80" stroke="black"/>
+    <line x1="20" y1="100" x2="100" y2="100" stroke="black"/>
+    <line x1="20" y1="120" x2="100" y2="120" stroke="black"/>
+    <line x1="40" y1="60" x2="40" y2="140" stroke="black"/>
+    <line x1="60" y1="60" x2="60" y2="140" stroke="black"/>
+    <line x1="80" y1="60" x2="80" y2="140" stroke="black"/>
+    <polygon points="100,60 150,40 150,120 100,140" fill="none" stroke="black"/>
+    <line x1="125" y1="50" x2="125" y2="130" stroke="black"/>
+    <line x1="137.5" y1="45" x2="137.5" y2="125" stroke="black"/>
+    <line x1="112.5" y1="55" x2="112.5" y2="135" stroke="black"/>
+    <line x1="100" y1="80" x2="150" y2="60" stroke="black"/>
+    <line x1="100" y1="100" x2="150" y2="80" stroke="black"/>
+    <line x1="100" y1="120" x2="150" y2="100" stroke="black"/>
+    <polygon points="20,60 100,60 150,40 70,40" fill="none" stroke="black"/>
+    <line x1="40" y1="60" x2="90" y2="40" stroke="black"/>
+    <line x1="60" y1="60" x2="110" y2="40" stroke="black"/>
+    <line x1="80" y1="60" x2="130" y2="40" stroke="black"/>
+    <line x1="112.5" y1="55" x2="32.5" y2="55" stroke="black"/>
+    <line x1="125" y1="50" x2="45" y2="50" stroke="black"/>
+    <line x1="137.5" y1="45" x2="57.5" y2="45" stroke="black"/>
+    <line x1="150" y1="120" x2="180" y2="120"
+          stroke="black" marker-end="url(#arrow)"/>
+    <line x1="70" y1="40" x2="70" y2="10"
+          stroke="black" marker-end="url(#arrow)"/>
+    <line x1="20" y1="140" x2="3" y2="150"
+          stroke="black" marker-end="url(#arrow)"/>
+    <text x="75" y="20" font-size="15" fill="black">x₁</text>
+    <text x="175" y="113" font-size="15" fill="black">x₂</text>
+    <text x="15" y="155" font-size="15" fill="black">x₃</text>
+  </svg>
+</div>
+
+
 
 
 2.  **Dictionary Learning:** The model learns a global dictionary of basis functions (e.g., Gaussian functions). These functions, or "dictionary words," serve as the fundamental building blocks for approximating the target function. The dictionary is shared across all blocks.
 $$D(\underline{x}) = \left( \underline{\phi_1} (\underline{x}), \underline{\phi_2} (\underline{x}), \underline{\phi_2} (\underline{x}), ... ,  \underline{\phi_n} (\underline{x})  \right)$$
 
-<p align="center">
-    <picture>
-        <!-- Fallback local asset kept for reliability -->
-        <source srcset="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/EfgItT_3qjZEj6Z6gGQ5XzoBITdyCfkyh_XLyMV1T_12zw?download=1" type="image/png" />
-        <img src="pics/dictionary2.png" alt="Dictionary example (learned basis functions)" width="400" />
-    </picture>
-</p>
 
 
 
@@ -297,42 +326,22 @@ logging.info(
 )
 ```
 
-## 4. Advanced Examples
+## 4. Examples
 ### One block example `examples/one_block_example.py`
 
 
 The one-block configuration treats the whole input space as a single partition. This is the simplest setup and a good baseline before introducing multiple blocks.
-If the image does not load, verify the shared link has public (anonymous) view permissions.
-<p align="center">
-    <img src="https://estudianteccr-my.sharepoint.com/:i:/g/personal/aasalas_estudiantec_cr/Efmit7muVKNEhbu8S7AGBbYBOthIOp3p61QS_rY7mpzbpA?download=1" alt="One-block partition: entire domain as a single region" width="400" />
-</p>
-
-
-### Training Visualization example `examples/video_demo.py`
-
-Monitor the training in real time by attaching a `VisualizerHook`. This hook captures snapshots of the dictionary at each logging interval and compiles them into a video.
-
-To generate the training-evolution video, use the `example/video_demo.py` script. The script saves the `docs/pics/training_evolution.mp4` file, ready to be viewed.
-
-Run in Windows PowerShell:
-```powershell
-python examples/video_demo.py
-```
 
 <p align="center">
-    <video controls width="500" preload="metadata">
-        <source src="https://estudianteccr-my.sharepoint.com/:v:/g/personal/aasalas_estudiantec_cr/EQ5G2pMw2MBKphiiu02S9h4Bsgf8q0T5eqHM7hMTcsNpYw?download=1" type="video/mp4" />
-        Tu navegador no soporta video HTML5.
-    </video>
+  <img src="figs/one_block_example.png" width="700" />
 </p>
 
-### Hyperparameter Tuning with Wandb example `example/wandb_sweep_example.py`
+In this example, you can see real-time training using the `VisualizerHook` class. This hook captures snapshots of the dictionary at each logging interval and compiles them into a video.
 
-The configuration-driven design of `pysesm` makes it perfect for hyperparameter optimization. The `wandb_sweep_example.py` shows how to integrate with `wandb` for a Bayesian sweep.
+<p align="center">
+<video src="figs/one_block_evolution.mp4" controls width="600">
+</p>
 
-```powershell
-python examples/wandb_sweep_example.py
-```
 
 ### Multi-Block Partitioning example `examples/multi_block_example.py`
 
@@ -361,10 +370,6 @@ partition_config = UniformPartitionConfig(
 
 ```
 The rest of the training pipeline remains the same.
-
-### Train Sesm with n-dimensional functions `examples/n_dimensions_example`
-
-This example shows how to apply SESM to arbitrary-dimensional (N-D) functions. The script `examples/n_dimensions_example.py` generates a synthetic N-dimensional dataset (nd-paraboloid), creates a partition, sets up the dictionary and sparse encoder, and trains the model to evaluate. It is useful for validating its behavior and scalability beyond 2D
 
 
 
