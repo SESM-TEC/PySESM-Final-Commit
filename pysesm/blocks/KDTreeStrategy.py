@@ -57,6 +57,8 @@ class KDTreeStrategy(PartitionStrategy):
         """
         if not test:
             self.kdtree = KDTree(X, y, self.config.maxNodeSize, self.config.data_wrapper, self.config.device)
+            for i, partition in enumerate(self.get_partitions()):
+                partition.block.block_index=(i,)
         else:
             self.kdtree.root.Data.test_data=X
             self.kdtree.root.Data.test_y=y

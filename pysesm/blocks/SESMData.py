@@ -17,14 +17,14 @@ class SESMData():
         self.X: torch.Tensor = X
         self.y: torch.Tensor = y
         self.split_point: torch.Tensor = None
-
+        self.idx: tuple = (0,)
         self.test_data: torch.Tensor = None
         self.test_y: torch.Tensor = None
         self.updateBounds()
         self.dim : int = self.greatestVarDim()
         self.block: PartitionBlock = PartitionBlock(
                 self.bounds[0],
-                (1,),
+                self.idx,
                 self.bounds[1]-self.bounds[0],
                 device=device)
 
