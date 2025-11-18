@@ -1,24 +1,122 @@
-Of course! Based on the provided source code and examples, here is a comprehensive User's Manual for the `pysesm` library in Markdown format.
 
----
 
 # PySESM User's Manual
 
-## 1. Introduction
+## 1. Prepare environment
 
-Welcome to the User's Manual for **PySESM**, a Python library for building Sparse-Encoded Surrogate Models. This framework is designed for complex function approximation and surrogate modeling tasks, leveraging sparse encoding, dictionary learning, and a unique block-based spatial partitioning approach.
+With `conda` or `micromamba`, create your working environment with
 
+    > conda create -n "sesm" python=3.12
+    
+Install your PyTorch according to your hardware configuration.  For
+instance, if you only have CPU:
+
+    > pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    
+or if you have GPU with CUDA 12.8:
+
+    > pip3 install torch torchvision
+
+For PyTorch it is preferable to check https://pytorch.org for the
+proper up-to-date install configuration.
+
+## 2. Dependencies and SESM installation
+
+This requires at least Python 3.12 and the dependencies listed in
+requirements.txt.  Besides the Python core libraries, PySESM relies on
+PyTorch and numpy, although additional libraries are used in the
+examples for visualization and dataset creation.
+
+This, will install PySESM and its dependencies:
+
+    > pip install -e . 
+    
+or 
+
+    > pip install -e . --use-pep517
+	
+The experiments, examples and so on need additional libraries that
+you can install with
+
+    > pip install -e ".[dev]"
+	
+    
+However, if you prefer to install the dependency packages with
+`micromamba` or `conda`, then you can use:
+
+    > conda install numpy matplotlib scipy scikit-learn pandas plotly
+
+
+
+## 3. Introduction
+
+PySESM is a PyTorch-based Python library that implements SESM
+(Sparse-Encoded Surrogate Model).  PySESM is designed for high-performance
+surrogate modeling and function approximation. It excels at
+representing complex, high-dimensional functions by implementing a
+powerful 'divide and conquer' strategy. The core architecture
+partitions the input space into manageable blocks, each handled by a
+local model. A key innovation is its use of a globally shared,
+learnable dictionary of basis functions (e.g., Gaussians) combined
+with block-specific sparse codes. This approach allows the model to
+learn a rich, shared representation of the function's features while
+using sparse, localized codes to efficiently capture the specific
+behavior in different regions of the input space, resulting in a
+highly flexible and scalable framework for scientific computing and
+machine learning tasks.
 ### Core Concepts
 
-PySESM is built on three main pillars:
-
 1.  **Space Partitioning:** The input data space is divided into smaller, manageable regions called "blocks." This allows the model to focus on learning local features of a function, making it highly scalable and effective for complex, non-stationary functions.
+
+<p align="center">
+  <img src="pics/partition.png" alt="Partition Config" width="400"/>
+</p>
+
+
 2.  **Dictionary Learning:** The model learns a global dictionary of basis functions (e.g., Gaussian functions). These functions, or "dictionary words," serve as the fundamental building blocks for approximating the target function. The dictionary is shared across all blocks.
+$$D(x) = \left( \underline{\phi_1} (x), \underline{\phi_2} (x), \underline{\phi_2} (x), ... ,  \underline{\phi_n} (x)  \right)$$
+
+<p align="center">
+  <img src="pics/dictionary2.png" alt="Partition Config" width="400"/>
+</p>
+
+
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
 
-The core idea is to approximate a target function `y` as `y ≈ D @ h`, where `D` is the dictionary and `h` is the sparse code.
 
-## 2. Library Architecture
+The core idea is to approximate the ground truth signal $ \mathbf{y} $ as the product $ \mathbf{D}\mathbf{h} $ where $ \mathbf{D} $ is the learned **dictionary** and $ \mathbf{h} $ is the corresponding **sparse code**. In this formulation, $ \mathbf{y} \in \mathbb{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \mathbf{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \mathbf{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \mathbf{y} $.
+
+$$\underline{y} = D \underline{h}$$
+
+$$
+\underbrace{
+\begin{bmatrix}
+y_1 \\[3pt]
+y_2 \\[3pt]
+\vdots \\[3pt]
+y_{\text{m}}
+\end{bmatrix}
+}_{\mathbf{y} \in \mathbb{R}^{(\text{m},\,1)}}
+=
+\underbrace{
+\begin{bmatrix}
+| & | & & | \\
+\mathbf{\underline{\phi}}_1 & \mathbf{\underline{\phi}}_2 & \cdots & \mathbf{\underline{\phi}}_{\text{n}} \\
+| & | & & |
+\end{bmatrix}
+}_{\mathbf{D} \in \mathbb{R}^{(\text{m},\,\text{n})}}
+\;
+\underbrace{
+\begin{bmatrix}
+h_1 \\[3pt]
+h_2 \\[3pt]
+\vdots \\[3pt]
+h_{\text{n}}
+\end{bmatrix}
+}_{\mathbf{h} \in \mathbb{R}^{(\text{n},\,1)}}
+$$
+
+## 4. Library Architecture
 
 The power of `pysesm` lies in its modular and configuration-driven design. You can easily swap out components for partitioning, sparse coding, and dictionary learning to tailor the model to your specific problem.
 
@@ -68,7 +166,7 @@ ssesm_config = SSESMConfig(
 
 *   **Factories (`pysesm.factories`):** The library uses a factory pattern to instantiate components based on the provided configuration objects. This is handled internally but is a key part of the flexible design.
 
-## 3. Getting Started: A Basic Example
+## 4. Getting Started: A Basic Example
 
 Let's walk through a complete example of approximating a 2D function composed of three Gaussian distributions using a single block. This is based on `one_block_example.py`.
 
@@ -135,9 +233,11 @@ ssesm_config = SSESMConfig(
 )
 ```
 
-### Step 3: Generate Data
+### Step 3: Generate Dataset
 
-PySESM provides utility functions to generate sample datasets. Here, we create a function composed of three non-diagonal Gaussians.
+PySESM provides utility functions to generate sample datasets in `PySESM\pysesm\utils_dataset\generate_dataset.py`. For example, we create a function composed of three non-diagonal Gaussians.
+
+
 
 ```python
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
@@ -205,34 +305,6 @@ partition_config = UniformPartitionConfig(
 ```
 The rest of the training pipeline remains the same. The `SSESM` model will automatically iterate through the four blocks during training.
 
-### Higher-Dimensional Problems
-
-PySESM is not limited to 2D. It can approximate N-dimensional functions.
-
-```python
-# From n_dimensions_example.py
-
-# --- Key Parameters ---
-n_features = 4  # Number of input dimensions
-n_functions = 50
-n_samples = 2000
-
-# --- Define N-dimensional Bounds ---
-domain_limits = (-2.0, 2.0)
-initial_bounds_list = [[domain_limits[0]] * n_features, [domain_limits[1]] * n_features]
-initial_bounds_tensor = torch.tensor(initial_bounds_list, dtype=torch.float32)
-
-# --- Create a 2x2x2x2 Grid (16 blocks) ---
-blocks_per_dim = 2
-t_list = [blocks_per_dim] * n_features
-t_tensor = torch.tensor(t_list)
-
-partition_config = UniformPartitionConfig(
-    T=t_tensor,
-    initial_bounds=initial_bounds_tensor,
-)
-```
-The model will then operate on input tensors of shape `(n_samples, 4)`.
 
 ### Training Visualization
 
