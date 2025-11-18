@@ -15,12 +15,9 @@ import logging
 import torch
 import numpy as np
 
-from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.BlockManager import BlockManager
-from pysesm.blocks.PartitionStrategy import PartitionStrategy, PartitionStrategyConfig
-from pysesm.blocks.KDTreeStrategy import KDTreeStrategy
+from pysesm.blocks.PartitionStrategy import PartitionStrategyConfig
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.base_types import TensorProxy
 from .BlockManager import BlockManagerConfig
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
@@ -34,7 +31,7 @@ class AdaptativePartitionConfig(BlockManagerConfig):
     adjacent blocks for smooth transitions.
     """
     overlap_ratio: float = 0.1
-    partition_strategy: Callable = None
+    partition_strategy: Callable = None #PartitionStrategy constructor
     strategy_config: PartitionStrategyConfig = None
     
 class AdaptativePartitionManager(BlockManager):
