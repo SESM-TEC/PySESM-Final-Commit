@@ -1,6 +1,17 @@
-# Opcion covariance_matrices.py -> generate_sigma_tensors()
-# Opcion density_generation.py -> generate_z() y generate_mu()
+"""
+Gaussian Covariance Density Utilities.
 
+Provides functions for generating and handling covariance matrices, Gaussian
+Mixture Model (GMM) densities, and mesh evaluations, primarily using scipy.stats.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import numpy as np
 import torch

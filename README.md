@@ -140,7 +140,8 @@ model = SSESM(config=ssesm_config, seed=42, logger=logger)
 ```
 
 Check the `examples/` folder for complete scripts, including data
-generation and visualization hooks.
+generation and visualization hooks, and the `docs/UsersManual.md` for
+more details.
 
 ## Directory Structure
 

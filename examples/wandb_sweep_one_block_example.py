@@ -19,7 +19,7 @@ from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
-from pysesm.utils.metric_loggers import log_to_WB
+from pysesm.utils.logging_hooks import log_to_WB
 from pysesm.utils_dataset.gaussian_covariance_density import generate_nondiag_covariance_matrices
 
 # --- 1. SETUP LOGGER & DEVICE ---

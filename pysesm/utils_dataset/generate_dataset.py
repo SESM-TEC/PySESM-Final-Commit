@@ -1,4 +1,18 @@
-from __future__ import annotations
+"""
+Dataset Generation Utilities.
+
+Provides functions to generate synthetic datasets for testing and
+experimentation within the SESM framework, including Gaussian mixtures and
+custom functions.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 from collections.abc import Callable
 import torch
@@ -70,10 +84,7 @@ def generate_gaussian_dataset(
     else:
         # Create diagonal covariance matrices from variances
         sigma_list = [var * torch.eye(2) for var in variances]
-
-
-
-    
+   
     # Convert means to tensors
     mu_list = [generate_mu(mu[0], mu[1]) for mu in means]
     
@@ -122,9 +133,6 @@ def generate_custom_function_dataset(
         function_params = {}
 
     low_lim, high_lim = limits
-
-
-
 
     # Generate mesh grid
     x_lin = torch.linspace(low_lim, high_lim, mesh_divisions)

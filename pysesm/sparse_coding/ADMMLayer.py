@@ -1,17 +1,18 @@
 '''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
 ADMM Layer Class
 
 Provides an implementation of the Alternating Direction Method of Multipliers
 for solving L1-regularized least squares problems in sparse coding.
 
 Authors: The SESM Team 
+Copyright (C) 2023-2025 Tecnológico de Costa Rica
+All rights reserved.
 
-License: 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
 '''
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 

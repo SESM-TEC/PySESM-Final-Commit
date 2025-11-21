@@ -1,17 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Generic Factory Base Class.
 
-Generic Factory Base Class
+Provides a reusable factory pattern implementation for creating different types
+of objects (like layers or managers) with registration and configuration-based
+instantiation mechanisms.
 
-Provides a reusable factory pattern for creating different types of objects
-with registration and configuration-based instantiation.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from typing import TypeVar, Generic
 from ..base_types import BaseConfig
 

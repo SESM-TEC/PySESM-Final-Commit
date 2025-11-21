@@ -1,17 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+FISTA Layer Implementation.
 
-FISTA Layer Class
+Implements the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA) for sparse
+coding, providing accelerated convergence compared to standard ISTA through
+momentum-based updates and restart strategies.
 
-Provides an implementation of the Fast Iterative Shrinkage-Thresholding Algorithm (FISTA)
-for solving L1-regularized least squares problems more efficiently than standard ISTA.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 from dataclasses import dataclass
 from collections.abc import Callable

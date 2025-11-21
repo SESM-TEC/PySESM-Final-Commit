@@ -1,13 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Uniform Partition Manager.
 
-Abstract class for all Block Managers
+Implements a strategy to partition the input space into a uniform grid of
+blocks, managing data assignment and local model configuration for each block.
 
-Authors: The SESM Team 
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-License: 
-'''
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from dataclasses import dataclass # Ensure dataclass is imported
 from collections.abc import Callable
 import logging

@@ -1,15 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Dictionary Layer Factory.
 
-Dictionary Factory
+Provides a factory to produce dictionary layer instances, such as the Gaussian
+Dictionary Layer, using the generic factory pattern.
 
-Provides a factory to produce dictionary layers using the generic factory pattern.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from .GenericFactory import GenericFactory
 from ..dictionaries.DictBaseLayer import DictBaseLayer, DictConfig
 
@@ -18,9 +20,10 @@ class DictFactory(GenericFactory[DictBaseLayer, DictConfig]):
     """
     Factory class for creating dictionary layer instances.
     
-    This factory provides a centralized way to create different dictionary layers
-    with flexible registration and instantiation methods. Dictionaries can be created either
-    by a string identifier or directly from a configuration object.
+    This factory provides a centralized way to create different dictionary
+    layers with flexible registration and instantiation methods. Dictionaries
+    can be created either by a string identifier or directly from a
+    configuration object.
     
     Usage examples:
     
@@ -38,4 +41,5 @@ class DictFactory(GenericFactory[DictBaseLayer, DictConfig]):
     """
     
     def __init__(self):
-        super().__init__(product_name="dictionary", config_name="dictionary config")
+        super().__init__(product_name="dictionary",
+                         config_name="dictionary config")

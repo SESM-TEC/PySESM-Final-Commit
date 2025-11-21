@@ -1,3 +1,18 @@
+"""
+Data Sampling Utilities.
+
+Provides helper functions for selecting and sampling data points from larger
+datasets, typically used for creating training and testing subsets.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
+
 from typing import Any
 
 import torch
@@ -29,10 +44,10 @@ def generate_uniform_sampling(total_points, n_samples=500):
     return selected_indexes
 
 
-def sample_data(x_values: Any, 
-                y_values: Any, 
-                z_values: Any, 
-                sampled_indices: list, 
+def sample_data(x_values: Any,
+                y_values: Any,
+                z_values: Any,
+                sampled_indices: list,
                 dtype: torch.dtype=torch.float32):
     """
     Sample data based on selected indices.

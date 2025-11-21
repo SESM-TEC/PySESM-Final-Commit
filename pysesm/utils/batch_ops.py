@@ -1,3 +1,19 @@
+"""
+Batch Operations Utilities.
+
+Provides helper functions for manipulating and processing batches of tensors
+and nested structures (like lists or dictionaries of tensors) within the SESM
+framework.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
+
 import torch
 from pysesm.base_types import TensorBatch
 

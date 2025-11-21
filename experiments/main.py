@@ -16,7 +16,7 @@ from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
-from pysesm.utils.metric_loggers import *
+from pysesm.utils.logging_hooks import *
 from pysesm.utils.loggers import setup_logger
 import gc
 

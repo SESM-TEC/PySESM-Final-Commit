@@ -1,4 +1,18 @@
-# pysesm/base_types.py
+"""
+Base Type Definitions.
+
+Provides fundamental type aliases, base configuration classes, and proxy
+wrappers used throughout the SESM framework to ensure consistent type hinting
+and data handling.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 from dataclasses import dataclass
 from collections.abc import Sequence

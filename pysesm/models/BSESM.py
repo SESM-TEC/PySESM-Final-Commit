@@ -1,12 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
-BSESM Base Class
-Provides the batched version of SESM
-Authors: The SESM Team 
-License: 
-'''
-from __future__ import annotations
+"""
+Batched Sparse-Encoded Surrogate Model (BSESM).
 
+Implements the Batched version of the SESM architecture, which processes
+data in aggregated batches using a global dictionary and a block-diagonal
+sparse coding strategy for parallel optimization.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 import time
 
