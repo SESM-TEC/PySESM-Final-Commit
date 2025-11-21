@@ -37,11 +37,13 @@ class KDTree():
         self.device=device
         self.root: Node = Node(data.to(self.device), y, data_wrapper, self.device)
         self.maxNodeSize: int = maxNodeSize
-        self.data_wrapper : Callable = data_wrapper
-        self.split: bool = False
+        self.data_wrapper : callable = data_wrapper
+        self.split_after_add: bool = False
 
         self._splitDataInNodes(self.root)
-        
+        leaves = self.get_leaves()
+        total_points = sum([0 if leaf.Data.X is None else leaf.Data.X.size(0) for leaf in leaves])
+        print(f"[KDTree init] leaves={len(leaves)}, total_points={total_points}")
     def _splitDataInNodes(self, node: Node) -> None:
         """
         Splits data based on the median of the greatest variance dimension. 
@@ -99,12 +101,17 @@ class KDTree():
         y=y.unsqueeze(0)
         node.Data.X=torch.cat((node.Data.X,x))
         node.Data.y=torch.cat((node.Data.y,y))
+        node.Data.updateBounds()
 
         if not (node.Data.X.size(0) <= self.maxNodeSize):
-            self.split=True
+            self.split_after_add=True
             self._splitDataInNodes(node)
+        leaves = self.get_leaves()
+        total_points = sum([0 if leaf.Data.X is None else leaf.Data.X.size(0) for leaf in leaves])
+        print(f"[KDTree add_point] after add total_leaves={len(leaves)}, total_points={total_points}")
+
     
-    def get_leaves(self,  leaves : list = None, node = None) -> list:
+    def get_leaves(self,  leaves : list = None, node = None) -> list[Node]:
         """
         Finds leaves of the tree and returns them in a list
 
@@ -128,13 +135,15 @@ class KDTree():
             leaves = self.get_leaves(leaves, node.right)
         return leaves
 
-    def _splitDataInNodes_test(self, node : Node):
+    def splitDataInNodes_test(self, node : Node = None):
         """
         Splits test data without changing the structure of the kdtree.
 
         Args:
             node (Node): Starting node, usually the root node
         """
+        if node is None:
+            node=self.root
         if node.Data.test_data is None or node.Data.X is not None:
             return
         test_Data=torch.cat((node.Data.test_data,node.Data.test_y),dim=1)
@@ -149,8 +158,8 @@ class KDTree():
         node.Data.test_data = None
         node.Data.test_y = None
         
-        self._splitDataInNodes_test(node.left)
-        self._splitDataInNodes_test(node.right)
+        self.splitDataInNodes_test(node.left)
+        self.splitDataInNodes_test(node.right)
         
         return
 

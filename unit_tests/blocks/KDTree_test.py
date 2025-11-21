@@ -9,6 +9,7 @@ from pysesm.blocks.Node import Node
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.KDTree import KDTree
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager, AdaptativePartitionConfig
+from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 
 logger = logging.getLogger("test_uniform_partition_manager")
 logger.setLevel(logging.DEBUG)
@@ -41,20 +42,18 @@ def create_manager(common_device):
     Factory fixture to create UniformPartitionManager instances with flexible config.
     Ensures initial_bounds are consistently passed as numpy arrays to the config.
     """
-    def _creator(T_val: int | torch.Tensor,
-                 initial_bounds_val:  np.ndarray | torch.Tensor | None =None,
-                 threshold_val: float=0):
+    def _creator():
         # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
-        if isinstance(initial_bounds_val, torch.Tensor):
-            initial_bounds_np = initial_bounds_val.cpu().numpy()
-        else:
-            initial_bounds_np = initial_bounds_val # If already numpy or None
-
-        config = AdaptativePartitionConfig(
+        strategyConfig = KDTreeStrategyConfig(
             maxNodeSize=5,
-            maxSplitsBeforeRestart=5,
-            overlap_ratio=None,
+            data_wrapper=SESMData,
             device=common_device
+        )
+        strategy = KDTreeStrategy
+        config = AdaptativePartitionConfig(
+            partition_strategy=strategy,
+            strategy_config=strategyConfig,
+            overlap_ratio=None
         )
         return AdaptativePartitionManager(
             config=config,
@@ -75,6 +74,55 @@ def test_greatestVarDim(common_device):
     variances = x.var(dim=0)
     dim_test = torch.argmax(variances).item()
     assert dim==dim_test
+
+def test_add_points_integrity(create_manager):
+    """Checks that all points are preserved through multiple KDTree additions."""
+    torch.manual_seed(42)
+    n_features = 5
+
+    # Create the manager with KDTreeStrategy inside
+    manager = create_manager()
+    strategy = manager.strategy
+
+    # --- First batch ---
+    X1 = torch.randn(50, n_features)
+    y1 = torch.randn(50, 1)
+    strategy.build(X1, y1)
+
+    kd = strategy.kdtree
+    assert_kdtree_integrity(kd, X1.shape[0])
+
+    # --- Second batch ---
+    X2 = torch.randn(150, n_features)
+    y2 = torch.randn(150, 1)
+    strategy.add_points(X2, y2)
+
+    # After adding both batches, all points must be present
+    total_expected = X1.shape[0] + X2.shape[0]
+    assert_kdtree_integrity(kd, total_expected)
+
+    # --- Compare concatenated data ---
+    all_X, all_y = strategy.get_all_points()
+    sorted_X_blocks, _ = torch.sort(all_X, dim=0)
+    sorted_y_blocks, _ = torch.sort(all_y, dim=0)
+    sorted_X_added, _ = torch.sort(torch.cat((X1, X2), dim=0), dim=0)
+    sorted_y_added, _ = torch.sort(torch.cat((y1, y2), dim=0), dim=0)
+
+    assert torch.allclose(sorted_X_blocks, sorted_X_added, atol=1e-6)
+    assert torch.allclose(sorted_y_blocks, sorted_y_added, atol=1e-6)
+
+def assert_kdtree_integrity(kdtree: KDTree, expected_points: int):
+    """Asserts that the KDTree preserves all points after insertions."""
+    leaves = kdtree.get_leaves()
+    total_points = 0
+    for leaf in leaves:
+        assert leaf.Data is not None, "Leaf has no Data object!"
+        if leaf.Data.X is None:
+            raise AssertionError("Leaf has Data.X = None (data lost)")
+        total_points += leaf.Data.X.size(0)
+    assert total_points == expected_points, (
+        f"KDTree contains {total_points} points, expected {expected_points}"
+    )
 
 
 def test_splitDataInNodes(create_KDTree, common_device):
@@ -135,9 +183,9 @@ def test_add_point(create_manager):
     maxSplitsBeforeRestart=5
     X = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+    partitionManager=create_manager()
     partitionManager._update_block_arrangement(X, y)
-    kd=partitionManager.kdtree
+    kd=partitionManager.strategy.kdtree
     for _ in range(1):
         x=torch.rand(n_features)
         y=torch.rand(1)

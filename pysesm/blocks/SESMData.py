@@ -17,15 +17,14 @@ class SESMData():
         self.X: torch.Tensor = X
         self.y: torch.Tensor = y
         self.split_point: torch.Tensor = None
-
+        self.idx: tuple = (0,)
         self.test_data: torch.Tensor = None
         self.test_y: torch.Tensor = None
-        self.overlap: torch.Tensor = None
-        self._updateBounds()
+        self.updateBounds()
         self.dim : int = self.greatestVarDim()
         self.block: PartitionBlock = PartitionBlock(
                 self.bounds[0],
-                (1,),
+                self.idx,
                 self.bounds[1]-self.bounds[0],
                 device=device)
 
@@ -38,7 +37,7 @@ class SESMData():
         else:
             return  -1 # Flag that no valid dimension selection was possible
         
-    def _updateBounds(self):
+    def updateBounds(self):
         "Update the bounds to fit the internal data"
         upperBounds, _ = torch.max(self.X, dim=0)
         lowerBounds, _ = torch.min(self.X, dim=0)

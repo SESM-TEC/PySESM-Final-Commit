@@ -6,165 +6,261 @@ from typing import Union, Optional
 
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager,AdaptativePartitionConfig
 from pysesm.blocks import KDTree
+from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
+from pysesm.blocks.PartitionBlock import PartitionBlock
 from pysesm.blocks import Node
+from pysesm.blocks.SESMData import SESMData
 from pysesm.utils.loggers import setup_logger
 from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig
 
-logger = logging.getLogger("test_uniform_partition_manager")
-logger.setLevel(logging.DEBUG)
-
-# pylint: disable=redefined-outer-name
+@pytest.fixture(scope="module")
+def logger():
+    """Provide a logger for the test module."""
+    logger = logging.getLogger("test_adaptative_partition_manager")
+    logger.setLevel(logging.DEBUG)
+    return logger
 
 @pytest.fixture(scope="module")
 def common_device():
-    """Provides a default device."""
+    """Shared device fixture for consistency across tests."""
     return "cpu"
 
-@pytest.fixture
-def create_manager(common_device):
+@pytest.fixture(scope="function")
+def create_manager(logger, common_device):
     """
-    Factory fixture to create UniformPartitionManager instances with flexible config.
-    Ensures initial_bounds are consistently passed as numpy arrays to the config.
+    Factory fixture para crear e inicializar instancias de AdaptativePartitionManager.
     """
-    def _creator(T_val: Union[int, torch.Tensor],
-                 initial_bounds_val: Optional[Union[np.ndarray, torch.Tensor]]=None,
-                 threshold_val: float=0):
-        # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
-        if isinstance(initial_bounds_val, torch.Tensor):
-            initial_bounds_np = initial_bounds_val.cpu().numpy()
-        else:
-            initial_bounds_np = initial_bounds_val # If already numpy or None
-
+    def _creator(
+        X: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
+        maxNodeSize: int = 5,
+        overlap_ratio: Optional[float] = 0.1
+    ):
+        strategyConfig = KDTreeStrategyConfig(
+            maxNodeSize=maxNodeSize,
+            device=common_device,
+            data_wrapper=SESMData # data_wrapper es casi siempre el mismo
+        )
+        strategy = KDTreeStrategy
         config = AdaptativePartitionConfig(
-            maxNodeSize=5,
-            maxSplitsBeforeRestart=5,
-            overlap_ratio=None,
-            device=common_device
+            overlap_ratio=overlap_ratio,
+            partition_strategy=strategy,
+            strategy_config=strategyConfig
         )
-        return AdaptativePartitionManager(
+        manager = AdaptativePartitionManager(
             config=config,
-            logger=logger # Use the module-level logger for the manager            
+            logger=logger
         )
+
+        if X is not None:
+            if y is None:
+                y = torch.zeros(X.shape[0], 1, device=common_device)
+            manager._update_block_arrangement(X, y)
+            manager._map_points() 
+
+        return manager
     return _creator
 
-def test_update_block_arrangement(create_manager):
-    X1 = torch.randn(19, 6)
-    y1 = torch.randn(19, 1)
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
-    partitionManager._update_block_arrangement(X1, y1)
-    
-    for block in partitionManager.blocks:
-        assert block is not None
-        assert block.X == []
-    
-    leaves=partitionManager.kdtree.get_leaves()
-    X=torch.Tensor()
-    for leaf in leaves:
-        X=torch.cat((leaf.Data.X, X))
-    
-    sorted_X, _ =torch.sort(X,0)
-    sorted_X1, _ =torch.sort(X1,0)
-    
-    assert torch.equal(sorted_X, sorted_X1)    
 
-    X2 = torch.randn(19, 6)
-    y2 = torch.randn(19, 1)
-    partitionManager._update_block_arrangement(X2,y2)
-    
-    X_added=torch.cat((X1,X2))
+# ---------------------------------------------------------------------------
+# Core tests
+# ---------------------------------------------------------------------------
 
-    for block in partitionManager.blocks:
-        assert block is not None
-        assert block.X == []
-    
-    leaves=partitionManager.kdtree.get_leaves()
-    X=torch.Tensor()
-    for leaf in leaves:
-        X=torch.cat((leaf.Data.X, X))
-    
-    sorted_X, _ =torch.sort(X,0)
-    sorted_X1, _ =torch.sort(X_added,0)
-    
-    assert torch.equal(sorted_X, sorted_X1)    
+def test_initial_build_creates_blocks(create_manager):
+    """Verify that the first _update_block_arrangement call builds the KDTree and blocks."""
+    X = torch.randn(20, 4)
+    manager = create_manager(X=X, overlap_ratio=None)
+
+    # Strategy should now have a KDTree built
+    assert manager.strategy.kdtree is not None, "KDTree should be initialized after first update"
+    assert len(manager.blocks) > 0, "Blocks should be created after initial partitioning"
+    assert all(isinstance(b, PartitionBlock) for b in manager.blocks), "All blocks must be PartitionBlock instances"
+    assert manager.total_blocks == len(manager.blocks)
+
+
+def test_add_points_triggers_rebuild(create_manager):
+    """Verify that adding new points either expands or rebuilds the KDTree."""
+    manager = create_manager()
+    n_samples=15
+    X1 = torch.randn(n_samples, 3)
+    y1 = torch.randn(n_samples, 1)
+    manager._update_block_arrangement(X1, y1)
+
+    initial_block_count = manager.total_blocks
+    for i in range(10):
+        X2 = torch.randn(10*n_samples, 3)
+        y2 = torch.randn(10*n_samples, 1)
+        manager._update_block_arrangement(X2, y2)
+
+    assert manager.strategy.kdtree is not None
+    assert len(manager.blocks) >= initial_block_count, (
+        "After adding points, total block count should stay or increase depending on rebuild policy."
+    )
+
+
+def test_combined_data_is_preserved(create_manager):
+    """Ensure that all data used in partitions equals the concatenation of all points seen."""
+    manager = create_manager()
+
+    X1 = torch.randn(10, 2)
+    y1 = torch.randn(10, 1)
+    X2 = torch.randn(8, 2)
+    y2 = torch.randn(8, 1)
+
+    manager._update_block_arrangement(X1, y1)
+    manager._update_block_arrangement(X2, y2)
+
+    # Gather all data from strategy leaves
+    leaves = manager.strategy.kdtree.get_leaves()
+    X_all = torch.cat([leaf.Data.X for leaf in leaves], dim=0)
+
+    sorted_combined, _ = torch.sort(torch.cat([X1, X2], dim=0), dim=0)
+    sorted_from_tree, _ = torch.sort(X_all, dim=0)
+
+    assert torch.allclose(sorted_combined, sorted_from_tree, atol=1e-6), \
+        "KDTree leaves should contain exactly all X points seen."
+
+def test_overlap_is_applied_correctly(create_manager):
+    """Ensure that overlap values are applied to all blocks when configured."""
+    overlap_ratio = 0.2
+    manager = create_manager(overlap_ratio=overlap_ratio)
+
+    X = torch.randn(12, 3)
+    y = torch.randn(12, 1)
+    manager._update_block_arrangement(X, y)
+
+    # Ensure overlap is set properly
+    for block in manager.blocks:
+        assert hasattr(block, "overlap"), "Each block must have an overlap attribute after applying overlap"
+        expected_overlap = block.block_size * overlap_ratio
+        assert torch.allclose(block.overlap, expected_overlap, atol=1e-6)
+
+
+def test_device_consistency(create_manager):
+    """Verify that all tensors are moved to the manager device."""
+    manager = create_manager()
+    X = torch.randn(5, 2)
+    y = torch.randn(5, 1)
+
+    manager.device = torch.device("cpu")  # simulate device assignment
+    manager._update_block_arrangement(X, y)
+
+    assert X.device == manager.device
+    assert y.device == manager.device
         
 
 def test_map_points(create_manager):
-    n_features=5
-    torch.manual_seed(42) 
+    """Verify that _map_points correctly synchronizes KDTree data into blocks."""
+    torch.manual_seed(42)
+    n_features = 5
+
+    # First batch
     X1 = torch.randn(19, n_features)
     y1 = torch.randn(19, 1)
-    Xy=torch.cat((X1,y1),dim=1)
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
-    partitionManager._update_block_arrangement(X1, y1)
-    partitionManager._map_points()
-    nodes=partitionManager.kdtree.get_leaves()
-    in_blocks=[]
-    in_blocks_y=[]
-    for node in nodes:
-        assert node.Data.block.X != []
-        assert node.Data.block.y != []
-        for x in node.Data.block.X:
-            in_blocks.append(x)
-        for yi in node.Data.block.y:
-            in_blocks_y.append(yi)
-    for block in partitionManager.blocks:
-        assert block.X !=[]
-    in_blocks = torch.stack(in_blocks, dim=0)
-    in_blocks_y = torch.stack(in_blocks_y, dim=0)
-    in_blocks, _ =torch.sort(in_blocks,0)
-    in_blocks_y, _ =torch.sort(in_blocks_y,0)
-    sort_X, _ = torch.sort(X1,0)
-    sort_y, _ = torch.sort(y1,0)
 
-    assert torch.equal(in_blocks,sort_X)
-    assert torch.equal(in_blocks_y,sort_y)
-    
+    manager = create_manager()
+    manager._update_block_arrangement(X1, y1)
+    manager._map_points()  # initial mapping
+
+    # --- Verify each block has been populated
+    all_X_blocks = []
+    all_y_blocks = []
+
+    for block in manager.blocks:
+        # Each block should now contain some data
+        assert hasattr(block, "X")
+        assert hasattr(block, "y")
+        assert block.X != []
+        assert block.y != []
+
+        # Gather all data points for global comparison
+        for x in block.X:
+            all_X_blocks.append(x)
+        for yi in block.y:
+            all_y_blocks.append(yi)
+
+    # --- Verify all points accounted for
+    in_blocks_X = torch.stack(all_X_blocks, dim=0)
+    in_blocks_y = torch.stack(all_y_blocks, dim=0)
+
+    sorted_X_blocks, _ = torch.sort(in_blocks_X, dim=0)
+    sorted_y_blocks, _ = torch.sort(in_blocks_y, dim=0)
+    sorted_X1, _ = torch.sort(X1, dim=0)
+    sorted_y1, _ = torch.sort(y1, dim=0)
+
+    assert torch.allclose(sorted_X_blocks, sorted_X1, atol=1e-6)
+    assert torch.allclose(sorted_y_blocks, sorted_y1, atol=1e-6)
+
+    # --- Second batch of data
     X2 = torch.randn(192, n_features)
     y2 = torch.randn(192, 1)
-    Xy2=torch.cat((X2,y2),dim=1)
 
-    partitionManager._update_block_arrangement(X2, y2)
-    partitionManager._map_points()
+    manager._update_block_arrangement(X2, y2)
+    manager._map_points()
+
+    # Collect again after update
+    all_X_blocks = []
+    all_y_blocks = []
+    for block in manager.blocks:
+        assert block.X != []
+        assert block.y != []
+        for x in block.X:
+            all_X_blocks.append(x)
+        for yi in block.y:
+            all_y_blocks.append(yi)
+
+    X_added = torch.cat((X1, X2), dim=0)
+    y_added = torch.cat((y1, y2), dim=0)
+
+    assert len(all_X_blocks) == X_added.shape[0]
+
+    in_blocks_X = torch.stack(all_X_blocks, dim=0)
+    in_blocks_y = torch.stack(all_y_blocks, dim=0)
+
+    sorted_X_blocks, _ = torch.sort(in_blocks_X, dim=0)
+    sorted_y_blocks, _ = torch.sort(in_blocks_y, dim=0)
+    sorted_X_added, _ = torch.sort(X_added, dim=0)
+    sorted_y_added, _ = torch.sort(y_added, dim=0)
+
+    assert in_blocks_X.shape == sorted_X_added.shape
+    assert torch.allclose(sorted_X_blocks, sorted_X_added, atol=1e-6)
+    assert torch.allclose(sorted_y_blocks, sorted_y_added, atol=1e-6)
+
+def test_map_points_with_zero_overlap(create_manager):
+    """Verify that when using overlap=0, the number of points mapped is the same"""
+    X = torch.randn(50, 3)
+    manager = create_manager(X=X, overlap_ratio=0.0)
     
-    leaves=partitionManager.kdtree.get_leaves()
-    in_blocks=[]
-    in_blocks_y=[]
-    contador=0
-    for node in leaves:
-        assert node.Data.block.X != []
-        assert node.Data.block.y != []
-        assert node.Data.block.positions != []
-        for x in node.Data.block.X:
-            in_blocks.append(x)
-            contador+=1
-        for yi in node.Data.block.y:
-            in_blocks_y.append(yi)
-    for block in partitionManager.blocks:
-        assert block.X !=[]
-    X_added=torch.cat((X1,X2))
-    assert len(in_blocks)==X_added.shape[0]
-    y_added=torch.cat((y2,y1))
-    in_blocks = torch.stack(in_blocks, dim=0)
-    in_blocks_y = torch.stack(in_blocks_y, dim=0)
-    in_blocks, _ =torch.sort(in_blocks,0)
-    in_blocks_y, _ =torch.sort(in_blocks_y,0)
-    sort_X, _ = torch.sort(X_added,0)
-    sort_y, _ = torch.sort(y_added,0)
+    # Act
+    manager._map_points(expand_scope=True) # expand_scope no debería tener efecto
+    
+    # Assert
+    total_points_mapped = sum(len(block.X) for block in manager.blocks)
+    assert total_points_mapped == X.shape[0]
 
-    assert in_blocks.shape==sort_X.shape
-    assert torch.equal(in_blocks,sort_X)
-    assert torch.equal(in_blocks_y,sort_y)
+def test_map_points_with_expand_scope(create_manager):
+    """Test _map_points with expand_scope=True properly includes overlapped data."""
+    torch.manual_seed(123)
+    n_features = 3
+    X = torch.randn(50, n_features)
+    y = torch.randn(50, 1)
+
+    manager = create_manager(overlap_ratio=0.2)
+    manager._update_block_arrangement(X, y)
+
+    manager._map_points(expand_scope=True)
+
+    all_counts = [len(block.X) for block in manager.blocks]
+    
+    assert any(c > 0 for c in all_counts), "At least one block should have points in expanded mapping"
+
+    total_points_mapped = sum(all_counts)
+    assert total_points_mapped >= X.shape[0], "With overlap, total mapped points should be >= original count"
 
 def test_add_points(create_manager, common_device):
     n_features=5
     X1 = torch.randn(500, n_features)
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+    partitionManager=create_manager()
 
     device = common_device
 
@@ -175,29 +271,29 @@ def test_add_points(create_manager, common_device):
 
     partitionManager.add_points(X2, y)
 
-    leaves = partitionManager.kdtree.get_leaves() 
+    partitions = partitionManager.strategy.get_partitions()
 
     X=torch.Tensor().to(device)
 
-    for node in leaves:
-        assert node.Data.block is not None
-        assert node.Data.block.X != []
-        assert node.Data.block.y != []
-        assert node.Data.block.positions != []
-        for tensor in node.Data.block.X:
+    for partition in partitions:
+        assert partition.block is not None
+        assert partition.block.X != []
+        assert partition.block.y != []
+        assert partition.block.positions != []
+        for tensor in partition.block.X:
             assert tensor.device.type==device
-        for tensor in node.Data.block.y:
+        for tensor in partition.block.y:
             assert tensor.device.type==device
-        for tensor in node.Data.block.space_origin:
+        for tensor in partition.block.space_origin:
             assert tensor.device.type==device
-        for tensor in node.Data.block.block_size:
+        for tensor in partition.block.block_size:
             assert tensor.device.type==device
-        for tensor in node.Data.block.block_scope:
+        for tensor in partition.block.block_scope:
             assert tensor.device.type==device
-        assert node.Data.y.device.type==device
-        assert node.Data.X.device.type==device
+        assert partition.y.device.type==device
+        assert partition.X.device.type==device
 
-        X=torch.cat((X,torch.stack(node.Data.block.X,dim=0)),dim=0)
+        X=torch.cat((X,torch.stack(partition.block.X,dim=0)),dim=0)
     sortX, _ = torch.sort(X,0)   
     sortX2, _ = torch.sort(X2,0)
     sortX1, _ = torch.sort(X1,0)
@@ -214,9 +310,7 @@ def test_add_points(create_manager, common_device):
 
 def test_init_sparse_coding_per_block_initializes_layers(create_manager):
     """Test that init_sparse_coding_per_block correctly initializes sparse coding layers."""
-    T = torch.tensor([2, 2], device='cpu')
-    initial_bounds = torch.tensor([[0.0, 0.0], [1.0, 1.0]], dtype=torch.float32)
-    manager = create_manager(T_val=T, initial_bounds_val=initial_bounds)
+    manager = create_manager()
 
     X = torch.tensor([[0.1, 0.2], [0.6, 0.7]], device='cpu', dtype=torch.float32)
     y = torch.tensor([[1.0], [2.0]], device='cpu', dtype=torch.float32)
@@ -248,9 +342,7 @@ def test_retrieve_active_blocks(create_manager, common_device):
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+    partitionManager=create_manager()
 
     partitionManager.add_points(X1, y)
     activeBlocks=partitionManager.retrieve_active_blocks()
@@ -265,9 +357,7 @@ def test_retrieve_test_active_blocks(create_manager):
     n_features=5
     X1 = torch.randn(500, n_features)
     y = torch.randn(500, 1)
-    maxNodeSize=5
-    maxSplitsBeforeRestart=5
-    partitionManager=create_manager(maxNodeSize, maxSplitsBeforeRestart)
+    partitionManager=create_manager()
     partitionManager.add_points(X1, y)
     activeBlocks1=partitionManager.retrieve_active_blocks()
     

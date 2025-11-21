@@ -13,6 +13,8 @@ from pysesm.models.SSESM import SSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
+from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
+from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
 from pysesm.utils.metric_loggers import *
 from pysesm.utils.loggers import setup_logger
@@ -153,8 +155,17 @@ def main():
             )
 
             [x1lim, x2lim] = function_limits[function_name]
+
+            strategy = KDTreeStrategy
+            strategyConfig = KDTreeStrategyConfig(
+                maxNodeSize=5,
+                device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                data_wrapper=SESMData
+            )
             partition_config = AdaptativePartitionConfig(
-                overlap_ratio=0.1
+                overlap_ratio=0.1,
+                partition_strategy=strategy,
+                strategy_config=strategyConfig
             )
 
             ssesm_config = SSESMConfig(
