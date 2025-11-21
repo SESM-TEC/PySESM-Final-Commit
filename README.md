@@ -1,79 +1,162 @@
 # PySESM
 
-PySESM is a PyTorch-based Python library that implements SESM
-(Sparse-Encoded Surrogate Model).  PySESM is designed for high-performance
-surrogate modeling and function approximation. It excels at
-representing complex, high-dimensional functions by implementing a
-powerful 'divide and conquer' strategy. The core architecture
-partitions the input space into manageable blocks, each handled by a
-local model. A key innovation is its use of a globally shared,
-learnable dictionary of basis functions (e.g., Gaussians) combined
-with block-specific sparse codes. This approach allows the model to
-learn a rich, shared representation of the function's features while
-using sparse, localized codes to efficiently capture the specific
-behavior in different regions of the input space, resulting in a
-highly flexible and scalable framework for scientific computing and
-machine learning tasks.
+**PySESM** (Python Sparse-Encoded Surrogate Model) is a
+high-performance library for surrogate modeling and function
+approximation, developed at **Tecnológico de Costa Rica**.
 
-## Prepare environment
+It excels at representing complex, high-dimensional functions using a
+**"divide and conquer"** strategy. The core architecture partitions
+the input space into manageable blocks (using Uniform or
+Adaptive/KD-Tree strategies), where each block is handled by a local
+sparse representation sharing a global, learnable dictionary of basis
+functions (e.g., Gaussians).
 
-With `conda` or `micromamba`, create your working environment with
+This approach allows the model to learn a rich, shared representation
+of the function's features while using sparse, localized codes to
+efficiently capture specific behaviors in different regions.
 
-    > conda create -n "sesm" python=3.12
-    
-Install your PyTorch according to your hardware configuration.  For
-instance, if you only have CPU:
+## Installation
 
-    > pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-    
-or if you have GPU with CUDA 12.8:
+PySESM requires **Python 3.12+**.
 
-    > pip3 install torch torchvision
+### 1. Prepare Environment
 
-For PyTorch it is preferable to check https://pytorch.org for the
-proper up-to-date install configuration.
+We recommend using conda or micromamba to manage the environment:
+```bash
+conda create -n "sesm" python=3.12
+conda activate sesm
+```
 
-## Dependencies and SESM installation
+### 2. Install PyTorch
 
-This requires at least Python 3.12 and the dependencies listed in
-requirements.txt.  Besides the Python core libraries, PySESM relies on
-PyTorch and numpy, although additional libraries are used in the
-examples for visualization and dataset creation.
+Install PyTorch according to your hardware.
 
-This, will install PySESM and its dependencies:
+* **For CPU only:**
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
 
-    > pip install -e . 
-    
-or 
+* **For GPU (CUDA):**
+```bash
+pip install torch torchvision
+```
 
-    > pip install -e . --use-pep517
-	
-The experiments, examples and so on need additional libraries that
-you can install with
+*(Check [pytorch.org](https://pytorch.org) for the command specific to
+your CUDA version).*
 
-    > pip install -e ".[dev]"
-	
-    
-However, if you prefer to install the dependency packages with
-`micromamba` or `conda`, then you can use:
+### 3. Install PySESM
 
-    > conda install numpy matplotlib scipy scikit-learn pandas plotly
+You can install the library in three modes depending on your needs:
 
-## Directory structure
+**A. Core Installation (Library only)**
 
+Installs only the necessary dependencies (numpy, torch, scipy) to run the model.
 
-* **bin**
-  Some generic utilities.
-* **examples**
-  Basic use cases and not so basic ones
-* **experiments**
-  More elaborated experimentation setups to compare SESM with other surrogate
-  strategies
-* **pysesm** 
-  The source code of the PySESM library itself
-* **unit_tests**
-  Unit tests for the constituent parts of the library
-* pyproject.toml
-  Project description
-* requirements.txt (deprecated)
-  Libraries used.
+```bash
+pip install -e .
+```
+
+**B. Visualization Support (Recommended for Examples)**
+
+Includes libraries for plotting, metrics logging, and video generation
+(matplotlib, plotly, wandb, imageio).
+
+```bash
+pip install -e ".[viz]"
+```
+
+**C. Full Development (Tests & Dev tools)**
+
+Includes everything above plus testing frameworks (pytest).
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Quick Start
+
+PySESM uses a modular configuration system. You need to configure
+three main components: the **Partition Manager** (how space is
+divided), the **Dictionary** (the basis functions), and the **Sparse
+Coding** algorithm (how to solve for coefficients).
+
+Here is a minimal example of how to set up and train a Sequential SESM
+(**SSESM**) model:
+
+```python
+import torch
+import logging
+from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.blocks import UniformPartitionConfig
+from pysesm.dictionaries import GaussianDictConfig
+from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
+from pysesm.utils.loggers import setup_logger
+
+# 1. Setup Logger
+logger = setup_logger(level=logging.INFO)
+
+# 2. Define Configurations
+n_features = 2
+
+# A. Partition: Divide space into a 2x2 grid
+partition_config = UniformPartitionConfig(
+    T=2, 
+    initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32)
+)
+
+# B. Dictionary: Gaussian Basis Functions
+dict_config = GaussianDictConfig(
+    epochs=50,
+    alpha=0.01,
+    mu_epochs=10,
+    rho_epochs=10
+)
+
+# C. Sparse Coding: ISTA Algorithm
+sparse_coding_config = ISTAConfig(
+    epochs=100,
+    alpha=0.15,
+    lambd=0.005,
+    n_functions=50,  # Dictionary size
+    step_size_method=StepSizeMethod.FROBENIUS
+)
+
+# 3. Main Model Config
+ssesm_config = SSESMConfig(
+    n_features=n_features,
+    model_epochs=200,
+    partition_config=partition_config,
+    dict_config=dict_config,
+    sparse_coding_config=sparse_coding_config,
+    log_interval=20
+)
+
+# 4. Instantiate and Train
+# Assuming X_train (inputs) and y_train (targets) are torch.Tensors
+model = SSESM(config=ssesm_config, seed=42, logger=logger)
+
+# model.partial_fit(X_train, y_train)
+# preds = model.predict(X_test)
+```
+
+Check the `examples/` folder for complete scripts, including data
+generation and visualization hooks.
+
+## Directory Structure
+
+* **pysesm/**: The core source code of the library.
+  * **blocks/**: Logic for space partitioning (Uniform, KD-Tree).
+  * **dictionaries/**: Learnable dictionary layers (e.g., Gaussian).
+  * **sparse_coding/**: Algorithms to find sparse representations (ISTA, FISTA, ADMM).
+  * **models/**: Main model architectures (SESM, SSESM, BSESM).
+  * **utils_dataset/**: Tools for generating synthetic datasets.
+* **examples/**: Scripts demonstrating basic usage, visualization hooks, and hyperparameter sweeps (WandB).
+* **unit_tests/**: Comprehensive test suite for all components.
+* **pyproject.toml**: Project configuration and dependencies.
+
+## License
+
+This project is licensed under the **BSD 3-Clause License**. See the
+LICENSE file for details.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica. All rights reserved.
