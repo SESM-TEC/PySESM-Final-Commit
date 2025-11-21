@@ -1,9 +1,10 @@
 """
-KD-Tree Partition Strategy.
+KD-Tree Partition Strategy Interface.
 
 Implements a partitioning strategy based on a KD-tree spatial decomposition to
 subdivide the input space into balanced regions/blocks.
 
+Author: Hender Valdivia
 Copyright (c) 2025, Tecnológico de Costa Rica
 All rights reserved.
 

@@ -1,4 +1,4 @@
-'''
+"""
 SESMData
 
 Class for data needed in the Node of a kd-tree
@@ -11,7 +11,7 @@ This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
-'''
+"""
 import torch
 from pysesm.blocks.PartitionBlock import PartitionBlock
 

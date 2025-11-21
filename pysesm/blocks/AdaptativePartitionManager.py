@@ -1,18 +1,18 @@
-'''
-Adaptive Partition Manager Class
+"""
+Adaptive Partition Manager.
 
 Provides a partition manager based on a kd-tree space partition, which
 adapts itself depending on the data it has.
 
 Author: Hender Valdivia
-Copyright (C) 2025 Tecnológico de Costa Rica
+Copyright (C) 2025, Tecnológico de Costa Rica
 All rights reserved.
 
 This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
-'''
+"""
 from dataclasses import dataclass
 from collections.abc import Callable
 

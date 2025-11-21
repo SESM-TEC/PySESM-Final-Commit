@@ -1,8 +1,9 @@
 """
-Gaussian Covariance Density Utilities.
+Surrogate Function Base Class.
 
-Provides functions for generating and handling covariance matrices, Gaussian
-Mixture Model (GMM) densities, and mesh evaluations, primarily using scipy.stats.
+Defines the abstract base class `SurrogateFunction`, which serves as the
+foundation for all surrogate models (e.g., Gaussian, Polynomial) within the
+SESM framework.
 
 Copyright (c) 2023-2025, Tecnológico de Costa Rica
 All rights reserved.
