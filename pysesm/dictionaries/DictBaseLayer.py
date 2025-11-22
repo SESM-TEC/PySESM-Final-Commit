@@ -33,7 +33,7 @@ class DictConfig(BaseConfig):
     alpha: float
     criterion: torch.nn.Module | None = None
     # Custom regularization function that takes the layer instance as input
-    regularization_func: Optional[Callable[[DictBaseLayer], torch.Tensor]] = None
+    regularization_func: Optional[Callable[["DictBaseLayer"], torch.Tensor]] = None
     regularization_gamma: float = 0.01
     optimizer_factory: Callable[[Iterator[torch.nn.Parameter], float], torch.optim.Optimizer] | None = None
     
