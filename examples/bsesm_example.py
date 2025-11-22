@@ -1,12 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+BSESM Example.
 
-This script provides a trivial example of using the SESM framework 
-to represent a dataset of three Gaussian distributions with a single block.
+Demonstrates the Batched Sparse-Encoded Surrogate Model (BSESM) training
+workflow, highlighting global optimization steps and batch processing.
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

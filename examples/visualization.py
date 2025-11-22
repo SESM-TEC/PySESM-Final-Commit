@@ -1,12 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Visualization Hooks.
 
-This file provides a visualization hook for the SESM framework to observe 
-the dictionary's evolution during training, generalized for multi-block scenarios.
+Provides the `VisualizerHook` class for inspecting and rendering the evolution
+of the dictionary and sparse codes during model training.
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

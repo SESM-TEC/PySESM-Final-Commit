@@ -1,3 +1,18 @@
+"""
+Video Demo Script.
+
+Runs a training session and uses the visualization hook to generate an
+MP4 video of the dictionary evolution, saving it to the documentation folder.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
+
 import os
 import logging
 from pathlib import Path

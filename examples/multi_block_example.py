@@ -1,12 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Multi-Block Example.
 
-This script provides an example of using the SESM framework to represent a 
-dataset of three Gaussian distributions with a multi-block partition (2x2 grid).
+Demonstrates the SESM framework representing a dataset of three Gaussian
+distributions using a multi-block partition (e.g., a 2x2 uniform grid).
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

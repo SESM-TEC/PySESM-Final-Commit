@@ -1,13 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Single Gaussian Example.
 
-This script provides a minimal example of using SESM to represent a 
-single Gaussian distribution with one dictionary word (n_functions=1) in a single block.
-It's an excellent test case for debugging dictionary learning.
+A minimal test case using SESM to represent a single Gaussian distribution
+with one dictionary word. Useful for debugging dictionary learning isolation.
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

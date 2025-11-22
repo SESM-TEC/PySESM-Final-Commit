@@ -1,12 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+One Block Example.
 
-This script provides a trivial example of using the SESM framework 
-to represent a dataset of three Gaussian distributions with a single block.
+A minimal example demonstrating the SESM framework fitting a dataset of three
+Gaussian distributions using a single partition block.
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

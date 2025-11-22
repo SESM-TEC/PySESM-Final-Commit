@@ -1,6 +1,16 @@
 """
-This is a file where many loss wrappers are defined.
-These loss wrappers are used for running examples and experiments.
+Loss Function Wrappers.
+
+Custom loss implementations (e.g., Jensen-Shannon, Cross-Entropy) used in
+examples and experiments to train surrogate models.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
 """
 import torch
 

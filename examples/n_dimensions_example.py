@@ -1,13 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+N-Dimensions Example.
 
-This script provides an example of using the SESM framework to represent an
-N-dimensional function. It demonstrates that the core logic works beyond
-2D visualization.
+Demonstrates the capability of the SESM framework to approximate functions
+in higher-dimensional input spaces (N > 2).
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch

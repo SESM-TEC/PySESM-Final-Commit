@@ -1,12 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+WandB Sweep (One Block).
 
-This script demonstrates how to use Weights & Biases (wandb) Sweeps to perform
-Bayesian hyperparameter optimization for a pysesm model.
+Script for running Bayesian hyperparameter optimization on a single-block
+SESM model using Weights & Biases sweeps.
 
-Authors: The SESM Team 
-License: 
-'''
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
 import torch
