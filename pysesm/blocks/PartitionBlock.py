@@ -99,6 +99,7 @@ class PartitionBlock:
         self.positions: list[int] = []
         self.predicted_output: list = []
         self.sparse_coding_layer: SparseCodingBaseLayer | None = None
+        self.normalization_scale: torch.Tensor | None = None
 
         # Cache for device-specific data copies
         self._device_data_cache = {}
@@ -186,7 +187,8 @@ class PartitionBlock:
         sizes = self.block_size.to(self.device) 
 
         if preserve_aspect_ratio:
-            divisor = sizes.max()
+            # Expand to vector for consistent storage/usage
+            divisor = torch.full_like(sizes, sizes.max())
         else:
             divisor = sizes
 
@@ -194,6 +196,7 @@ class PartitionBlock:
         # This might indicate malformed block sizes or degenerate dimensions.
         divisor[divisor == 0] = 1.0 if isinstance(divisor, torch.Tensor) else (1.0 if divisor == 0 else divisor)
 
+        self.normalization_scale = divisor
         self.normalized_X = TensorProxy((tensor_X - min_vals) / divisor)
 
 

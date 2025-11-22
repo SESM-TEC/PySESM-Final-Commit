@@ -173,7 +173,7 @@ sparse_coding_config = ISTAConfig(
 # --- Main SESM Model Configurations (choose one) ---
 bsesm_config = BSESMConfig(
     n_features=n_features,
-    model_epochs=640,
+    model_epochs=250,
     partition_config=partition_config,
     dict_config=dict_config,
     sparse_coding_config=sparse_coding_config,

@@ -78,6 +78,7 @@ class KDTreeStrategy(PartitionStrategy):
         else:
             self.kdtree.root.Data.test_data=X
             self.kdtree.root.Data.test_y=y
+            self.kdtree.root.Data.test_indices=torch.arange(X.size(0), device=X.device)
             return self.kdtree.splitDataInNodes_test()
 
     def add_points(self, X: torch.Tensor, y: torch.Tensor) -> bool:

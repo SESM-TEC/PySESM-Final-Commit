@@ -27,6 +27,7 @@ class SESMData():
         self.idx: tuple = (0,)
         self.test_data: torch.Tensor = None
         self.test_y: torch.Tensor = None
+        self.test_indices: torch.Tensor = None
         self.updateBounds()
         self.dim : int = self.greatestVarDim()
         self.block: PartitionBlock = PartitionBlock(
@@ -55,3 +56,6 @@ class SESMData():
         self.y = None
         self.bounds = None
         self.block=None
+        self.test_data = None
+        self.test_y = None
+        self.test_indices = None

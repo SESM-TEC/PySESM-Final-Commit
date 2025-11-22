@@ -18,7 +18,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from pysesm.models.SESM import SESM
-from pysesm.models.SSESM import SSESM, SSESMConfig
+from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
@@ -52,7 +52,7 @@ n_features = 2
 strategyConfig = KDTreeStrategyConfig(
     maxNodeSize=100,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    data_wrapper=SESMData # data_wrapper es casi siempre el mismo
+    data_wrapper=SESMData # data_wrapper is almost always the same one
 )
 partition_config = AdaptativePartitionConfig(
     overlap_ratio=0.25,
@@ -61,11 +61,11 @@ partition_config = AdaptativePartitionConfig(
 )
 
 dict_config = GaussianDictConfig(
-    epochs=25,
-    alpha=0.01,
+    epochs=58,
+    alpha=0.0002525,
     criterion=torch.nn.MSELoss(),
     optimizer_factory=lambda params, lr: torch.optim.AdamW(
-        params, lr=lr, weight_decay=0.001 # Added small weight decay
+        params, lr=lr, weight_decay=0.00873 # Added small weight decay
     ),
     mu_epochs=10,
     rho_epochs=10,
@@ -74,14 +74,14 @@ dict_config = GaussianDictConfig(
     eig_range=[0.05, 0.2],
     mu_range=[0.0, 1.0],
     regularization_func=GaussianDictLayer.electrostatic_regularization,
-    regularization_gamma=0.001,
+    regularization_gamma=0.00001018,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
 sparse_coding_config = ISTAConfig(
-    epochs=50,
+    epochs=235,
     alpha=0.15,
-    lambd=0.005,
+    lambd=0.0009157,
     step_size_method=StepSizeMethod.FROBENIUS,
     power_iterations=10,
     n_functions=n_functions,
@@ -89,14 +89,13 @@ sparse_coding_config = ISTAConfig(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
-ssesm_config = SSESMConfig(
+ssesm_config = BSESMConfig(
     n_features=n_features,
-    model_epochs=100,  # Increased epochs for the more complex multi-block problem
+    model_epochs=640,  # Increased epochs for the more complex multi-block problem
     partition_config=partition_config,
     dict_config=dict_config,
     sparse_coding_config=sparse_coding_config,
-    log_interval=25,
-    permutation_times=10, # Permuting blocks is important in SSESM
+    log_interval=10,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
@@ -104,7 +103,7 @@ ssesm_config = SSESMConfig(
 experiment = {
     "config": ssesm_config,
     "hyp_set": 2, # Changed to distinguish from one-block
-    "n_samples": 1000, # More samples for a more complex setup
+    "n_samples": 500, # More samples for a more complex setup
     "seed": 45,
     "iter": 0
 }
@@ -153,7 +152,7 @@ non_diag_sigmas = [sigma1, sigma2, sigma3]
 fig_hook, ax_hook = plt.subplots(figsize=(10, 8))
 plt.ion()
 
-model = SSESM(**experiment, logger=logger)
+model = BSESM(**experiment, logger=logger)
 
 # Create and install the visualization hook using the imported, general-purpose class
 visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5, 5), (-5, 5)))

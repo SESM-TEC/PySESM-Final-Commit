@@ -127,10 +127,16 @@ class VisualizerHook:
         for i_block, block in enumerate(active_blocks):
             color = block_colors(i_block)
             block_min_coords = block.block_scope[0].cpu()
-            block_span_coords = block.block_size.cpu()
+
+            # Retrieve the actual normalization scale used by the block.
+            # Fallback to block_size if not set (legacy/unnormalized behavior).
+            if block.normalization_scale is not None:
+                norm_scale = block.normalization_scale.cpu()
+            else:
+                norm_scale = block.block_size.cpu()           
             
             # Draw block boundary
-            rect = Rectangle(block_min_coords, *block_span_coords, 
+            rect = Rectangle(block_min_coords, *block.block_size.cpu(),
                              linewidth=1, edgecolor=color, facecolor='none', 
                              linestyle=':', alpha=0.8)
             self.ax.add_patch(rect)
@@ -143,7 +149,7 @@ class VisualizerHook:
                 rho_norm = rho_params[:, i]
 
                 # Denormalize mu and Sigma using this block's scope
-                mu_orig = mu_norm * block_span_coords + block_min_coords
+                mu_orig = mu_norm * norm_scale + block_min_coords
                 
                 A = torch.zeros(n_features, n_features)
                 indices = torch.triu_indices(n_features, n_features)
@@ -155,8 +161,10 @@ class VisualizerHook:
                 except torch.linalg.LinAlgError:
                     Sigma_norm = torch.eye(n_features) # Fallback
 
-                Sigma_orig = torch.diag(block_span_coords) @ Sigma_norm @ torch.diag(block_span_coords)
-                
+                # Scale covariance matrix properly (handles anisotropic scaling)
+                scale_mat = torch.diag(norm_scale)
+                Sigma_orig = scale_mat @ Sigma_norm @ scale_mat
+
                 # Draw dictionary ellipse (subtly)
                 self._draw_ellipse(mu_orig, Sigma_orig, 'red', '-', 0.02)
 

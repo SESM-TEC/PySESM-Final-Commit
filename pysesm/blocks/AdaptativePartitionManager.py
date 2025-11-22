@@ -262,7 +262,6 @@ class AdaptativePartitionManager(BlockManager):
         test_blocks = np.empty_like(self.blocks, dtype=object)  
         
         #Clone blocks and map test data to each test_block    
-        pos=0
         for index in np.ndindex(self.blocks.shape):
             partition=partitions[index[0]]
             if partition.test_data is not None:
@@ -278,9 +277,7 @@ class AdaptativePartitionManager(BlockManager):
                 new_pb.amplitude = partition.block.amplitude
                 test_blocks[index] = new_pb
                 for i, _ in enumerate(partition.test_data):
-                    test_blocks[index].new_point(partition.test_data[i], partition.test_y[i],pos)
-                    pos+=1
-                
+                    test_blocks[index].new_point(partition.test_data[i], partition.test_y[i], partition.test_indices[i].item())
 
         for idx in np.ndindex(test_blocks.shape):
             block = test_blocks[idx]

@@ -24,6 +24,7 @@ class dummyData():
         self.split_point: float=None
         self.test_data: torch.Tensor=None
         self.test_y: torch.Tensor=None
+        self.test_indices: torch.Tensor=None
         self.dim: int=0
 
     def empty_data(self):
@@ -49,6 +50,7 @@ class KDTree():
         leaves = self.get_leaves()
         total_points = sum([0 if leaf.Data.X is None else leaf.Data.X.size(0) for leaf in leaves])
         print(f"[KDTree init] leaves={len(leaves)}, total_points={total_points}")
+        
     def _splitDataInNodes(self, node: Node) -> None:
         """
         Splits data based on the median of the greatest variance dimension. 
@@ -156,12 +158,15 @@ class KDTree():
 
         node.right.Data.test_data = test_Data[mask][:,:-1]
         node.right.Data.test_y = test_Data[mask][:,-1:]
+        node.right.Data.test_indices = node.Data.test_indices[mask]
 
         node.left.Data.test_data = test_Data[~mask][:,:-1]
         node.left.Data.test_y = test_Data[~mask][:,-1:]
+        node.left.Data.test_indices = node.Data.test_indices[~mask]
 
         node.Data.test_data = None
         node.Data.test_y = None
+        node.Data.test_indices = None
         
         self.splitDataInNodes_test(node.left)
         self.splitDataInNodes_test(node.right)
