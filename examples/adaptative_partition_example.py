@@ -38,7 +38,7 @@ from mpl_toolkits.mplot3d import Axes3D
 logger = setup_logger(level=logging.INFO)
 
 # 2. DEFINE MODEL CONFIGURATIONS
-n_functions = 20  
+n_functions = 80
 n_features = 2
 
 # partition_config = UniformPartitionConfig(
@@ -65,7 +65,7 @@ dict_config = GaussianDictConfig(
     alpha=0.0002525,
     criterion=torch.nn.MSELoss(),
     optimizer_factory=lambda params, lr: torch.optim.AdamW(
-        params, lr=lr, weight_decay=0.00873 # Added small weight decay
+        params, lr=lr, weight_decay=0.00873
     ),
     mu_epochs=10,
     rho_epochs=10,
@@ -89,9 +89,9 @@ sparse_coding_config = ISTAConfig(
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
-ssesm_config = BSESMConfig(
+bsesm_config = BSESMConfig(
     n_features=n_features,
-    model_epochs=640,  # Increased epochs for the more complex multi-block problem
+    model_epochs=250,
     partition_config=partition_config,
     dict_config=dict_config,
     sparse_coding_config=sparse_coding_config,
@@ -101,9 +101,9 @@ ssesm_config = BSESMConfig(
 
 # 3. DEFINE EXPERIMENT PARAMETERS
 experiment = {
-    "config": ssesm_config,
+    "config": bsesm_config,
     "hyp_set": 2, # Changed to distinguish from one-block
-    "n_samples": 500, # More samples for a more complex setup
+    "n_samples": 500,
     "seed": 45,
     "iter": 0
 }
@@ -184,7 +184,7 @@ except KeyboardInterrupt:
 finally:
     # Ensure the video is created even if training is interrupted.
     if 'visual_hook' in locals() and visual_hook is not None:
-        visual_hook.create_video(video_name="multi_block_evolution.mp4")
+        visual_hook.create_video(video_name="adaptiv_pm_evolution.mp4")
 
 print("\nDisplaying final plots. Close all plot windows to exit.")
 plt.show(block=True)

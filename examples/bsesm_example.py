@@ -123,7 +123,7 @@ dict_config = GaussianDictConfig(
     mu_epochs=10,
     rho_epochs=10,
     split_mu_rho=False,
-    # These ranges operate in the NORMALIZED space [0, 1] of the block.        
+    # These ranges operate in the NORMALIZED space [0, 1] of the block.
     eig_range=[0.05, 0.2],
     mu_range=[0.0, 1.0],
     regularization_func=GaussianDictLayer.electrostatic_regularization,
