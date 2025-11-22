@@ -1,8 +1,17 @@
 """
-Unit tests for KDPartitionStrategy
+KD-Tree Strategy Tests.
 
-Tests the KD-tree–based partition strategy for correct construction,
-data consistency, and partition retrieval behavior.
+Tests for the KD-Tree partitioning strategy, ensuring correct integration
+between the strategy interface and the underlying tree structure.
+
+Author: Hender Valdivia
+Copyright (c) 2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
 """
 
 import pytest
