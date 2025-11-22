@@ -24,7 +24,7 @@ import numpy as np
 from pysesm.blocks.Node import Node
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.KDTree import KDTree
-from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager, AdaptativePartitionConfig
+from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionManager, AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 
 logger = logging.getLogger("test_uniform_partition_manager")
@@ -66,12 +66,12 @@ def create_manager(common_device):
             device=common_device
         )
         strategy = KDTreeStrategy
-        config = AdaptativePartitionConfig(
+        config = AdaptivePartitionConfig(
             partition_strategy=strategy,
             strategy_config=strategyConfig,
             overlap_ratio=None
         )
-        return AdaptativePartitionManager(
+        return AdaptivePartitionManager(
             config=config,
             logger=logger # Use the module-level logger for the manager            
         )

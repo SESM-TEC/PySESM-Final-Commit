@@ -31,11 +31,11 @@ class SESMData():
         self.updateBounds()
         self.dim : int = self.greatestVarDim()
         self.block: PartitionBlock = PartitionBlock(
-                self.bounds[0],
-                self.idx,
-                self.bounds[1]-self.bounds[0],
+                block_index=self.idx,
+                block_size=self.bounds[1]-self.bounds[0],
+                block_scope=self.bounds,
                 device=device)
-
+        
     def greatestVarDim(self) -> int:
         """Returns the dimension with the greatest variance of the dataset, 
            or -1 if no preferred dimension can be computed."""

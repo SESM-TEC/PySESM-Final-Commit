@@ -28,10 +28,10 @@ from ..sparse_coding.SparseCodingBaseLayer import SparseCodingConfig
 from ..factories.SparseCodingFactory import SparseCodingFactory
 
 @dataclass(kw_only=True)
-class AdaptativePartitionConfig(BlockManagerConfig):
-    """Configuration for AdaptativePartitionManager.
+class AdaptivePartitionConfig(BlockManagerConfig):
+    """Configuration for AdaptivePartitionManager.
     
-    This class defines the configuration parameters needed to set up adaptative
+    This class defines the configuration parameters needed to set up adaptive
     partitioning of the input space into blocks with optional overlap between
     adjacent blocks for smooth transitions.
     """
@@ -39,13 +39,13 @@ class AdaptativePartitionConfig(BlockManagerConfig):
     partition_strategy: Callable = None #PartitionStrategy constructor
     strategy_config: PartitionStrategyConfig = None
     
-class AdaptativePartitionManager(BlockManager):
+class AdaptivePartitionManager(BlockManager):
     
-    CONFIG_CLASS = AdaptativePartitionConfig 
+    CONFIG_CLASS = AdaptivePartitionConfig 
     
     def __init__(
         self,
-        config: AdaptativePartitionConfig,
+        config: AdaptivePartitionConfig,
         logger: logging.Logger,
         sparse_coding_layer_hook=None
     ):
@@ -267,10 +267,11 @@ class AdaptativePartitionManager(BlockManager):
             if partition.test_data is not None:
                 partition.block.clear_points()
                 new_pb = PartitionBlock(    
-                    space_origin=partition.block.space_origin,
                     block_index=partition.block.block_index,
                     block_size=partition.block.block_size,
-                    device=partition.block.device
+                    block_scope=partition.block.block_scope,
+                    device=partition.block.device,
+                    space_origin=partition.block.space_origin                    
                 )
                 # Transfer the learned sparse_coding_layer and amplitude from original training block
                 new_pb.sparse_coding_layer = partition.block.sparse_coding_layer

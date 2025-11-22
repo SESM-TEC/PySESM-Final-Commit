@@ -43,12 +43,15 @@ def partition_block_factory(device_fixture):
         device = device_fixture
         space_origin = torch.tensor(space_origin_coords, device=device, dtype=torch.float32)
         block_size = torch.tensor(block_size_coords, device=device, dtype=torch.float32)
+
+        # Calculate block_scope explicitly for the test factory
+        idx_tensor = torch.tensor(block_idx_tuple, device=device, dtype=torch.float32)
+        # Calculate position relative to space_origin
+        base_pos = space_origin + idx_tensor * block_size
+        block_scope = torch.stack((base_pos, base_pos + block_size))
         
-        # Allow overriding eps for testing purposes if PartitionBlock is modified to accept it
-        # For now, assuming PartitionBlock uses internal torch.finfo.eps
-        # If you modify PartitionBlock to take an eps parameter:
-        # return PartitionBlock(space_origin, block_idx_tuple, block_size, device=device, eps_val=custom_eps)
-        return PartitionBlock(space_origin, block_idx_tuple, block_size, device=device)
+        return PartitionBlock(block_index=block_idx_tuple, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
+
     return _create_block
 
 @pytest.fixture

@@ -15,10 +15,10 @@ SPDX-License-Identifier: BSD-3-Clause
 
 # Import the concrete classes
 from .UniformPartitionManager import UniformPartitionManager
-from .AdaptativePartitionManager import AdaptativePartitionManager
+from .AdaptivePartitionManager import AdaptivePartitionManager
 # Import the factory
 from ..factories import BlockManagerFactory
 
 # Perform registrations
 BlockManagerFactory.register("uniform_partition_manager", UniformPartitionManager)
-BlockManagerFactory.register("adaptative_partition_manager", AdaptativePartitionManager)
+BlockManagerFactory.register("adaptive_partition_manager", AdaptivePartitionManager)

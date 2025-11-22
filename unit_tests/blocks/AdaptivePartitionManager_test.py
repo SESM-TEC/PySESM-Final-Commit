@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from typing import Union, Optional
 
-from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionManager,AdaptativePartitionConfig
+from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionManager,AdaptivePartitionConfig
 from pysesm.blocks import KDTree
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.PartitionBlock import PartitionBlock
@@ -31,7 +31,7 @@ from pysesm.sparse_coding.ISTALayer import ISTALayer, ISTAConfig
 @pytest.fixture(scope="module")
 def logger():
     """Provide a logger for the test module."""
-    logger = logging.getLogger("test_adaptative_partition_manager")
+    logger = logging.getLogger("test_adaptive_partition_manager")
     logger.setLevel(logging.DEBUG)
     return logger
 
@@ -43,7 +43,7 @@ def common_device():
 @pytest.fixture(scope="function")
 def create_manager(logger, common_device):
     """
-    Factory fixture para crear e inicializar instancias de AdaptativePartitionManager.
+    Factory fixture para crear e inicializar instancias de AdaptivePartitionManager.
     """
     def _creator(
         X: Optional[torch.Tensor] = None,
@@ -57,12 +57,12 @@ def create_manager(logger, common_device):
             data_wrapper=SESMData # data_wrapper es casi siempre el mismo
         )
         strategy = KDTreeStrategy
-        config = AdaptativePartitionConfig(
+        config = AdaptivePartitionConfig(
             overlap_ratio=overlap_ratio,
             partition_strategy=strategy,
             strategy_config=strategyConfig
         )
-        manager = AdaptativePartitionManager(
+        manager = AdaptivePartitionManager(
             config=config,
             logger=logger
         )

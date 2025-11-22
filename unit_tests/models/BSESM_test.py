@@ -155,8 +155,11 @@ def _nested_tensor_data_generator(_bsesm_config_fixture, _common_evaluation_func
         for i in range(num_blocks):
             num_samples = torch.randint(min_samples_per_block, max_samples_per_block + 1, (1,)).item()
             
-            block = PartitionBlock(dummy_space_origin, (i, 0), dummy_block_size, device) # Simple (i,0) indices
-            # Populate block with simulated data
+            block_idx = (i, 0)
+            pos = dummy_space_origin + torch.tensor(block_idx, device=device) * dummy_block_size
+            block_scope = torch.stack((pos, pos + dummy_block_size))
+            
+            block = PartitionBlock(block_index=block_idx, block_size=dummy_block_size, block_scope=block_scope, device=device, space_origin=dummy_space_origin)
             block.normalized_X = TensorProxy(torch.randn(num_samples, n_features, device=device, dtype=torch.float32))
             block.target = TensorProxy(torch.randn(num_samples, 1, device=device, dtype=torch.float32))
             block.amplitude = 1.0 # Simple amplitude for testing

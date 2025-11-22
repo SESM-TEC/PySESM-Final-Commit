@@ -69,28 +69,24 @@ class PartitionBlock:
 
     def __init__(
         self,
-        space_origin: torch.Tensor,
         block_index: tuple[int, ...], # Use Tuple for clarity
         block_size: torch.Tensor,
+        block_scope: torch.Tensor,    
         device: torch.device,
+        space_origin: torch.Tensor | None = None
     ):
         self.block_index = block_index
         self.block_size = block_size.to(device)
         self.device = device
         
-        self.space_origin = space_origin.to(self.device)
-
-        # Calculate the base edge of this specific block based on its index
-        # (e.g., for block (i, j), its origin is global_origin + i*block_size_x + j*block_size_y)
-        base_edge_of_this_block = self.space_origin + torch.mul(
-            torch.tensor(block_index, device=self.device), self.block_size
-        )
-        # Define the block's specific bounding box (min_coords, max_coords)
-        self.block_scope = torch.stack((
-            base_edge_of_this_block,
-            base_edge_of_this_block + self.block_size
-        )).to(self.device)
+        self.block_scope = block_scope.to(self.device)
         
+        # Use provided origin or infer from scope (for metadata compatibility)
+        if space_origin is not None:
+            self.space_origin = space_origin.to(self.device)
+        else:
+            self.space_origin = self.block_scope[0]
+
         self.amplitude: float = 1.0
         self.X: list[torch.Tensor] = []
         self.normalized_X: TensorProxy | None = None

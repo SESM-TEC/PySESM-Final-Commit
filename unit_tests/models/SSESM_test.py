@@ -89,11 +89,17 @@ def _active_blocks_generator(_ssesm_config_fixture, _common_evaluation_func):
         
         active_blocks = []
         for i in range(num_blocks):
+            space_origin = torch.tensor([0.0, 0.0], device=device)
+            block_idx = (0, i)
+            block_size = torch.tensor([1.0, 1.0], device=device)
+            pos = space_origin + torch.tensor(block_idx, device=device) * block_size
+            block_scope = torch.stack((pos, pos + block_size))            
             block = PartitionBlock(
-                space_origin=torch.tensor([0.0, 0.0], device=device),
-                block_index=(0, i),
-                block_size=torch.tensor([1.0, 1.0], device=device),
-                device=device
+                block_index=block_idx,
+                block_size=block_size,
+                block_scope=block_scope,
+                device=device,
+                space_origin=space_origin                
             )
             block.normalized_X = TensorProxy(torch.randn(samples_per_block, n_features, device=device))
             block.target = TensorProxy(torch.randn(samples_per_block, 1, device=device))

@@ -32,7 +32,8 @@ def test_partition_block_initialization():
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
 
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     assert block.block_index == block_index
     assert torch.allclose(block.block_size, block_size)
@@ -58,7 +59,8 @@ def test_add_point_to_block():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     point_x = torch.tensor([0.5, 0.5], device=device)
     point_y = torch.tensor([1.0], device=device)
@@ -79,7 +81,8 @@ def test_clear_points():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     point_x = torch.tensor([0.5, 0.5], device=device)
     point_y = torch.tensor([1.0], device=device)
@@ -101,7 +104,8 @@ def test_is_active():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     assert not block.is_active()
 
@@ -121,7 +125,8 @@ def test_normalize():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     point_x = torch.tensor([0.5, 0.5], device=device)
     point_y = torch.tensor([1.0], device=device)
@@ -144,7 +149,8 @@ def test_normalize_extreme_block_sizes():
     
     # Very small block size
     block_size_small = torch.tensor([1e-6, 1e-6], device=device)
-    block_small = PartitionBlock(space_origin, block_index, block_size_small, device=device)
+    block_scope_small = torch.stack([space_origin, space_origin + block_size_small])
+    block_small = PartitionBlock(block_index=block_index, block_size=block_size_small, block_scope=block_scope_small, device=device, space_origin=space_origin)
     
     point_small = torch.tensor([0.5e-6, 0.5e-6], device=device)
     block_small.new_point(point_small, torch.tensor([1.0], device=device), 0)
@@ -158,7 +164,8 @@ def test_normalize_extreme_block_sizes():
 
     # Very large block size
     block_size_large = torch.tensor([1e6, 1e6], device=device)
-    block_large = PartitionBlock(space_origin, block_index, block_size_large, device=device)
+    block_scope_large = torch.stack([space_origin, space_origin + block_size_large])
+    block_large = PartitionBlock(block_index=block_index, block_size=block_size_large, block_scope=block_scope_large, device=device, space_origin=space_origin)
     
     point_large = torch.tensor([0.5e6, 0.5e6], device=device)
     block_large.new_point(point_large, torch.tensor([1.0], device=device), 0)
@@ -184,13 +191,15 @@ def test_partition_block_calculate_amplitude_and_target():
     space_origin = torch.tensor([0.0, 0.0], device=cpu_device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=cpu_device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
 
     # Create an instance of PartitionBlock
     block = PartitionBlock(
-        space_origin=space_origin,
         block_index=block_index,
         block_size=block_size,
-        device=cpu_device
+        block_scope=block_scope,
+        device=cpu_device,
+        space_origin=space_origin        
     )
 
     # --- Test Case 1: Max absolute y value > 1 ---
@@ -264,7 +273,8 @@ def test_append_points_to_block():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     points_x = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device=device)
     points_y = torch.tensor([[1.0], [2.0], [3.0]], device=device)
@@ -299,7 +309,8 @@ def test_append_points_dimension_mismatch_raises_error():
     space_origin = torch.tensor([0.0, 0.0], device=device)
     block_index = (0, 0)
     block_size = torch.tensor([1.0, 1.0], device=device)
-    block = PartitionBlock(space_origin, block_index, block_size, device=device)
+    block_scope = torch.stack([space_origin, space_origin + block_size])
+    block = PartitionBlock(block_index=block_index, block_size=block_size, block_scope=block_scope, device=device, space_origin=space_origin)
 
     # Mismatch: points_x (3 samples), points_y (2 samples)
     points_x_mismatch = torch.tensor([[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]], device=device)

@@ -209,10 +209,15 @@ class UniformPartitionManager(BlockManager):
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=object) 
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(space_origin = self.initial_bounds[0],
+                # Calculate geometry here (Manager's responsibility)
+                base_edge = self.initial_bounds[0] + torch.tensor(index, device=self.device) * self.block_size
+                scope = torch.stack((base_edge, base_edge + self.block_size))
+                self.blocks[index] = PartitionBlock(
                                                     block_index = index, 
                                                     block_size = self.block_size,
-                                                    device=self.device)
+                                                    block_scope = scope,
+                                                    device=self.device,
+                                                    space_origin = self.initial_bounds[0])
         else:
             new_max_x = torch.max(X).to(self.device)
             new_min_x = torch.min(X).to(self.device)
@@ -354,10 +359,11 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             original_block = self.blocks[index]
             new_pb = PartitionBlock(
-                space_origin=original_block.space_origin,
                 block_index=original_block.block_index,
                 block_size=original_block.block_size,
-                device=original_block.device
+                block_scope=original_block.block_scope,
+                device=original_block.device,
+                space_origin=original_block.space_origin                
             )
             # Transfer the learned sparse_coding_layer and amplitude from original training block
             new_pb.sparse_coding_layer = original_block.sparse_coding_layer
