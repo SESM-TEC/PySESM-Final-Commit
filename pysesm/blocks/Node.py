@@ -17,14 +17,13 @@ from typing import Callable
 import torch
 
 class Node():
-    def __init__(self, Data: torch.Tensor, y: torch.Tensor, data_wrapper: Callable, device, parent=None):
+    def __init__(self, data_object, parent=None):
         """
         Args:
-            Data (torch.Tensor): Input dataset.
+            data_object: Instance of the data wrapper (e.g. SESMData).
             parent (Node): Optional parent node.
-            data_wrapper (Callable): A class or function to wrap/process the Data (e.g., KdSESMData).
         """
-        self.Data: Callable = data_wrapper(Data, y, device)
+        self.Data = data_object
         self.left: Node = None
         self.right: Node = None 
         self.parent: Node = parent

@@ -13,37 +13,19 @@ LICENSE file in the root directory of this source tree.
 SPDX-License-Identifier: BSD-3-Clause
 """
 
-from typing import Callable
 import torch
 from pysesm.blocks.Node import Node
-
-class dummyData():
-    def __init__(self, X: torch.Tensor, y: torch.Tensor):
-        self.X: torch.Tensor=X
-        self.y: torch.Tensor=y
-        self.split_point: float=None
-        self.test_data: torch.Tensor=None
-        self.test_y: torch.Tensor=None
-        self.test_indices: torch.Tensor=None
-        self.dim: int=0
-
-    def empty_data(self):
-        self.X = None
-
+from pysesm.blocks.DataContainer import DataContainer
+        
 class KDTree():
-    def __init__(self, data: torch.Tensor, y: torch.Tensor, maxNodeSize: int = 500, data_wrapper: Callable = dummyData,device=None):
+    def __init__(self, root_data: DataContainer, maxNodeSize: int = 500):
         """
-        data (Tensor): Tensor holding all data points
-        root (Node): Root node of the tree.
-        maxNodeSize (int): If a node has more than maxNodeSize points it is split into two nodes.
-        data_wrapper (Callable): The object used in the nodes to store the data.
-        split (bool): Flag to indicate whether any node has been split  points added after the initial KD-tree build.
-        device (string or None): Device where internal tensors will be stored.
+        Args:
+            root_data (DataContainer): The initialized data wrapper for the root.
+            maxNodeSize (int): Maximum capacity of a node before splitting.
         """
-        self.device=device
-        self.root: Node = Node(data.to(self.device), y, data_wrapper, self.device)
+        self.root: Node = Node(root_data)
         self.maxNodeSize: int = maxNodeSize
-        self.data_wrapper : callable = data_wrapper
         self.split_after_add: bool = False
 
         self._splitDataInNodes(self.root)
@@ -57,21 +39,15 @@ class KDTree():
         It stops when the children nodes have maxNodeSize points or less
         """
         
-        if node is None or node.Data.X.size(0) <= self.maxNodeSize:
-            return      
-        # Calculate median only for the dimension we need
-        node.Data.split_point = torch.median(node.Data.X[:,node.Data.dim]).item()
-
-        # Create combined data (necessary for mask)
-        data=torch.cat((node.Data.X, node.Data.y), dim=1)
-
-        # Create mask of data over threshold only once and reuse its inverse
-        mask = data[:, node.Data.dim] >= node.Data.split_point
-        not_mask = ~mask
-        node.right = Node(data[mask][:,:-1],data[mask][:,-1:], self.data_wrapper, self.device)
-        node.left = Node(data[not_mask][:, :-1],data[not_mask][:, -1:], self.data_wrapper, self.device)        
-
-        node.Data.empty_data()
+        if node is None or node.Data.size() <= self.maxNodeSize:
+            return
+        
+        left_data, right_data = node.Data.split()
+        
+        node.left = Node(left_data, parent=node)
+        node.right = Node(right_data, parent=node)
+        
+        node.Data.clear_payload()        
         
         self._splitDataInNodes(node.left)
         self._splitDataInNodes(node.right)
@@ -100,17 +76,10 @@ class KDTree():
 
         x: one-dimensional tensor
         """
-        x=x.to(self.device)
-        y=y.to(self.device)
         node = self._find_node(x)
+        node.Data.append(x, y)
 
-        x=x.unsqueeze(0)
-        y=y.unsqueeze(0)
-        node.Data.X=torch.cat((node.Data.X,x))
-        node.Data.y=torch.cat((node.Data.y,y))
-        node.Data.updateBounds()
-
-        if not (node.Data.X.size(0) <= self.maxNodeSize):
+        if not (node.Data.size() <= self.maxNodeSize):
             self.split_after_add=True
             self._splitDataInNodes(node)
         leaves = self.get_leaves()
@@ -151,23 +120,13 @@ class KDTree():
         """
         if node is None:
             node=self.root
-        if node.Data.test_data is None or node.Data.X is not None:
+            
+        # If leaf (children are None) or no test data, stop
+        if (node.left is None and node.right is None) or node.Data.test_data is None:
             return
-        test_Data=torch.cat((node.Data.test_data,node.Data.test_y),dim=1)
-        mask = test_Data[:, node.Data.dim] >= node.Data.split_point
-
-        node.right.Data.test_data = test_Data[mask][:,:-1]
-        node.right.Data.test_y = test_Data[mask][:,-1:]
-        node.right.Data.test_indices = node.Data.test_indices[mask]
-
-        node.left.Data.test_data = test_Data[~mask][:,:-1]
-        node.left.Data.test_y = test_Data[~mask][:,-1:]
-        node.left.Data.test_indices = node.Data.test_indices[~mask]
-
-        node.Data.test_data = None
-        node.Data.test_y = None
-        node.Data.test_indices = None
         
+        node.Data.push_test_data_to_children(node.left.Data, node.right.Data)
+
         self.splitDataInNodes_test(node.left)
         self.splitDataInNodes_test(node.right)
         
@@ -203,7 +162,7 @@ class KDTree():
                 leaf_min = leaf.Data.bounds[0]  # Lower bounds of this leaf
                 global_min = torch.min(global_min, leaf_min)
         
-        return global_min.to(self.device) if self.device else global_min
+        return global_min
 
     def _get_global_maximum(self) -> torch.Tensor:
         """
@@ -234,7 +193,7 @@ class KDTree():
                 leaf_max = leaf.Data.bounds[1]  # Upper bounds of this leaf
                 global_max = torch.max(global_max, leaf_max)
         
-        return global_max.to(self.device) if self.device else global_max
+        return global_max
 
     def get_global_bounds(self) -> torch.Tensor:
         """

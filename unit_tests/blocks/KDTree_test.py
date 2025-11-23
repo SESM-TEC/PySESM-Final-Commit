@@ -43,13 +43,8 @@ def create_KDTree(common_device):
     """
     def _creator(data: torch.Tensor, y: torch.Tensor, maxNodeSize: int=5):
         # Convert torch.Tensor bounds to numpy array for UniformPartitionConfig
-        return KDTree(
-            data=data,
-            y=y,
-            maxNodeSize=maxNodeSize,
-            data_wrapper=SESMData,
-            device=common_device
-        )
+        root_data = SESMData(data.to(common_device), y.to(common_device), common_device)
+        return KDTree(root_data, maxNodeSize=maxNodeSize)
     return _creator
 
 @pytest.fixture
@@ -84,7 +79,8 @@ def test_greatestVarDim(common_device):
     device = common_device
     x = torch.randn(20, 5).to(device)
     y = torch.randn(20, 1).to(device)    
-    node=Node(x,y, SESMData, device)
+    data = SESMData(x, y, device)
+    node = Node(data)
     dim = node.Data.greatestVarDim()
 
     variances = x.var(dim=0)
@@ -152,7 +148,7 @@ def test_splitDataInNodes(create_KDTree, common_device):
     kd=create_KDTree(x,y)
     defaultMaxNodeSize = kd.maxNodeSize
 
-    Data=torch.Tensor().to(kd.device)
+    Data=torch.Tensor().to(device)
     treeNodes=kd.get_leaves()
     for node in treeNodes:
         Data=torch.cat((Data,node.Data.X))

@@ -20,7 +20,7 @@ import torch
 from pysesm.blocks.PartitionStrategy import PartitionStrategy, PartitionStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.PartitionBlock import PartitionBlock
-from pysesm.blocks.KDTree import KDTree, dummyData
+from pysesm.blocks.KDTree import KDTree
 
 
 @dataclass(kw_only=True)
@@ -72,7 +72,10 @@ class KDTreeStrategy(PartitionStrategy):
             test (bool): Indicates if the structure must be build for testing.
         """
         if not test:
-            self.kdtree = KDTree(X, y, self.config.maxNodeSize, self.config.data_wrapper, self.config.device)
+            # Instantiate the data wrapper (e.g. SESMData) first
+            root_data = self.config.data_wrapper(X.to(self.config.device), y.to(self.config.device), self.config.device)
+            # Pass the data object to KDTree
+            self.kdtree = KDTree(root_data, self.config.maxNodeSize)            
             for i, partition in enumerate(self.get_partitions()):
                 partition.block.block_index=(i,)
         else:

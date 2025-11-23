@@ -15,6 +15,24 @@ SPDX-License-Identifier: BSD-3-Clause
 
 import logging
 import torch
+import argparse
+import json
+import dataclasses
+from datetime import datetime
+from pathlib import Path
+
+# --- Argument Parsing & Headless Setup ---
+# This must happen BEFORE importing matplotlib.pyplot
+parser = argparse.ArgumentParser(description="Run a BSESM experiment.")
+parser.add_argument('--headless', action='store_true', 
+                    help="Run in headless mode (no plots displayed, saves files).")
+args = parser.parse_args()
+
+if args.headless:
+    import matplotlib
+    matplotlib.use('Agg')
+
+
 import matplotlib.pyplot as plt
 
 from pysesm.models.SESM import SESM
@@ -29,8 +47,41 @@ from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils_dataset.gaussian_covariance_density import generate_nondiag_covariance_matrices
 from pysesm.utils.plot_and_save_stats import plot_surface
-from visualization import VisualizerHook  # Import from the new centralized file
+from visualization import VisualizerHook # Import from the new centralized file
 from mpl_toolkits.mplot3d import Axes3D
+
+
+# --- Directory and Config Setup ---
+run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+output_dir = Path(f"results/bsesm_run_{run_timestamp}")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+class EnhancedJSONEncoder(json.JSONEncoder):
+    """
+    A custom JSON encoder to handle non-serializable types like dataclasses,
+    lambda functions, and torch.device.
+    """
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        if isinstance(o, torch.device):
+            return str(o)
+        if callable(o):
+            if hasattr(o, '__name__'):
+                return f"<function {o.__name__}>"
+            # Handle callable class instances like torch.nn.MSELoss()
+            return f"<instance of {o.__class__.__name__}>"
+        try:
+            return super().default(o)
+        except TypeError:
+            return str(o)
+
+def save_config_to_json(config_dict, path):
+    """Saves the experiment configuration dictionary to a JSON file."""
+    with open(path, 'w') as f:
+        json.dump(config_dict, f, cls=EnhancedJSONEncoder, indent=4)
+
+
 
 # --- Main Script ---
 
@@ -152,10 +203,13 @@ non_diag_sigmas = [sigma1, sigma2, sigma3]
 fig_hook, ax_hook = plt.subplots(figsize=(10, 8))
 plt.ion()
 
+save_config_to_json(experiment, output_dir / "config.json")
+
 model = BSESM(**experiment, logger=logger)
 
 # Create and install the visualization hook using the imported, general-purpose class
-visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5, 5), (-5, 5)))
+visual_hook = VisualizerHook(model, ax_hook, X_train, gt_mu, gt_sigma, plot_limits=((-5, 5), (-5, 5)),
+                             output_dir=output_dir, headless=args.headless)
 model.sesm_hook = visual_hook
     
 # 6. TRAIN AND EVALUATE THE MODEL
@@ -170,14 +224,14 @@ try:
         "Model: %s, MSE Value = %.6f, time = %.6f",
         model.__class__.__name__, mse_value, time
     )
-
-    plot_surface(test_dataset=testDataset,
-                 X_train=X_train,
-                 y_train=y_train,
-                 y_pred=y_predicted,
-                 model=model,
-                 hypset=experiment["hyp_set"])
     
+    final_fig = plot_surface(test_dataset=testDataset,
+                             X_train=X_train,
+                             y_train=y_train,
+                             y_pred=y_predicted,
+                             model=model,
+                             hypset=experiment["hyp_set"])
+   
 except KeyboardInterrupt:
     print("\nTraining aborted by user. Creating video from captured frames...")
     
@@ -186,5 +240,11 @@ finally:
     if 'visual_hook' in locals() and visual_hook is not None:
         visual_hook.create_video(video_name="adaptiv_pm_evolution.mp4")
 
-print("\nDisplaying final plots. Close all plot windows to exit.")
-plt.show(block=True)
+if args.headless:
+    final_figure_path = output_dir / "final_surface_plot.png"
+    final_fig.savefig(final_figure_path, dpi=160)
+    logger.info(f"Final plot saved to {final_figure_path}")
+    print(f"\nHeadless run finished. Results saved in: {output_dir.resolve()}")
+else:
+    print("\nDisplaying final plots. Close all plot windows to exit.")
+    plt.show(block=True)
