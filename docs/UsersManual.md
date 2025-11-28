@@ -74,39 +74,39 @@ machine learning tasks.
     <defs>
       <marker id="arrow" markerWidth="10" markerHeight="10" 
               refX="0" refY="3" orient="auto">
-        <polygon points="0 0, 6 3, 0 6" fill="black"/>
+        <polygon points="0 0, 6 3, 0 6" fill="orange"/>
       </marker>
     </defs>
-    <rect x="20" y="60" width="80" height="80" fill="none" stroke="black"/>
-    <line x1="20" y1="80" x2="100" y2="80" stroke="black"/>
-    <line x1="20" y1="100" x2="100" y2="100" stroke="black"/>
-    <line x1="20" y1="120" x2="100" y2="120" stroke="black"/>
-    <line x1="40" y1="60" x2="40" y2="140" stroke="black"/>
-    <line x1="60" y1="60" x2="60" y2="140" stroke="black"/>
-    <line x1="80" y1="60" x2="80" y2="140" stroke="black"/>
-    <polygon points="100,60 150,40 150,120 100,140" fill="none" stroke="black"/>
-    <line x1="125" y1="50" x2="125" y2="130" stroke="black"/>
-    <line x1="137.5" y1="45" x2="137.5" y2="125" stroke="black"/>
-    <line x1="112.5" y1="55" x2="112.5" y2="135" stroke="black"/>
-    <line x1="100" y1="80" x2="150" y2="60" stroke="black"/>
-    <line x1="100" y1="100" x2="150" y2="80" stroke="black"/>
-    <line x1="100" y1="120" x2="150" y2="100" stroke="black"/>
-    <polygon points="20,60 100,60 150,40 70,40" fill="none" stroke="black"/>
-    <line x1="40" y1="60" x2="90" y2="40" stroke="black"/>
-    <line x1="60" y1="60" x2="110" y2="40" stroke="black"/>
-    <line x1="80" y1="60" x2="130" y2="40" stroke="black"/>
-    <line x1="112.5" y1="55" x2="32.5" y2="55" stroke="black"/>
-    <line x1="125" y1="50" x2="45" y2="50" stroke="black"/>
-    <line x1="137.5" y1="45" x2="57.5" y2="45" stroke="black"/>
+    <rect x="20" y="60" width="80" height="80" fill="none" stroke="royalblue"/>
+    <line x1="20" y1="80" x2="100" y2="80" stroke="royalblue"/>
+    <line x1="20" y1="100" x2="100" y2="100" stroke="royalblue"/>
+    <line x1="20" y1="120" x2="100" y2="120" stroke="royalblue"/>
+    <line x1="40" y1="60" x2="40" y2="140" stroke="royalblue"/>
+    <line x1="60" y1="60" x2="60" y2="140" stroke="royalblue"/>
+    <line x1="80" y1="60" x2="80" y2="140" stroke="royalblue"/>
+    <polygon points="100,60 150,40 150,120 100,140" fill="none" stroke="royalblue"/>
+    <line x1="125" y1="50" x2="125" y2="130" stroke="royalblue"/>
+    <line x1="137.5" y1="45" x2="137.5" y2="125" stroke="royalblue"/>
+    <line x1="112.5" y1="55" x2="112.5" y2="135" stroke="royalblue"/>
+    <line x1="100" y1="80" x2="150" y2="60" stroke="royalblue"/>
+    <line x1="100" y1="100" x2="150" y2="80" stroke="royalblue"/>
+    <line x1="100" y1="120" x2="150" y2="100" stroke="royalblue"/>
+    <polygon points="20,60 100,60 150,40 70,40" fill="none" stroke="royalblue"/>
+    <line x1="40" y1="60" x2="90" y2="40" stroke="royalblue"/>
+    <line x1="60" y1="60" x2="110" y2="40" stroke="royalblue"/>
+    <line x1="80" y1="60" x2="130" y2="40" stroke="royalblue"/>
+    <line x1="112.5" y1="55" x2="32.5" y2="55" stroke="royalblue"/>
+    <line x1="125" y1="50" x2="45" y2="50" stroke="royalblue"/>
+    <line x1="137.5" y1="45" x2="57.5" y2="45" stroke="royalblue"/>
     <line x1="150" y1="120" x2="180" y2="120"
-          stroke="black" marker-end="url(#arrow)"/>
+          stroke="orange" marker-end="url(#arrow)"/>
     <line x1="70" y1="40" x2="70" y2="10"
-          stroke="black" marker-end="url(#arrow)"/>
+          stroke="orange" marker-end="url(#arrow)"/>
     <line x1="20" y1="140" x2="3" y2="150"
-          stroke="black" marker-end="url(#arrow)"/>
-    <text x="75" y="20" font-size="15" fill="black">x₁</text>
-    <text x="175" y="113" font-size="15" fill="black">x₂</text>
-    <text x="15" y="155" font-size="15" fill="black">x₃</text>
+          stroke="orange" marker-end="url(#arrow)"/>
+    <text x="75" y="20" font-size="15" fill="orange">x₁</text>
+    <text x="175" y="113" font-size="15" fill="orange">x₂</text>
+    <text x="15" y="155" font-size="15" fill="orange">x₃</text>
   </svg>
 </div>
 
