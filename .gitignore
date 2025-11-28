@@ -169,3 +169,5 @@ wandb/
 
 #Pytorch models
 *.pth
+*.pt
+*.joblib

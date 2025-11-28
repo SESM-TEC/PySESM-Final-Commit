@@ -15,7 +15,7 @@ from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
-from pysesm.blocks.AdaptativePartitionManager import AdaptativePartitionConfig
+from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.utils.logging_hooks import *
 from pysesm.utils.loggers import setup_logger
 import gc
@@ -162,7 +162,7 @@ def main():
                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                 data_wrapper=SESMData
             )
-            partition_config = AdaptativePartitionConfig(
+            partition_config = AdaptivePartitionConfig(
                 overlap_ratio=0.1,
                 partition_strategy=strategy,
                 strategy_config=strategyConfig
@@ -239,7 +239,22 @@ def main():
                     experiment = EXPERIMENT(svr_config, nn_config, ssesm_config, pf_config)
                     experiment.setup_dataset(train_data, test_data)
                     experiment.train_all()
-                    logger.debug("Debug, device: %s", experiment.SESM_model.partition_manager.kdtree.device)
+                    # Mostrar el dispositivo usado por la estructura espacial (kdtree).
+                    # AdaptivePartitionManager no expone directamente `kdtree`; la
+                    # estrategia (strategy) puede contener la estructura. Comprobamos
+                    # varias opciones para evitar AttributeError.
+                    pm = experiment.SESM_model.partition_manager
+                    device_info = "unknown"
+                    if hasattr(pm, "kdtree") and hasattr(pm.kdtree, "device"):
+                        device_info = pm.kdtree.device
+                    elif hasattr(pm, "strategy"):
+                        strat = pm.strategy
+                        if hasattr(strat, "kdtree") and hasattr(strat.kdtree, "device"):
+                            device_info = strat.kdtree.device
+                        elif hasattr(strat, "device"):
+                            device_info = strat.device
+
+                    logger.debug("Debug, device: %s", device_info)
                     experiment.test_all()
                     metrics = experiment.metrics
 
