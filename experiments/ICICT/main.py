@@ -259,7 +259,7 @@ def main():
                     # AdaptivePartitionManager no expone directamente `kdtree`; la
                     # estrategia (strategy) puede contener la estructura. Comprobamos
                     # varias opciones para evitar AttributeError.
-                    pm = experiment.SESM_model.partition_manager
+                    pm = experiment.sesm_model.partition_manager
                     device_info = "unknown"
                     if hasattr(pm, "kdtree") and hasattr(pm.kdtree, "device"):
                         device_info = pm.kdtree.device
