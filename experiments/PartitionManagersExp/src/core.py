@@ -1,7 +1,7 @@
 import torch
 import time
 import wandb
-import logging
+import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # BSESM Imports
@@ -14,129 +14,167 @@ from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.utils_dataset.generate_dataset import generate_custom_nd_function_dataset
 
-from src.utils import plot_predictions
+from src.utils import plot_surface_comparison
 
-def train_one_run(cfg, logger, func_obj):
+def train_stream_experiment(cfg, logger, func_obj):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # 1. GENERAR DATASET
-    dataset_config = {
-        "n_samples": cfg.n_samples,
-        "n_dimensions": cfg.dim,
-        "function": func_obj,
-        "limits": cfg.dataset.limits
-    }
+    # Pasos de streaming
+    steps = cfg.stream_steps
+    max_samples = max(steps)
     
-    train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
-    
-    X_train, y_train = train_data["X"], train_data["Z"]
-    X_test, y_test = test_data["X"], test_data["Z"]
+    for run_idx in range(cfg.n_runs):
+        
+        current_seed = cfg.seed + run_idx
+        torch.manual_seed(current_seed)
+        np.random.seed(current_seed)
+        
+        logger.info(f"--- Run {run_idx+1}/{cfg.n_runs} | Dim: {cfg.dim} | Dataset: {cfg.dataset.name} ---")
 
-    # Normalización
-    mean_x, std_x = X_train.mean(0), X_train.std(0)
-    mean_y, std_y = y_train.mean(), y_train.std()
-    
-    # Safety checks
-    std_x[std_x == 0] = 1.0
-    if std_y == 0: std_y = 1.0
+        # 1. GENERAR DATASET (RAW)
+        dataset_config = {
+            "n_samples": max_samples,
+            "n_dimensions": cfg.dim,
+            "function": func_obj,
+            "limits": cfg.dataset.limits
+        }
+        
+        train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
+        
+        # --- SIN NORMALIZAR (Raw Data) ---
+        X_full_train = train_data["X"].to(device)
+        y_full_train = train_data["Z"].to(device)
+        
+        X_test = test_data["X"].to(device)
+        y_test = test_data["Z"].to(device)
 
-    X_train_norm = ((X_train - mean_x) / std_x).to(device)
-    y_train_norm = ((y_train - mean_y) / std_y).to(device)
-    X_test_norm = ((X_test - mean_x) / std_x).to(device)
-    
-    # --- CORRECCIÓN IMPORTANTE: Preparamos y_test_norm para pasarlo al modelo ---
-    y_test_norm = ((y_test - mean_y) / std_y).to(device)
+        # 2. CONFIGURACIÓN DEL MODELO
+        # Calculamos n_atoms
+        n_atoms = cfg.bsesm_params.atoms_per_dim * cfg.dim
+        logger.info(f"   Configurando modelo con n_atoms = {n_atoms} (Feature Space)")
 
-    # 2. CONFIGURAR MODELO
-    # Dictionary
-    dict_conf = GaussianDictConfig(
-        epochs=cfg.bsesm_params.dict_epochs,
-        alpha=1e-3,
-        criterion=torch.nn.MSELoss(),
-        optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
-        mu_epochs=10, rho_epochs=10, split_mu_rho=False,
-        eig_range=[0.05, 0.2], mu_range=[0.0, 1.0],
-        regularization_func=GaussianDictLayer.electrostatic_regularization,
-        regularization_gamma=1e-5,
-        device=device
-    )
-
-    # Sparse Coding
-    n_atoms = cfg.bsesm_params.atoms_per_dim * cfg.dim 
-    sc_conf = ISTAConfig(
-        epochs=cfg.bsesm_params.sc_epochs,
-        alpha=0.1, lambd=0.005,
-        step_size_method=StepSizeMethod.FROBENIUS,
-        power_iterations=10, n_functions=n_atoms,
-        criterion=torch.nn.MSELoss(), device=device
-    )
-
-    # Partition Method
-    if cfg.method.name == "kdtree":
-        strategy_conf = KDTreeStrategyConfig(
-            maxNodeSize=cfg.method.maxNodeSize,
-            device=device, data_wrapper=SESMData
+        # Diccionario
+        dict_conf = GaussianDictConfig(
+            epochs=cfg.bsesm_params.dict_epochs,
+            alpha=1e-3, criterion=torch.nn.MSELoss(),
+            optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
+            mu_epochs=10, rho_epochs=10, split_mu_rho=False,
+            eig_range=[0.05, 0.2], mu_range=[0.0, 1.0], 
+            regularization_func=GaussianDictLayer.electrostatic_regularization,
+            regularization_gamma=1e-5, device=device
         )
-        part_conf = AdaptivePartitionConfig(
-            overlap_ratio=cfg.method.overlap_ratio,
-            partition_strategy=KDTreeStrategy,
-            strategy_config=strategy_conf
+
+        # Sparse Coding
+        sc_conf = ISTAConfig(
+            epochs=cfg.bsesm_params.sc_epochs,
+            alpha=0.1, lambd=0.005, step_size_method=StepSizeMethod.FROBENIUS,
+            power_iterations=10, n_functions=n_atoms,
+            criterion=torch.nn.MSELoss(), device=device
         )
-    elif cfg.method.name == "uniform":
-        bounds = torch.tensor([[-3.0]*cfg.dim, [3.0]*cfg.dim], device=device)
-        part_conf = UniformPartitionConfig(
-            T=cfg.method.T,
-            initial_bounds=bounds,
-            activity_threshold=0,
-            overlap_ratio=cfg.method.overlap_ratio,
-            device=device
+
+        # Partición (CRÍTICO: Bounds correctos)
+        if cfg.method.name == "kdtree":
+            strategy_conf = KDTreeStrategyConfig(
+                maxNodeSize=cfg.method.maxNodeSize, device=device, data_wrapper=SESMData
+            )
+            part_conf = AdaptivePartitionConfig(
+                overlap_ratio=cfg.method.overlap_ratio, partition_strategy=KDTreeStrategy,
+                strategy_config=strategy_conf
+            )
+        else: # Uniform
+            # --- CORRECCIÓN CLAVE ---
+            # Si no normalizamos, los bounds deben ser los límites REALES del dataset.
+            # cfg.dataset.limits viene como lista [min, max], ej: [0, 1] o [-5, 5]
+            lim_min, lim_max = cfg.dataset.limits
+            
+            # Construimos tensor de bounds: [[min, min...], [max, max...]]
+            bounds_tensor = torch.tensor([
+                [float(lim_min)] * cfg.dim, 
+                [float(lim_max)] * cfg.dim
+            ], dtype=torch.float32, device=device)
+            
+            part_conf = UniformPartitionConfig(
+                T=cfg.method.T, 
+                initial_bounds=bounds_tensor, # <--- AHORA USA LÍMITES REALES
+                activity_threshold=0,
+                overlap_ratio=cfg.method.overlap_ratio, 
+                device=device
+            )
+
+        bsesm_conf = BSESMConfig(
+            n_features=cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
+            partition_config=part_conf, dict_config=dict_conf,
+            sparse_coding_config=sc_conf, log_interval=1000, device=device
         )
-    else:
-        raise ValueError(f"Method {cfg.method.name} unknown")
 
-    # BSESM Global
-    bsesm_conf = BSESMConfig(
-        n_features=cfg.dim,
-        model_epochs=cfg.bsesm_params.global_epochs,
-        partition_config=part_conf,
-        dict_config=dict_conf,
-        sparse_coding_config=sc_conf,
-        log_interval=50, device=device
-    )
+        # Inicializar
+        model = BSESM(config=bsesm_conf, logger=logger)
 
-    # 3. ENTRENAMIENTO
-    model = BSESM(config=bsesm_conf, logger=logger)
-    
-    t0 = time.time()
-    model.partial_fit(X_train_norm, y_train_norm)
-    train_time = time.time() - t0
+        # 3. STREAMING LOOP
+        previous_n = 0
+        total_train_time = 0
+        
+        for step_idx, current_n in enumerate(steps):
+            
+            # Slicing de datos raw
+            X_batch = X_full_train[previous_n:current_n]
+            y_batch = y_full_train[previous_n:current_n]
+            
+            # Entrenamiento incremental
+            t0 = time.time()
+            model.partial_fit(X_batch, y_batch) # Pasamos raw data
+            dt = time.time() - t0
+            total_train_time += dt
+            
+            # Evaluación
+            # Pasamos y_test real como target
+            y_pred, _, _ = model.performance_stats(X_test, y_test)
+            
+            # Métricas (Aseguramos CPU para sklearn)
+            y_true_cpu = y_test.detach().cpu()
+            y_pred_cpu = y_pred.detach().cpu()
+            
+            mse = mean_squared_error(y_true_cpu, y_pred_cpu)
+            mae = mean_absolute_error(y_true_cpu, y_pred_cpu)
+            
+            logger.info(f"   Step {current_n} samples | MSE: {mse:.5f}")
 
-    # 4. TEST
-    # --- CORRECCIÓN: Pasamos y_test_norm en lugar de None ---
-    y_pred_norm, _, _ = model.performance_stats(X_test_norm, y_test_norm)
-    
-    # Desnormalizar
-    y_pred = y_pred_norm.detach().cpu() * std_y + mean_y
-    y_true = y_test.detach().cpu()
+            # Plotting (Solo último paso y dimensiones bajas)
+            plot_image = None
+            
+            if cfg.dim in [2]:
+                plot_name = f"./outputs/run{run_idx}_step{current_n}_{cfg.dataset.name}_{cfg.method.name}.png"
+                
+                # Datos acumulados para mostrar puntos de entrenamiento
+                X_train_acc = X_full_train[:current_n].cpu()
+                y_train_acc = y_full_train[:current_n].cpu()
+                
+                plot_surface_comparison(
+                    X_test=X_test.cpu(), y_test=y_true_cpu, y_pred=y_pred_cpu,
+                    X_train=X_train_acc, y_train=y_train_acc,
+                    dim=cfg.dim, 
+                    title=f"Run {run_idx} | N={current_n} | {cfg.dataset.name}", 
+                    outpath=plot_name
+                )
+                
+                import os
+                if os.path.exists(plot_name):
+                    plot_image = wandb.Image(plot_name)
 
-    # Métricas
-    mse = mean_squared_error(y_true, y_pred)
-    mae = mean_absolute_error(y_true, y_pred)
+            # Log WandB
+            wandb.log({
+                "run_id": run_idx,
+                "n_samples_seen": current_n,
+                "dim": cfg.dim,
+                "dataset": cfg.dataset.name,
+                "method": cfg.method.name,
+                "MSE": mse,
+                "MAE": mae,
+                "Incremental_Time": dt,
+                "Total_Train_Time": total_train_time,
+                "Surface_Plot": plot_image
+            })
+            
+            previous_n = current_n
 
-    # Plot
-    plot_name = f"plot_{cfg.dataset.name}_{cfg.method.name}.png"
-    plot_predictions(y_true, y_pred, f"{cfg.method.name} - {cfg.dataset.name}", plot_name)
-
-    results = {
-        "dim": cfg.dim,
-        "n_samples": cfg.n_samples,
-        "method": cfg.method.name,
-        "dataset": cfg.dataset.name,
-        "MSE": mse,
-        "MAE": mae,
-        "Train_Time": train_time,
-        "Plot": wandb.Image(plot_name)
-    }
-    
-    wandb.log(results)
-    return results
+    return "Done"
