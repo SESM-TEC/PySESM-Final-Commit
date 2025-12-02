@@ -1,33 +1,33 @@
 defaults:
-  - dataset: zhou      # Default dummy
-  - method: kdtree     # Default dummy
+  - dataset: zhou
+  - method: kdtree
   - _self_
 
-# Variables globales fijas
+# =======================================================
+# CONFIGURACIÓN DEL STREAMING Y REPETICIONES
+# =======================================================
+dim: 2
 seed: 45
-dim: 2                   
-n_samples: 500           
+n_runs: 5               # <--- Repeticiones por combinación (para estadística)
+stream_steps: [2, 4, 8, 16, 32, 64] # <--- El modelo recibirá datos en esta secuencia
 
 bsesm_params:
-  global_epochs: 200
-  dict_epochs: 200
-  sc_epochs: 100
+  global_epochs: 150
+  dict_epochs: 50
+  sc_epochs: 15          # Optimizado para velocidad
   atoms_per_dim: 10
 
 wandb:
-  project: "PySESM_experiments"
+  project: "PySESM_Streaming"
   entity: "hvaldivia"
   mode: "online"
 
-# -----------------------------------------------------------
-# DEFINICIÓN DEL BARRIDO (SWEEP)
-# -----------------------------------------------------------
+# =======================================================
+# DEFINICIÓN DEL BARRIDO (SOLO DIMENSIONES, DATASETS Y MÉTODOS)
+# =======================================================
 hydra:
   sweeper:
     params:
-      # VARIABLES A COMPARAR:
-      dim: 1, 2 #, 3, 4, 5, 6, 7, 8, 9, 10
-      n_samples: 2, 4 #, 8, 16, 32, 64
+      dim: 2, 3, 4
       dataset: zhou, zakharov, styblinski
       method: uniform, kdtree
-      #n_runs: 1..20

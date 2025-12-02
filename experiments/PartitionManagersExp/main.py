@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import wandb
 import fun
-from src.core import train_one_run
+from src.core import train_stream_experiment  # <--- CAMBIO AQUÍ
 
 FUNCTIONS = {
     "function_zhou": fun.function_zhou,
@@ -16,21 +16,15 @@ FUNCTIONS = {
 @hydra.main(config_path="conf", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     
-    # Logger
-    logger = logging.getLogger("BSESM")
+    logger = logging.getLogger("BSESM_Stream")
     
-    # Reproducibilidad
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-
-    # Validar función
     if cfg.dataset.name not in FUNCTIONS:
-        raise ValueError(f"Función {cfg.dataset.name} no existe en fun.py")
-    
+        raise ValueError(f"Función {cfg.dataset.name} desconocida")
     func_obj = FUNCTIONS[cfg.dataset.name]
 
-    # WandB
+    # Nombre del Run (Ya no lleva n_samples porque es dinámico)
     run_name = f"{cfg.method.name}_{cfg.dataset.name}_D{cfg.dim}"
+    
     wandb.init(
         project=cfg.wandb.project,
         entity=cfg.wandb.entity,
@@ -38,16 +32,15 @@ def main(cfg: DictConfig):
         name=run_name,
         config=OmegaConf.to_container(cfg, resolve=True),
         reinit=True,
-        group="BSESM_Sweep"
+        group="Stream_Study"
     )
 
-    try:
-        logger.info(f"=== RUN: {run_name} ===")
-        res = train_one_run(cfg, logger, func_obj)
-        logger.info(f"Done. MSE: {res['MSE']:.5f}")
-    except Exception as e:
-        logger.error(f"Fallo: {e}")
-        wandb.finish(exit_code=1)
+    
+    train_stream_experiment(cfg, logger, func_obj) # <--- LLAMADA
+    # except Exception as e:
+    #     logger.error(f"Fallo en {run_name}: {e}")
+    #     wandb.finish(exit_code=1)
+    #     raise e # Re-raise para ver el traceback si falla
     
     wandb.finish()
 
