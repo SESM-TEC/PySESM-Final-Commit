@@ -1,7 +1,11 @@
-import torch
+
 import time
-import wandb
 import logging
+from src.utils import plot_predictions
+import torch
+
+import wandb
+
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # BSESM Imports
@@ -14,7 +18,7 @@ from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.utils_dataset.generate_dataset import generate_custom_nd_function_dataset
 
-from src.utils import plot_predictions
+
 
 def train_one_run(cfg, logger, func_obj):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

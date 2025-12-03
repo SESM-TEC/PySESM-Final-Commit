@@ -15,10 +15,10 @@ FUNCTIONS = {
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
-    
+
     # Logger
     logger = logging.getLogger("BSESM")
-    
+
     # Reproducibilidad
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -26,7 +26,7 @@ def main(cfg: DictConfig):
     # Validar función
     if cfg.dataset.name not in FUNCTIONS:
         raise ValueError(f"Función {cfg.dataset.name} no existe en fun.py")
-    
+
     func_obj = FUNCTIONS[cfg.dataset.name]
 
     # WandB
@@ -48,7 +48,7 @@ def main(cfg: DictConfig):
     except Exception as e:
         logger.error(f"Fallo: {e}")
         wandb.finish(exit_code=1)
-    
+
     wandb.finish()
 
 if __name__ == "__main__":
