@@ -1,12 +1,11 @@
-import torch
+
 import time
+import logging
+from src.utils import plot_predictions
+import torch
+
 import wandb
-import numpy as np
-import os
-import csv
-import hydra
-import copy
-from omegaconf import OmegaConf
+
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # BSESM Imports
@@ -19,307 +18,129 @@ from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.utils_dataset.generate_dataset import generate_custom_nd_function_dataset
 
-from src.utils import plot_multi_method_comparison
 
-# ==========================================
-# FUNCIONES DE CHECKPOINT (CSV)
-# ==========================================
-def get_checkpoint_path(filename="experiment_results.csv"):
-    """Obtiene la ruta absoluta al archivo CSV en la raíz del proyecto."""
-    try:
-        # Intenta obtener la ruta original desde donde se lanzó Hydra
-        base_path = hydra.utils.get_original_cwd()
-    except:
-        base_path = os.getcwd()
-    return os.path.join(base_path, filename)
 
-def load_existing_results(filepath):
-    """
-    Carga los resultados existentes en un Set para búsqueda rápida O(1).
-    Retorna: Set con tuplas (run_id, dim, dataset_name, method_name, n_samples)
-    """
-    completed = set()
-    if not os.path.exists(filepath):
-        return completed
-    
-    try:
-        with open(filepath, 'r', newline='') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Convertimos a los tipos correctos para coincidir con el bucle
-                key = (
-                    int(row['run_id']),
-                    int(row['dim']),
-                    row['dataset'],
-                    row['method'],
-                    int(row['n_samples'])
-                )
-                completed.add(key)
-    except Exception as e:
-        print(f"[Checkpoint] Advertencia leyendo CSV: {e}")
-    
-    return completed
-
-def save_result_row(filepath, data_dict):
-    """Guarda una fila de resultados en el CSV (Append mode)."""
-    file_exists = os.path.exists(filepath)
-    fieldnames = [
-        'run_id', 'dim', 'dataset', 'method', 'n_samples', 
-        'mse', 'mae', 'inc_time', 'total_time', 'timestamp'
-    ]
-    
-    try:
-        with open(filepath, 'a', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            
-            # Agregamos timestamp
-            row = data_dict.copy()
-            row['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow(row)
-    except Exception as e:
-        print(f"[Checkpoint] Error escribiendo en CSV: {e}")
-
-# ==========================================
-# LÓGICA PRINCIPAL DEL EXPERIMENTO
-# ==========================================
-def train_stream_experiment(cfg, logger, func_obj):
+def train_one_run(cfg, logger, func_obj):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # --- MODIFICACIÓN: Escalar steps según la dimensión ---
-    base_steps = cfg.stream_steps
-    # Calculamos steps como potencia de la dimensión: [2^d, 4^d, ...]
-    steps = [int(n**cfg.dim) for n in base_steps]
-    max_samples = max(steps)
+    # 1. GENERAR DATASET
+    dataset_config = {
+        "n_samples": cfg.n_samples,
+        "n_dimensions": cfg.dim,
+        "function": func_obj,
+        "limits": cfg.dataset.limits
+    }
     
-    logger.info(f"Stream Steps escalados para Dim {cfg.dim}: {steps}")
-    # ------------------------------------------------------
+    train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
     
-    # 1. PREPARAR CHECKPOINT
-    csv_path = get_checkpoint_path("experiment_checkpoint.csv")
-    completed_steps = load_existing_results(csv_path)
-    logger.info(f"Checkpoint cargado: {len(completed_steps)} pasos completados encontrados en {csv_path}")
+    X_train, y_train = train_data["X"], train_data["Z"]
+    X_test, y_test = test_data["X"], test_data["Z"]
 
-    # Obtener ruta base para configs
-    try:
-        base_path = hydra.utils.get_original_cwd()
-    except:
-        base_path = os.getcwd()
+    # Normalización
+    mean_x, std_x = X_train.mean(0), X_train.std(0)
+    mean_y, std_y = y_train.mean(), y_train.std()
+    
+    # Safety checks
+    std_x[std_x == 0] = 1.0
+    if std_y == 0: std_y = 1.0
 
-    # ==========================================
-    # BUCLE 1: RUNS
-    # ==========================================
-    for run_idx in range(cfg.n_runs):
-        
-        # Caché de predicciones (Volátil, solo para plots en vivo)
-        predictions_cache = {} 
-        
-        current_seed = cfg.seed + run_idx
-        torch.manual_seed(current_seed)
-        np.random.seed(current_seed)
-        
-        logger.info(f"=== INICIO RUN {run_idx+1}/{cfg.n_runs} | Dim: {cfg.dim} | Dataset: {cfg.dataset.name} ===")
+    X_train_norm = ((X_train - mean_x) / std_x).to(device)
+    y_train_norm = ((y_train - mean_y) / std_y).to(device)
+    X_test_norm = ((X_test - mean_x) / std_x).to(device)
+    
+    # --- CORRECCIÓN IMPORTANTE: Preparamos y_test_norm para pasarlo al modelo ---
+    y_test_norm = ((y_test - mean_y) / std_y).to(device)
 
-        # Generar Dataset (Siempre necesario, usa max_samples actualizado)
-        dataset_config = {
-            "n_samples": max_samples,
-            "n_dimensions": cfg.dim,
-            "function": func_obj,
-            "limits": cfg.dataset.limits
-        }
-        
-        train_data, _, _, test_data, _, _ = generate_custom_nd_function_dataset(**dataset_config)
-        X_full_train = train_data["X"].to(device)
-        y_full_train = train_data["Z"].to(device)
-        X_test = test_data["X"].to(device)
-        y_test = test_data["Z"].to(device)
-        
-        # ==========================================
-        # BUCLE 2: MÉTODOS (Secuencial: Uniform -> KDTree)
-        # ==========================================
-        for method_idx, method_name in enumerate(cfg.methods_to_test):
-            
-            logger.info(f"   >>> Configurando Método: {method_name.upper()}")
+    # 2. CONFIGURAR MODELO
+    # Dictionary
+    dict_conf = GaussianDictConfig(
+        epochs=cfg.bsesm_params.dict_epochs,
+        alpha=1e-3,
+        criterion=torch.nn.MSELoss(),
+        optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
+        mu_epochs=10, rho_epochs=10, split_mu_rho=False,
+        eig_range=[0.05, 0.2], mu_range=[0.0, 1.0],
+        regularization_func=GaussianDictLayer.electrostatic_regularization,
+        regularization_gamma=1e-5,
+        device=device
+    )
 
-            # --- Carga de Configuración ---
-            try:
-                method_conf_path = os.path.join(base_path, "conf", "method", f"{method_name}.yaml")
-                if os.path.exists(method_conf_path):
-                    method_specific_conf = OmegaConf.load(method_conf_path)
-                    cfg.method = method_specific_conf
-                else:
-                    logger.warning(f"No config for {method_name}, using default.")
-            except Exception as e:
-                logger.error(f"Error loading config: {e}")
-                raise e
+    # Sparse Coding
+    n_atoms = cfg.bsesm_params.atoms_per_dim * cfg.dim 
+    sc_conf = ISTAConfig(
+        epochs=cfg.bsesm_params.sc_epochs,
+        alpha=0.1, lambd=0.005,
+        step_size_method=StepSizeMethod.FROBENIUS,
+        power_iterations=10, n_functions=n_atoms,
+        criterion=torch.nn.MSELoss(), device=device
+    )
 
-            # --- Configuración del Modelo ---
-            n_atoms_original = cfg.bsesm_params.atoms_per_dim * cfg.dim
-            
-            dict_conf = GaussianDictConfig(
-                epochs=cfg.bsesm_params.dict_epochs,
-                alpha=1e-3, criterion=torch.nn.MSELoss(),
-                optimizer_factory=lambda params, lr: torch.optim.AdamW(params, lr=lr),
-                mu_epochs=10, rho_epochs=10, split_mu_rho=False,
-                eig_range=[0.05, 0.2], mu_range=[0.0, 1.0], 
-                regularization_func=GaussianDictLayer.electrostatic_regularization,
-                regularization_gamma=1e-5, device=device
-            )
+    # Partition Method
+    if cfg.method.name == "kdtree":
+        strategy_conf = KDTreeStrategyConfig(
+            maxNodeSize=cfg.method.maxNodeSize,
+            device=device, data_wrapper=SESMData
+        )
+        part_conf = AdaptivePartitionConfig(
+            overlap_ratio=cfg.method.overlap_ratio,
+            partition_strategy=KDTreeStrategy,
+            strategy_config=strategy_conf
+        )
+    elif cfg.method.name == "uniform":
+        bounds = torch.tensor([[-3.0]*cfg.dim, [3.0]*cfg.dim], device=device)
+        part_conf = UniformPartitionConfig(
+            T=cfg.method.T,
+            initial_bounds=bounds,
+            activity_threshold=0,
+            overlap_ratio=cfg.method.overlap_ratio,
+            device=device
+        )
+    else:
+        raise ValueError(f"Method {cfg.method.name} unknown")
 
-            sc_conf = ISTAConfig(
-                epochs=cfg.bsesm_params.sc_epochs,
-                alpha=0.1, lambd=0.005, step_size_method=StepSizeMethod.FROBENIUS,
-                power_iterations=10, n_functions=n_atoms_original,
-                criterion=torch.nn.MSELoss(), device=device
-            )
+    # BSESM Global
+    bsesm_conf = BSESMConfig(
+        n_features=cfg.dim,
+        model_epochs=cfg.bsesm_params.global_epochs,
+        partition_config=part_conf,
+        dict_config=dict_conf,
+        sparse_coding_config=sc_conf,
+        log_interval=50, device=device
+    )
 
-            if cfg.method.name == "kdtree":
-                strategy_conf = KDTreeStrategyConfig(
-                    maxNodeSize=cfg.method.maxNodeSize, device=device, data_wrapper=SESMData
-                )
-                part_conf = AdaptivePartitionConfig(
-                    overlap_ratio=cfg.method.overlap_ratio, partition_strategy=KDTreeStrategy,
-                    strategy_config=strategy_conf
-                )
-            else: # Uniform
-                lim_min, lim_max = cfg.dataset.limits
-                bounds_tensor = torch.tensor([
-                    [float(lim_min)] * cfg.dim, 
-                    [float(lim_max)] * cfg.dim
-                ], dtype=torch.float32, device=device)
-                
-                part_conf = UniformPartitionConfig(
-                    T=cfg.method.T, 
-                    initial_bounds=bounds_tensor,
-                    activity_threshold=0,
-                    overlap_ratio=cfg.method.overlap_ratio, 
-                    device=device
-                )
+    # 3. ENTRENAMIENTO
+    model = BSESM(config=bsesm_conf, logger=logger)
+    
+    t0 = time.time()
+    model.partial_fit(X_train_norm, y_train_norm)
+    train_time = time.time() - t0
 
-            bsesm_conf = BSESMConfig(
-                n_features=cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
-                partition_config=part_conf, dict_config=dict_conf,
-                sparse_coding_config=copy.deepcopy(sc_conf), 
-                log_interval=1000, device=device
-            )
+    # 4. TEST
+    # --- CORRECCIÓN: Pasamos y_test_norm en lugar de None ---
+    y_pred_norm, _, _ = model.performance_stats(X_test_norm, y_test_norm)
+    
+    # Desnormalizar
+    y_pred = y_pred_norm.detach().cpu() * std_y + mean_y
+    y_true = y_test.detach().cpu()
 
-            model = BSESM(config=bsesm_conf, logger=logger)
+    # Métricas
+    mse = mean_squared_error(y_true, y_pred)
+    mae = mean_absolute_error(y_true, y_pred)
 
-            # ==========================================
-            # BUCLE 3: STREAMING (Steps)
-            # ==========================================
-            previous_n = 0
-            total_train_time = 0
-            
-            for step_idx, current_n in enumerate(steps):
-                
-                # Definir la llave única de este paso
-                step_key = (run_idx, cfg.dim, cfg.dataset.name, method_name, current_n)
-                is_already_done = step_key in completed_steps
+    # Plot
+    plot_name = f"plot_{cfg.dataset.name}_{cfg.method.name}.png"
+    plot_predictions(y_true, y_pred, f"{cfg.method.name} - {cfg.dataset.name}", plot_name)
 
-                X_batch = X_full_train[previous_n:current_n]
-                y_batch = y_full_train[previous_n:current_n]
-                
-                t0 = time.time()
-                
-                # --- PARCHE DE SEGURIDAD (Reinicio de n_functions) ---
-                if hasattr(model, 'sparse_coding_config'):
-                    model.sparse_coding_config.n_functions = n_atoms_original
-                
-                # 1. ENTRENAMIENTO (Siempre se ejecuta para mantener el estado del modelo)
-                try:
-                    model.partial_fit(X_batch, y_batch)
-                except RuntimeError as re:
-                    logger.critical(f"Error Shapes en Step {current_n} ({method_name}).")
-                    raise re
-
-                dt = time.time() - t0
-                total_train_time += dt
-                
-                # 2. EVALUACIÓN Y LOGGING (Solo si NO está en el checkpoint)
-                if is_already_done:
-                    logger.info(f"      Step {current_n} | {method_name} | SKIPPING EVAL (Found in Checkpoint)")
-                    # Recuperamos el tiempo total teórico del CSV si fuera necesario, 
-                    # pero como partial_fit se ejecutó, total_train_time es real y correcto.
-                else:
-                    # Evaluación
-                    y_pred, _, _ = model.performance_stats(X_test, y_test)
-                    y_true_cpu = y_test.detach().cpu()
-                    y_pred_cpu = y_pred.detach().cpu()
-                    
-                    # Guardar predicción en caché RAM (para plots)
-                    if current_n not in predictions_cache:
-                        predictions_cache[current_n] = {}
-                    predictions_cache[current_n][method_name] = y_pred_cpu
-
-                    mse = mean_squared_error(y_true_cpu, y_pred_cpu)
-                    mae = mean_absolute_error(y_true_cpu, y_pred_cpu)
-                    
-                    logger.info(f"      Step {current_n} | {method_name} | MSE: {mse:.5f}")
-
-                    # --- GUARDAR EN CHECKPOINT CSV ---
-                    result_data = {
-                        'run_id': run_idx,
-                        'dim': cfg.dim,
-                        'dataset': cfg.dataset.name,
-                        'method': method_name,
-                        'n_samples': current_n,
-                        'mse': mse,
-                        'mae': mae,
-                        'inc_time': dt,
-                        'total_time': total_train_time
-                    }
-                    save_result_row(csv_path, result_data)
-                    # Agregar a memoria para no repetir si falla en el mismo run
-                    completed_steps.add(step_key)
-
-                    # --- LÓGICA DE PLOTEO (Igual que antes) ---
-                    plot_image = None
-                    is_last_method = (method_idx == len(cfg.methods_to_test) - 1)
-                    
-                    if cfg.dim == 2 and is_last_method:
-                        # Verificamos si tenemos datos para comparar
-                        preds_for_step = predictions_cache.get(current_n, {})
-                        
-                        if preds_for_step:
-                            plot_name = f"./outputs/run{run_idx}_step{current_n}_{cfg.dataset.name}_COMPARISON.png"
-                            try:
-                                X_train_acc = X_full_train[:current_n].cpu()
-                                y_train_acc = y_full_train[:current_n].cpu()
-                                
-                                plot_multi_method_comparison(
-                                    X_test=X_test.cpu(), 
-                                    y_test=y_true_cpu, 
-                                    predictions_dict=preds_for_step,
-                                    X_train=X_train_acc, 
-                                    y_train=y_train_acc,
-                                    dim=cfg.dim, 
-                                    title=f"Run {run_idx} | N={current_n} | {cfg.dataset.name}", 
-                                    outpath=plot_name
-                                )
-                                if os.path.exists(plot_name):
-                                    plot_image = wandb.Image(plot_name)
-                            except Exception: pass
-
-                    # Log WandB
-                    wandb.log({
-                        "run_id": run_idx,
-                        "n_samples_seen": current_n,
-                        "dim": cfg.dim,
-                        "dataset": cfg.dataset.name,
-                        "method": method_name,
-                        "MSE": mse,
-                        "MAE": mae,
-                        "Incremental_Time": dt,
-                        "Total_Train_Time": total_train_time,
-                        "Comparison_Plot": plot_image 
-                    })
-                
-                previous_n = current_n
-            
-            # Limpieza
-            del model
-            torch.cuda.empty_cache()
-
-    return "Done"
+    results = {
+        "dim": cfg.dim,
+        "n_samples": cfg.n_samples,
+        "method": cfg.method.name,
+        "dataset": cfg.dataset.name,
+        "MSE": mse,
+        "MAE": mae,
+        "Train_Time": train_time,
+        "Plot": wandb.Image(plot_name)
+    }
+    
+    wandb.log(results)
+    return results
