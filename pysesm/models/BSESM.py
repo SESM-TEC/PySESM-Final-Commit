@@ -15,7 +15,7 @@ SPDX-License-Identifier: BSD-3-Clause
 """
 import logging
 import time
-
+import copy
 from collections.abc import Callable
 
 from dataclasses import dataclass
@@ -80,9 +80,10 @@ class BSESM(SESM):
         )
 
         # The global sparse coding layer will operate on the large block-diagonal matrix,
-        # so it uses standard matrix multiplication.
+        # so it uses standard matrix multiplication.c
+        global_sc_config = copy.deepcopy(self.sparse_coding_config)
         self.global_sparse_coding_layer = SparseCodingFactory.create(
-            config=self.sparse_coding_config,
+            config=global_sc_config,
             evaluation_func=self.evaluation_func,
             logger=self.logger,
             parameter_hook=self.sparse_coding_layer_hook
