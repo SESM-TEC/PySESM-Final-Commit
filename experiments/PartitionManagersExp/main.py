@@ -12,6 +12,8 @@ from omegaconf import DictConfig, OmegaConf
 import logging
 import wandb
 import fun
+import torch
+import numpy as np
 from src.core import train_stream_experiment
 
 FUNCTIONS = {
