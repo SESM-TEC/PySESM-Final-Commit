@@ -8,8 +8,8 @@ defaults:
 # =======================================================
 dim: 2
 seed: 45
-n_runs: 5
-stream_steps: [32, 64]
+n_runs: 25
+stream_steps: [2, 4, 8, 16, 32]
 
 # Lista de métodos a ejecutar secuencialmente sobre los mismos datos
 methods_to_test: [uniform, kdtree] 

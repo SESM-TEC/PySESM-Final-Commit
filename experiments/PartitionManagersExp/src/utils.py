@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.metrics import mean_squared_error
 
 def to_numpy(data):
     """Convierte Tensores o Listas a Numpy array de forma segura (CPU)."""
@@ -11,88 +12,71 @@ def to_numpy(data):
         return np.array(data)
     return data
 
-def plot_surface_comparison(X_test, y_test, y_pred, X_train, y_train, dim, title, outpath):
+def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_train, dim, title, outpath):
     """
-    Grafica la comparación visual solo si dim es 2.
-    Para dim=3, se hace un intento de visualización volumétrica pero se advierte.
+    Grafica comparación visual: Ground Truth vs Método 1 vs Método 2.
+    
+    Args:
+        predictions_dict: Dict { "nombre_metodo": y_pred_tensor, ... }
     """
     
-    # Filtro: Solo graficamos Dim 2 (Superficie) y Dim 3 (Volumen)
-    if dim not in [2, 3]:
+    # Filtro: Solo graficamos Dim 2 (Superficie)
+    # (Se podría extender a dim 3, pero se vuelve difícil de ver en 3 paneles)
+    if dim != 2:
         return
 
-    # Convertir todo a numpy
+    # Convertir datos base a numpy
     Xt = to_numpy(X_test)
     Yt = to_numpy(y_test).flatten()
-    Yp = to_numpy(y_pred).flatten()
     Xtr = to_numpy(X_train)
     Ytr = to_numpy(y_train).flatten()
 
-    # Configuración de la figura
-    fig = plt.figure(figsize=(16, 7))
+    methods = list(predictions_dict.keys())
+    n_methods = len(methods)
+    
+    # Configuración de la figura: 1 fila, 1 (GT) + n_methods columnas
+    cols = 1 + n_methods
+    fig = plt.figure(figsize=(6 * cols, 6))
 
-    # ==========================================
-    # CASO 2D: Superficie z = f(x, y)
-    # ESTILO: Puntos Grises (Real) vs Azules (Pred), SIN escala de color
-    # ==========================================
-    if dim == 2:
-        # --- SUBPLOT 1: GROUND TRUTH ---
-        ax1 = fig.add_subplot(121, projection='3d')
-        
-        # Realidad: Puntos pequeños en GRIS (0.4)
-        ax1.scatter(Xt[:, 0], Xt[:, 1], Yt, c='0.4', marker='.', s=1, alpha=0.2, label='Ground Truth')
-        
-        # Entrenamiento: Cruces ROJAS
-        ax1.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=30, label='Train Data')
-        
-        ax1.set_title(f"Realidad (Ground Truth)\n{title}")
-        ax1.set_xlabel('X1')
-        ax1.set_ylabel('X2')
-        ax1.set_zlabel('Y')
-        # Ajustamos vista inicial para que no se vea distorsionado
-        ax1.view_init(elev=30, azim=-60)
+    # --- SUBPLOT 1: GROUND TRUTH ---
+    ax1 = fig.add_subplot(1, cols, 1, projection='3d')
+    # Puntos reales (Gris)
+    ax1.scatter(Xt[:, 0], Xt[:, 1], Yt, c='0.4', marker='.', s=15, alpha=0.2, label='Ground Truth')
+    # Puntos de entrenamiento (Rojos)
+    ax1.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=40, label='Train Data')
+    
+    ax1.set_title(f"Ground Truth\n{title}")
+    ax1.set_xlabel('X1')
+    ax1.set_ylabel('X2')
+    ax1.set_zlabel('Y')
+    ax1.view_init(elev=30, azim=-60)
 
-        # --- SUBPLOT 2: PREDICCIÓN ---
-        ax2 = fig.add_subplot(122, projection='3d')
+    # --- SUBPLOTS MÉTODOS ---
+    # Colores para diferenciar métodos: Azul, Verde, Purpura...
+    colors = ['b', 'g', 'm', 'c']
+    
+    for i, method_name in enumerate(methods):
+        y_pred_tensor = predictions_dict[method_name]
+        Yp = to_numpy(y_pred_tensor).flatten()
         
-        # Predicción: Puntos pequeños en AZUL (o el color que prefiera)
-        ax2.scatter(Xt[:, 0], Xt[:, 1], Yp, c='b', marker='.', s=1, alpha=0.2, label='Predicción')
-        
-        # Referencia Entrenamiento
-        ax2.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=30, label='Train Data')
-        
+        # Calcular MSE localmente para el título
         mse_val = np.mean((Yt - Yp)**2)
-        ax2.set_title(f"Predicción Modelo\nMSE: {mse_val:.5f}")
-        ax2.set_xlabel('X1')
-        ax2.set_ylabel('X2')
-        ax2.set_zlabel('Y')
-        ax2.view_init(elev=30, azim=-60)
-
-    # ==========================================
-    # CASO 3D: Volumen w = f(x, y, z)
-    # ESTILO: Aquí SI es necesaria la escala de color (4ta dimensión)
-    # ==========================================
-    elif dim == 3:
-        # --- SUBPLOT 1: GROUND TRUTH ---
-        ax1 = fig.add_subplot(121, projection='3d')
-        p1 = ax1.scatter(Xt[:, 0], Xt[:, 1], Xt[:, 2], c=Yt, cmap='viridis', marker='.', s=2, alpha=0.3)
-        fig.colorbar(p1, ax=ax1, shrink=0.5, label='Valor Real')
         
-        ax1.set_title(f"Volumen Real (Color=Valor)\n{title}")
-        ax1.set_xlabel('X1')
-        ax1.set_ylabel('X2')
-        ax1.set_zlabel('X3')
-
-        # --- SUBPLOT 2: PREDICCIÓN ---
-        ax2 = fig.add_subplot(122, projection='3d')
-        p2 = ax2.scatter(Xt[:, 0], Xt[:, 1], Xt[:, 2], c=Yp, cmap='viridis', marker='.', s=2, alpha=0.3)
-        fig.colorbar(p2, ax=ax2, shrink=0.5, label='Valor Predicho')
+        ax = fig.add_subplot(1, cols, i + 2, projection='3d')
         
-        ax2.set_title("Volumen Predicho")
-        ax2.set_xlabel('X1')
-        ax2.set_ylabel('X2')
-        ax2.set_zlabel('X3')
+        # Predicción
+        col = colors[i % len(colors)]
+        ax.scatter(Xt[:, 0], Xt[:, 1], Yp, c=col, marker='.', s=15, alpha=0.2, label='Predicción')
+        
+        # Referencia Entrenamiento (para ver si pasaron por los puntos)
+        ax.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=40)
+        
+        ax.set_title(f"Modelo: {method_name.upper()}\nMSE: {mse_val:.5f}")
+        ax.set_xlabel('X1')
+        ax.set_ylabel('X2')
+        ax.set_zlabel('Y')
+        ax.view_init(elev=30, azim=-60)
 
     plt.tight_layout()
-    plt.savefig(outpath, dpi=120)
+    plt.savefig(outpath, dpi=100) # dpi moderado para no hacer archivos gigantes
     plt.close()
