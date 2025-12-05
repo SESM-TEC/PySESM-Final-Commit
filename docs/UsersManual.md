@@ -89,6 +89,9 @@ $$\underline{y} = D \underline{h}$$
 
 
 ![Ecuación](https://latex.codecogs.com/svg.latex?\mathbf{y}=D\mathbf{h})
+<p align="center">
+  <img src="https://latex.codecogs.com/svg.latex?%5Cmathbf%7By%7D%3DD%5Cmathbf%7Bh%7D" width="300"/>
+</p>
 
 
 $$
