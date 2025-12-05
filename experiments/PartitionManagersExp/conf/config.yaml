@@ -1,6 +1,6 @@
 defaults:
   - dataset: zhou
-  - method: kdtree
+  - method: uniform # Placeholder inicial
   - _self_
 
 # =======================================================
@@ -8,13 +8,16 @@ defaults:
 # =======================================================
 dim: 2
 seed: 45
-n_runs: 5               # <--- Repeticiones por combinación (para estadística)
-stream_steps: [2, 4, 8, 16, 32, 64] # <--- El modelo recibirá datos en esta secuencia
+n_runs: 5
+stream_steps: [32, 64]
+
+# Lista de métodos a ejecutar secuencialmente sobre los mismos datos
+methods_to_test: [uniform, kdtree] 
 
 bsesm_params:
   global_epochs: 150
   dict_epochs: 50
-  sc_epochs: 15          # Optimizado para velocidad
+  sc_epochs: 15
   atoms_per_dim: 10
 
 wandb:
@@ -23,11 +26,11 @@ wandb:
   mode: "online"
 
 # =======================================================
-# DEFINICIÓN DEL BARRIDO (SOLO DIMENSIONES, DATASETS Y MÉTODOS)
+# DEFINICIÓN DEL BARRIDO (SOLO DIMENSIONES Y DATASETS)
 # =======================================================
 hydra:
   sweeper:
     params:
       dim: 2, 3, 4
       dataset: zhou, zakharov, styblinski
-      method: uniform, kdtree
+      # method: SE ELIMINÓ DE AQUÍ PARA CONTROLARLO MANUALMENTE
