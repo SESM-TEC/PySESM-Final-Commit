@@ -1,3 +1,12 @@
+"""Entry point for PartitionManagers experiments.
+
+This module runs a single experiment using a Hydra configuration located in
+`conf/config.yaml` (hydra decorator handles injecting the runtime config).
+"""
+
+import logging
+
+# Third-party imports
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import logging
@@ -8,14 +17,25 @@ from src.core import train_stream_experiment
 FUNCTIONS = {
     "function_zhou": fun.function_zhou,
     "function_zakharov": fun.function_zakharov,
-    "function_styblinski_tang": fun.function_styblinski_tang
+    "function_styblinski_tang": fun.function_styblinski_tang,
 }
+
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
-    
-    logger = logging.getLogger("BSESM_Stream")
-    
+    """Run a single experiment using the provided configuration `cfg`.
+
+    This function is executed via the Hydra decorator so it's intentionally
+    declared with a single `cfg` parameter (Hydra will provide it at runtime).
+    """
+
+    logger = logging.getLogger("BSESM")
+
+    # Reproducibilidad
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
+
+    # Validar función objetivo
     if cfg.dataset.name not in FUNCTIONS:
         raise ValueError(f"Función {cfg.dataset.name} desconocida")
     func_obj = FUNCTIONS[cfg.dataset.name]
@@ -44,5 +64,8 @@ def main(cfg: DictConfig):
     
     wandb.finish()
 
+
 if __name__ == "__main__":
-    main()
+    # The Hydra-decorated `main` is invoked without arguments at runtime.
+    # Pylint cannot see Hydra's injection, so silence the specific warning.
+    main()  # pylint: disable=no-value-for-parameter

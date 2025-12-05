@@ -1,26 +1,40 @@
+"""Benchmark functions used by ICICT experiments.
+
+This module provides three multivariate test functions used to generate
+datasets for experiments:
+
+- `function_zhou`: multi-modal Gaussian-like function (useful for oscillatory tests).
+- `function_zakharov`: smooth paraboloid-like function.
+- `function_styblinski_tang`: non-linear polynomial benchmark.
+
+Each function accepts a PyTorch tensor `x` of shape `(n_samples, n_dimensions)`
+and returns a 1-D tensor of shape `(n_samples,)` containing the function values.
+Implementations preserve the input device and dtype and are intended to be
+called with inputs scaled according to the experiment configuration.
+"""
 import torch
 
 # Funcion con más oscilaciones
-def function_zhou(X: torch.Tensor) -> torch.Tensor:
+def function_zhou(x: torch.Tensor) -> torch.Tensor:
     """
     Zhou (1998) function.
 
     Args:
-        X (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
+        x (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
                         Each row is a point in the search space (values typically in [0,1]).
 
     Returns:
         torch.Tensor: Function values of shape (n_samples,).
     """
-    d = X.shape[1]
+    d = x.shape[1]
 
     # Shift and scale
-    X_a = 10 * (X - 1.0/3.0)
-    X_b = 10 * (X - 2.0/3.0)
+    x_a = 10 * (x - 1.0/3.0)
+    x_b = 10 * (x - 2.0/3.0)
 
     # Norms squared
-    norm_a2 = torch.sum(X_a**2, dim=1)
-    norm_b2 = torch.sum(X_b**2, dim=1)
+    norm_a2 = torch.sum(x_a**2, dim=1)
+    norm_b2 = torch.sum(x_b**2, dim=1)
 
     # Gaussian components
     coeff = (2 * torch.pi) ** (-d / 2)
@@ -31,26 +45,26 @@ def function_zhou(X: torch.Tensor) -> torch.Tensor:
     return (10.0**d) / 2.0 * (phi1 + phi2)
 
 #Funcion tipo parábola
-def function_zakharov(X: torch.Tensor) -> torch.Tensor:
+def function_zakharov(x: torch.Tensor) -> torch.Tensor:
     """
     Zakharov function.
 
     Args:
-        X (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
+        x (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
                         Each row is a point in the search space.
 
     Returns:
         torch.Tensor: Function values of shape (n_samples,).
     """
-    # indices for 1..d (broadcasted to match X)
-    d = X.shape[1]
-    ii = torch.arange(1, d + 1, dtype=X.dtype, device=X.device).unsqueeze(0)
+    # indices for 1..d (broadcasted to match x)
+    d = x.shape[1]
+    ii = torch.arange(1, d + 1, dtype=x.dtype, device=x.device).unsqueeze(0)
 
     # sum1 = sum(x_i^2)
-    sum1 = torch.sum(X**2, dim=1)
+    sum1 = torch.sum(x**2, dim=1)
 
     # sum2 = sum(0.5 * i * x_i)
-    sum2 = torch.sum(0.5 * ii * X, dim=1)
+    sum2 = torch.sum(0.5 * ii * x, dim=1)
 
     # final function value
     return sum1 + sum2**2 + sum2**4
@@ -58,15 +72,15 @@ def function_zakharov(X: torch.Tensor) -> torch.Tensor:
 
 
 
-def function_styblinski_tang(X: torch.Tensor) -> torch.Tensor:
+def function_styblinski_tang(x: torch.Tensor) -> torch.Tensor:
     """
     Styblinski-Tang function.
 
     Args:
-        X (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
+        x (torch.Tensor): Input tensor of shape (n_samples, n_dimensions).
                         Each row is a point in the search space.
 
     Returns:
         torch.Tensor: Function values of shape (n_samples,).
     """
-    return 0.5 * torch.sum(X**4 - 16 * X**2 + 5 * X, dim=1)
+    return 0.5 * torch.sum(x**4 - 16 * x**2 + 5 * x, dim=1)

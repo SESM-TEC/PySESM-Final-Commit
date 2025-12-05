@@ -1,5 +1,14 @@
-import torch
+"""Core training logic used by PartitionManagers experiments.
+
+This module exposes ``train_one_run`` which builds a dataset, configures a
+BSESM model and runs a single training + evaluation cycle. It is intentionally
+kept as a small runner that integrates components from the local ``pysesm``
+package and logs results to Weights & Biases.
+"""
+
 import time
+
+import torch
 import wandb
 import numpy as np
 import os
@@ -9,7 +18,7 @@ import copy
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# BSESM Imports
+# BSESM / project imports
 from pysesm.models.BSESM import BSESM, BSESMConfig
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
@@ -17,7 +26,9 @@ from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
-from pysesm.utils_dataset.generate_dataset import generate_custom_nd_function_dataset
+from pysesm.utils_dataset.generate_dataset import (
+    generate_custom_nd_function_dataset,
+)
 
 from src.utils import plot_multi_method_comparison
 

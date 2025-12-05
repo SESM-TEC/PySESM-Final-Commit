@@ -1,3 +1,11 @@
+"""Utility functions for plotting and tensor/array conversion used by
+PartitionManagers experiments.
+
+This module provides helpers to convert PyTorch tensors (or lists) to
+NumPy arrays and to save a simple scatter plot comparing ground-truth vs
+predicted values.
+"""
+
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -5,10 +13,22 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics import mean_squared_error
 
 def to_numpy(data):
-    """Convierte Tensores o Listas a Numpy array de forma segura (CPU)."""
+    """Convertir ``data`` a un ndarray de NumPy.
+
+    - Si ``data`` es un ``torch.Tensor`` se mueve a CPU y se desconecta del
+      grafo para obtener un array.
+    - Si ``data`` es una ``list`` se convierte con ``np.array``.
+    - En cualquier otro caso se devuelve ``data`` tal cual.
+
+    Args:
+        data: ``torch.Tensor``, ``list`` u objeto ya en formato NumPy.
+
+    Returns:
+        Un objeto NumPy (o el valor original si no aplica conversión).
+    """
     if isinstance(data, torch.Tensor):
         return data.detach().cpu().numpy()
-    elif isinstance(data, list):
+    if isinstance(data, list):
         return np.array(data)
     return data
 
