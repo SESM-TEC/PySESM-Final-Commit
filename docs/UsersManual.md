@@ -83,7 +83,7 @@ $$
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
 
 
-The core idea is to approximate the ground truth signal $\boldsymbol{y}$ as the product $ \mathbf{D}\mathbf{h} $ where $ \mathbf{D} $ is the learned **dictionary** and $ \mathbf{h} $ is the corresponding **sparse code**. In this formulation, $ \mathbf{y} \in \mathbb{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \mathbf{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \mathbf{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \mathbf{y} $.
+The core idea is to approximate the ground truth signal $\boldsymbol{y}$ as the product $ \boldsymbol{D}\boldsymbol{h} $ where $ \boldsymbol{D} $ is the learned **dictionary** and $ \boldsymbol{h} $ is the corresponding **sparse code**. In this formulation, $ \boldsymbol{y} \in \boldsymbol{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \boldsymbol{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \boldsymbol{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \boldsymbol{y} $.
 
 $$
 \underline{y} = D \underline{h}
