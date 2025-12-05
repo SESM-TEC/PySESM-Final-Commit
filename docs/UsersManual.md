@@ -68,6 +68,9 @@ machine learning tasks.
 
 1.  **Space Partitioning:** The input data space is divided into smaller, manageable regions called "blocks." This allows the model to focus on learning local features of a function, making it highly scalable and effective for complex, non-stationary functions.
 
+<p align="center">
+  <img src="figs/partition.svg" alt="Figura de la partición uniforme">
+</p>
 
 <div align="center">
   <svg width="400" height="400" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
