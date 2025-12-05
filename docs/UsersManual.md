@@ -87,6 +87,36 @@ The core idea is to approximate the ground truth signal $ \mathbf{y} $ as the pr
 
 $$\underline{y} = D \underline{h}$$
 
+
+$$
+\underbrace{
+\begin{bmatrix}
+y_1 \\[3pt]
+y_2 \\[3pt]
+\vdots \\[3pt]
+y_{m}
+\end{bmatrix}
+}_{\mathbf{y} \in \mathbb{R}^{(m,1)}}
+=
+\underbrace{
+\begin{bmatrix}
+\mid & \mid &        & \mid \\
+\boldsymbol{\phi}_1 & \boldsymbol{\phi}_2 & \cdots & \boldsymbol{\phi}_n \\
+\mid & \mid &        & \mid
+\end{bmatrix}
+}_{\mathbf{D} \in \mathbb{R}^{(m,n)}}
+\;
+\underbrace{
+\begin{bmatrix}
+h_1 \\[3pt]
+h_2 \\[3pt]
+\vdots \\[3pt]
+h_{n}
+\end{bmatrix}
+}_{\mathbf{h} \in \mathbb{R}^{(n,1)}}
+$$
+
+
 $$
 \underbrace{
 \begin{bmatrix}
