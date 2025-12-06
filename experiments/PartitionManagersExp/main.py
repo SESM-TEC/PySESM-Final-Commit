@@ -7,14 +7,16 @@ This module runs a single experiment using a Hydra configuration located in
 import logging
 
 # Third-party imports
+import numpy as np
+import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import logging
 import wandb
+
+# Local imports
 import fun
-import torch
-import numpy as np
 from src.core import train_stream_experiment
+
 
 FUNCTIONS = {
     "function_zhou": fun.function_zhou,
@@ -44,7 +46,7 @@ def main(cfg: DictConfig):
 
     # Nombre del Run: Solo Dimensión y Dataset (los métodos van dentro)
     run_name = f"Stream_{cfg.dataset.name}_D{cfg.dim}"
-    
+
     # Inicializamos WandB para este Dataset+Dim
     wandb.init(
         project=cfg.wandb.project,
@@ -59,11 +61,11 @@ def main(cfg: DictConfig):
 
     try:
         train_stream_experiment(cfg, logger, func_obj)
-    except Exception as e:
-        logger.error(f"Fallo crítico en {run_name}: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Fallo crítico en %s: %s", run_name, e)
         wandb.finish(exit_code=1)
         raise e
-    
+
     wandb.finish()
 
 
