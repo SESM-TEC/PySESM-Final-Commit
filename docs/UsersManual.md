@@ -83,45 +83,38 @@ $$
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
 
 
-The core idea is to approximate the ground truth signal $\boldsymbol{y}$ as the product $ \boldsymbol{D}\boldsymbol{h} $ where $ \boldsymbol{D} $ is the learned **dictionary** and $ \boldsymbol{h} $ is the corresponding **sparse code**. In this formulation, $ \boldsymbol{y} \in \boldsymbol{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \boldsymbol{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \boldsymbol{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \boldsymbol{y} $.
+The core idea is to approximate the ground truth signal $\boldsymbol{y}$ as the product $\boldsymbol{D}\boldsymbol{h}$ where $\boldsymbol{D}$ is the learned **dictionary** and $\boldsymbol{h}$ is the corresponding **sparse code**. In this formulation, $\boldsymbol{y} \in \boldsymbol{R}^{(m,1)}$ represents an $m$-dimensional target vector, $\boldsymbol{D} \in \mathbb{R}^{(m,n)}$ is a matrix containing $n$ basis functions (or atoms) as its columns, and $\boldsymbol{h} \in \mathbb{R}^{(n,1)}$ is a sparse activation vector indicating how much each atom contributes to reconstructing $\boldsymbol{y}$.
 
 $$
 \underline{y} = D \underline{h}
 $$
 
-
-<p align="center">
-  <img src="https://latex.codecogs.com/svg.latex?%5Cmathbf%7By%7D%3DD%5Cmathbf%7Bh%7D" width="300"/>
-</p>
-
-
 $$
+\underbrace{\begin{bmatrix}
+y_1 \\
+y_2 \\
+\vdots\\
+y_{m}
+\end{bmatrix}}_{\mathbf{y} \in \mathbb{R}^{(m,\,1)}}=
 \underbrace{
 \begin{bmatrix}
-y_1 \\[3pt]
-y_2 \\[3pt]
-\vdots \\[3pt]
-y_{\text{m}}
+\mid & \mid &        & \mid \\
+\phi_1 & \phi_2 & \cdots & \phi_n \\
+\mid & \mid &        & \mid
 \end{bmatrix}
-}_{\mathbf{y} \in \mathbb{R}^{(\text{m},\,1)}}
-=
+}_{\mathbf{D} \in \mathbb{R}^{(m,n)}}
 \underbrace{
 \begin{bmatrix}
-| & | & & | \\
-\mathbf{\underline{\phi}}_1 & \mathbf{\underline{\phi}}_2 & \cdots & \mathbf{\underline{\phi}}_{\text{n}} \\
-| & | & & |
+h_1 \\
+h_2 \\
+\vdots \\
+h_{n}
 \end{bmatrix}
-}_{\mathbf{D} \in \mathbb{R}^{(\text{m},\,\text{n})}}
-\;
-\underbrace{
-\begin{bmatrix}
-h_1 \\[3pt]
-h_2 \\[3pt]
-\vdots \\[3pt]
-h_{\text{n}}
-\end{bmatrix}
-}_{\mathbf{h} \in \mathbb{R}^{(\text{n},\,1)}}
+}_{\mathbf{h} \in \mathbb{R}^{(n,1)}}
 $$
+
+
+
 
 
 
@@ -310,7 +303,7 @@ The one-block configuration treats the whole input space as a single partition. 
 In this example, you can see real-time training using the `VisualizerHook` class. This hook captures snapshots of the dictionary at each logging interval and compiles them into a video.
 
 <p align="center">
-<video src="figs/one_block_evolution.mp4" controls width="600">
+  <img src="figs/one_block_evolution.gif" controls width="500"/>
 </p>
 
 
@@ -353,7 +346,7 @@ The rest of the training pipeline remains the same.
 
 *   `pysesm.models.SSESMConfig`: Main configuration dataclass.
 *   `pysesm.blocks.UniformPartitionConfig`: Configuration for grid-based partitioning.
-*   `pysesm.blocks.AdaptativePartitionConfig`: Configuration for data-driven partitioning.
+*   `pysesm.blocks.AdaptivePartitionConfig`: Configuration for data-driven partitioning.
 *   `pysesm.dictionaries.GaussianDictConfig`: Configuration for the Gaussian dictionary.
 *   `pysesm.sparse_coding.ISTAConfig`: Configuration for the ISTA solver.
 *   `pysesm.sparse_coding.FISTAConfig`: Configuration for the FISTA solver.
