@@ -7,8 +7,10 @@ predicted values.
 """
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from sklearn.metrics import mean_squared_error
 
 def to_numpy(data):
     """Convertir ``data`` a un ndarray de NumPy.
@@ -30,61 +32,38 @@ def to_numpy(data):
         return np.array(data)
     return data
 
-"""
-dataset (dict): x_test, y_test, x_train, ytrain
-"""
-def plot_multi_method_comparison(
-    x_test,
-    y_test,
-    x_train,
-    y_train,
-    predictions_dict,
-    dim,
-    title,
-    outpath,
-):
-    """Comparación visual 3D entre Ground Truth y métodos.
-
-    Crea una figura con subplots: uno para los datos reales y uno por cada
-    método en ``predictions_dict``. Cada subplot muestra los puntos de prueba
-    y de entrenamiento, y en el caso de los métodos se reporta el MSE local.
-
-    Parameters
-    ----------
-    x_test : array-like or torch.Tensor
-        Matriz de puntos de prueba (N x 2) en el dominio.
-    y_test : array-like or torch.Tensor
-        Valores reales correspondientes a ``x_test``.
-    x_train : array-like or torch.Tensor
-        Puntos utilizados para entrenamiento (M x 2).
-    y_train : array-like or torch.Tensor
-        Valores de entrenamiento correspondientes a ``x_train``.
-    predictions_dict : dict[str, array-like or torch.Tensor]
-        Diccionario con las predicciones por método. Llaves son nombres de
-        método y valores son tensores/arrays con las predicciones sobre
-        ``x_test``.
-    dim : int
-        Dimensionalidad del problema. Actualmente solo se grafica si ``dim == 2``.
-    title : str
-        Título base para los subplots.
-    outpath : str
-        Ruta de salida del archivo PNG que se genera.
+def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_train, dim, title, outpath):
     """
-
+    Grafica comparación visual: Ground Truth vs Método 1 vs Método 2.
+    Todas las gráficas compartirán la misma escala en el eje Z basada en el Ground Truth.
+    
+    Args:
+        predictions_dict: Dict { "nombre_metodo": y_pred_tensor, ... }
+    """
+    
     # Filtro: Solo graficamos Dim 2 (Superficie)
-    # (Se podría extender a dim 3, pero se vuelve difícil de ver en 3 paneles)
     if dim != 2:
         return
 
     # Convertir datos base a numpy
-    xt = to_numpy(x_test)
-    yt = to_numpy(y_test).flatten()
-    xtr = to_numpy(x_train)
-    ytr = to_numpy(y_train).flatten()
+    Xt = to_numpy(X_test)
+    Yt = to_numpy(y_test).flatten()
+    Xtr = to_numpy(X_train)
+    Ytr = to_numpy(y_train).flatten()
+
+    # --- NUEVO: Calcular límites globales basados en Ground Truth y Train ---
+    # Esto asegura que todos los plots tengan la misma escala vertical.
+    z_min = min(np.min(Yt), np.min(Ytr))
+    z_max = max(np.max(Yt), np.max(Ytr))
+    
+    # Opcional: Agregar un pequeño margen (padding) del 5% para que los puntos no toquen los bordes
+    z_range = z_max - z_min
+    z_min -= z_range * 0.05
+    z_max += z_range * 0.05
 
     methods = list(predictions_dict.keys())
     n_methods = len(methods)
-
+    
     # Configuración de la figura: 1 fila, 1 (GT) + n_methods columnas
     cols = 1 + n_methods
     fig = plt.figure(figsize=(6 * cols, 6))
@@ -92,66 +71,48 @@ def plot_multi_method_comparison(
     # --- SUBPLOT 1: GROUND TRUTH ---
     ax1 = fig.add_subplot(1, cols, 1, projection='3d')
     # Puntos reales (Gris)
-    ax1.scatter(
-        xt[:, 0],
-        xt[:, 1],
-        yt,
-        c='0.4',
-        marker='.',
-        s=15,
-        alpha=0.2,
-        label='Ground Truth'
-    )
+    ax1.scatter(Xt[:, 0], Xt[:, 1], Yt, c='0.4', marker='.', s=15, alpha=0.2, label='Ground Truth')
     # Puntos de entrenamiento (Rojos)
-    ax1.scatter(
-        xtr[:, 0],
-        xtr[:, 1],
-        ytr,
-        c='r',
-        marker='x',
-        s=40,
-        label='Train Data'
-    )
-
+    ax1.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=40, label='Train Data')
+    
     ax1.set_title(f"Ground Truth\n{title}")
     ax1.set_xlabel('X1')
     ax1.set_ylabel('X2')
     ax1.set_zlabel('Y')
+    
+    # APLICAR ESCALA
+    ax1.set_zlim(z_min, z_max)
+    
     ax1.view_init(elev=30, azim=-60)
 
     # --- SUBPLOTS MÉTODOS ---
     # Colores para diferenciar métodos: Azul, Verde, Purpura...
     colors = ['b', 'g', 'm', 'c']
-
+    
     for i, method_name in enumerate(methods):
         y_pred_tensor = predictions_dict[method_name]
-        yp = to_numpy(y_pred_tensor).flatten()
-
+        Yp = to_numpy(y_pred_tensor).flatten()
+        
         # Calcular MSE localmente para el título
-        mse_val = np.mean((yt - yp)**2)
-
+        mse_val = np.mean((Yt - Yp)**2)
+        
         ax = fig.add_subplot(1, cols, i + 2, projection='3d')
-
+        
         # Predicción
         col = colors[i % len(colors)]
-        ax.scatter(
-            xt[:, 0],
-            xt[:, 1],
-            yp,
-            c=col,
-            marker='.',
-            s=15,
-            alpha=0.2,
-            label='Predicción'
-        )
-
+        ax.scatter(Xt[:, 0], Xt[:, 1], Yp, c=col, marker='.', s=15, alpha=0.2, label='Predicción')
+        
         # Referencia Entrenamiento (para ver si pasaron por los puntos)
-        ax.scatter(xtr[:, 0], xtr[:, 1], ytr, c='r', marker='x', s=40)
-
+        ax.scatter(Xtr[:, 0], Xtr[:, 1], Ytr, c='r', marker='x', s=40)
+        
         ax.set_title(f"Modelo: {method_name.upper()}\nMSE: {mse_val:.5f}")
         ax.set_xlabel('X1')
         ax.set_ylabel('X2')
         ax.set_zlabel('Y')
+        
+        # APLICAR ESCALA (La misma del GT)
+        ax.set_zlim(z_min, z_max)
+        
         ax.view_init(elev=30, azim=-60)
 
     plt.tight_layout()
