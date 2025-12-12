@@ -1,11 +1,10 @@
 defaults:
   - dataset: zhou
-  - method: uniform # Placeholder inicial
+  - method: uniform
   - _self_
 
-# =======================================================
-# CONFIGURACIÓN DEL STREAMING Y REPETICIONES
-# =======================================================
+recovery_mode: true
+
 dim: 2
 seed: 45
 n_runs: 25
@@ -26,11 +25,10 @@ wandb:
   mode: "online"
 
 # =======================================================
-# DEFINICIÓN DEL BARRIDO (SOLO DIMENSIONES Y DATASETS)
+# DEFINICIÓN DEL BARRIDO
 # =======================================================
 hydra:
   sweeper:
     params:
-      dim: 2, 3, 4
+      dim: 2, 3, 4, 5, 6, 7, 8, 9, 10
       dataset: zhou, zakharov, styblinski
-      # method: SE ELIMINÓ DE AQUÍ PARA CONTROLARLO MANUALMENTE
