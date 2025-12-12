@@ -35,13 +35,13 @@ def to_numpy(data):
 def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_train, dim, title, outpath):
     """
     Grafica comparación visual: Ground Truth vs Método 1 vs Método 2.
+    Todas las gráficas compartirán la misma escala en el eje Z basada en el Ground Truth.
     
     Args:
         predictions_dict: Dict { "nombre_metodo": y_pred_tensor, ... }
     """
     
     # Filtro: Solo graficamos Dim 2 (Superficie)
-    # (Se podría extender a dim 3, pero se vuelve difícil de ver en 3 paneles)
     if dim != 2:
         return
 
@@ -50,6 +50,16 @@ def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_tr
     Yt = to_numpy(y_test).flatten()
     Xtr = to_numpy(X_train)
     Ytr = to_numpy(y_train).flatten()
+
+    # --- NUEVO: Calcular límites globales basados en Ground Truth y Train ---
+    # Esto asegura que todos los plots tengan la misma escala vertical.
+    z_min = min(np.min(Yt), np.min(Ytr))
+    z_max = max(np.max(Yt), np.max(Ytr))
+    
+    # Opcional: Agregar un pequeño margen (padding) del 5% para que los puntos no toquen los bordes
+    z_range = z_max - z_min
+    z_min -= z_range * 0.05
+    z_max += z_range * 0.05
 
     methods = list(predictions_dict.keys())
     n_methods = len(methods)
@@ -69,6 +79,10 @@ def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_tr
     ax1.set_xlabel('X1')
     ax1.set_ylabel('X2')
     ax1.set_zlabel('Y')
+    
+    # APLICAR ESCALA
+    ax1.set_zlim(z_min, z_max)
+    
     ax1.view_init(elev=30, azim=-60)
 
     # --- SUBPLOTS MÉTODOS ---
@@ -95,8 +109,12 @@ def plot_multi_method_comparison(X_test, y_test, predictions_dict, X_train, y_tr
         ax.set_xlabel('X1')
         ax.set_ylabel('X2')
         ax.set_zlabel('Y')
+        
+        # APLICAR ESCALA (La misma del GT)
+        ax.set_zlim(z_min, z_max)
+        
         ax.view_init(elev=30, azim=-60)
 
     plt.tight_layout()
-    plt.savefig(outpath, dpi=100) # dpi moderado para no hacer archivos gigantes
+    plt.savefig(outpath, dpi=100)
     plt.close()
