@@ -19,7 +19,8 @@ def to_numpy(data):
     - En cualquier otro caso se devuelve ``data`` tal cual.
 
     Args:
-        data: ``torch.Tensor``, ``list`` u objeto ya en formato NumPy.
+
+    data: ``torch.Tensor``, ``list`` u objeto ya en formato NumPy.
 
     Returns:
         Un objeto NumPy (o el valor original si no aplica conversión).
@@ -31,15 +32,12 @@ def to_numpy(data):
     return data
 
 def plot_multi_method_comparison(
-    x_test,
-    y_test,
-    x_train,
-    y_train,
+    dataset,
     predictions_dict,
     dim,
     title,
     outpath,
-):
+):  # pylint: disable=too-many-locals
     """Comparación visual 3D entre Ground Truth y métodos.
 
     Crea una figura con subplots: uno para los datos reales y uno por cada
@@ -48,22 +46,20 @@ def plot_multi_method_comparison(
 
     Parameters
     ----------
-    x_test : array-like or torch.Tensor
-        Matriz de puntos de prueba (N x 2) en el dominio.
-    y_test : array-like or torch.Tensor
-        Valores reales correspondientes a ``x_test``.
-    x_train : array-like or torch.Tensor
-        Puntos utilizados para entrenamiento (M x 2).
-    y_train : array-like or torch.Tensor
-        Valores de entrenamiento correspondientes a ``x_train``.
+    dataset : dict
+        Diccionario con los datos base: 'x_test', 'y_test', 'x_train', 'y_train'.
+
     predictions_dict : dict[str, array-like or torch.Tensor]
         Diccionario con las predicciones por método. Llaves son nombres de
         método y valores son tensores/arrays con las predicciones sobre
         ``x_test``.
+
     dim : int
         Dimensionalidad del problema. Actualmente solo se grafica si ``dim == 2``.
+
     title : str
         Título base para los subplots.
+
     outpath : str
         Ruta de salida del archivo PNG que se genera.
     """
@@ -72,17 +68,22 @@ def plot_multi_method_comparison(
     if dim != 2:
         return
 
+    x_test = dataset["x_test"]
+    y_test = dataset["y_test"]
+    x_train = dataset["x_train"]
+    y_train = dataset["y_train"]
+
     # Convertir datos base a numpy
-    Xt = to_numpy(X_test)
-    Yt = to_numpy(y_test).flatten()
-    Xtr = to_numpy(X_train)
-    Ytr = to_numpy(y_train).flatten()
+    xt = to_numpy(x_test)
+    yt = to_numpy(y_test).flatten()
+    xtr = to_numpy(x_train)
+    ytr = to_numpy(y_train).flatten()
 
     # --- NUEVO: Calcular límites globales basados en Ground Truth y Train ---
     # Esto asegura que todos los plots tengan la misma escala vertical.
-    z_min = min(np.min(Yt), np.min(Ytr))
-    z_max = max(np.max(Yt), np.max(Ytr))
-    
+    z_min = min(np.min(yt), np.min(ytr))
+    z_max = max(np.max(yt), np.max(ytr))
+
     # Opcional: Agregar un pequeño margen (padding) del 5% para que los puntos no toquen los bordes
     z_range = z_max - z_min
     z_min -= z_range * 0.05
@@ -108,6 +109,7 @@ def plot_multi_method_comparison(
         alpha=0.2,
         label='Ground Truth'
     )
+
     # Puntos de entrenamiento (Rojos)
     ax1.scatter(
         xtr[:, 0],
@@ -123,10 +125,10 @@ def plot_multi_method_comparison(
     ax1.set_xlabel('X1')
     ax1.set_ylabel('X2')
     ax1.set_zlabel('Y')
-    
+
     # APLICAR ESCALA
     ax1.set_zlim(z_min, z_max)
-    
+
     ax1.view_init(elev=30, azim=-60)
 
     # --- SUBPLOTS MÉTODOS ---
@@ -162,10 +164,10 @@ def plot_multi_method_comparison(
         ax.set_xlabel('X1')
         ax.set_ylabel('X2')
         ax.set_zlabel('Y')
-        
+
         # APLICAR ESCALA (La misma del GT)
         ax.set_zlim(z_min, z_max)
-        
+
         ax.view_init(elev=30, azim=-60)
 
     plt.tight_layout()
