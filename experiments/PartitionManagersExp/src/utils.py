@@ -30,9 +30,6 @@ def to_numpy(data):
         return np.array(data)
     return data
 
-"""
-dataset (dict): x_test, y_test, x_train, ytrain
-"""
 def plot_multi_method_comparison(
     x_test,
     y_test,
@@ -172,6 +169,5 @@ def plot_multi_method_comparison(
         ax.view_init(elev=30, azim=-60)
 
     plt.tight_layout()
-    plt.savefig(outpath, dpi=100)
     plt.savefig(outpath, dpi=100)
     plt.close()
