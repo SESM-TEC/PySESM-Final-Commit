@@ -9,9 +9,10 @@ import time
 import hydra
 import numpy as np
 import torch
-import wandb
+
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from src.utils import plot_multi_method_comparison
 
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
@@ -23,7 +24,8 @@ from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
-from src.utils import plot_multi_method_comparison
+
+import wandb
 
 # ==========================================
 # HELPERS GLOBALES
@@ -38,7 +40,7 @@ def adamw_factory(params, lr):
 def get_checkpoint_path(filename="experiment_results.csv"):
     try:
         base_path = hydra.utils.get_original_cwd()
-    except:
+    except (ValueError, AttributeError):
         base_path = os.getcwd()
     return os.path.join(base_path, filename)
 
@@ -125,7 +127,7 @@ def train_stream_experiment(cfg, logger, func_obj):
     # Obtener ruta base para configs locales
     try:
         base_path = hydra.utils.get_original_cwd()
-    except:
+    except (ValueError, AttributeError):
         base_path = os.getcwd()
 
     # ==========================================
@@ -137,8 +139,10 @@ def train_stream_experiment(cfg, logger, func_obj):
         current_seed = cfg.seed + run_idx
         torch.manual_seed(current_seed)
         np.random.seed(current_seed)
-
-        logger.info(f"=== RUN {run_idx+1}/{cfg.n_runs} | Dim: {cfg.dim} | Dataset: {cfg.dataset.name} ===")
+        logger.info(
+            "=== INICIO RUN %d/%d | Dim: %d | Dataset: %s ===",
+            run_idx+1, cfg.n_runs, cfg.dim, cfg.dataset.name
+        )
 
         # Generar Dataset
         dataset_config = {
@@ -203,25 +207,39 @@ def train_stream_experiment(cfg, logger, func_obj):
 
             if cfg.method.name == "kdtree":
                 strategy_conf = KDTreeStrategyConfig(
-                    maxNodeSize=cfg.method.maxNodeSize, device=device, data_wrapper=SESMData
+                    maxNodeSize = cfg.method.maxNodeSize,
+                    device = device,
+                    data_wrapper = SESMData
                 )
                 part_conf = AdaptivePartitionConfig(
-                    overlap_ratio=cfg.method.overlap_ratio, partition_strategy=KDTreeStrategy,
-                    strategy_config=strategy_conf
+                    overlap_ratio = cfg.method.overlap_ratio,
+                    partition_strategy = KDTreeStrategy,
+                    strategy_config = strategy_conf
                 )
-            else: 
+            else:  # Uniform
                 lim_min, lim_max = cfg.dataset.limits
-                bounds_tensor = torch.tensor([[float(lim_min)] * cfg.dim, [float(lim_max)] * cfg.dim], dtype=torch.float32, device=device)
+                bounds_tensor = torch.tensor([
+                    [float(lim_min)] * cfg.dim,
+                    [float(lim_max)] * cfg.dim
+                ],
+                dtype=torch.float32,
+                device=device)
+
                 part_conf = UniformPartitionConfig(
-                    T=cfg.method.T, initial_bounds=bounds_tensor, activity_threshold=0,
-                    overlap_ratio=cfg.method.overlap_ratio, device=device
+                    T=cfg.method.T,
+                    initial_bounds=bounds_tensor,
+                    activity_threshold=0,
+                    overlap_ratio=cfg.method.overlap_ratio,
+                    device=device
                 )
 
             bsesm_conf = BSESMConfig(
-                n_features=cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
-                partition_config=part_conf, dict_config=dict_conf,
-                sparse_coding_config=copy.deepcopy(sc_conf),
-                log_interval=1000, device=device
+                n_features = cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
+                partition_config = part_conf,
+                dict_config=dict_conf,
+                sparse_coding_config = copy.deepcopy(sc_conf),
+                log_interval=1000,
+                device = device
             )
 
             model = BSESM(config=bsesm_conf, logger=logger)
@@ -269,9 +287,15 @@ def train_stream_experiment(cfg, logger, func_obj):
                     })
                     
                     wandb.log({
-                        "run_id": run_idx, "n_samples": current_n, "dim": cfg.dim, "dataset": cfg.dataset.name,
-                        "method": method_name, "MSE": mse, "MAE": mae,
-                        "Train_Time_Step": t_train, "Test_Time_Step": t_test
+                        "run_id": run_idx,
+                        "n_samples": current_n,
+                        "dim": cfg.dim,
+                        "dataset": cfg.dataset.name,
+                        "method": method_name,
+                        "MSE": mse,
+                        "MAE": mae,
+                        "Train_Time_Step": t_train,
+                        "Test_Time_Step": t_test
                     })
                     
                     completed_keys.add(step_key)
@@ -290,10 +314,14 @@ def train_stream_experiment(cfg, logger, func_obj):
                     try:
                         plot_name = f"./outputs/run{run_idx}_step{current_n}_{cfg.dataset.name}_COMPARISON.png"
                         plot_multi_method_comparison(
-                            X_test=x_test.cpu(), y_test=y_test.cpu(),
+                            x_test=x_test.cpu(),
+                            y_test=y_test.cpu(),
                             predictions_dict=predictions_cache[current_n],
-                            X_train=x_full_train[:current_n].cpu(), y_train=y_full_train[:current_n].cpu(),
-                            dim=cfg.dim, title=f"Run {run_idx} N={current_n} {cfg.dataset.name}", outpath=plot_name
+                            x_train=x_full_train[:current_n].cpu(),
+                            y_train=y_full_train[:current_n].cpu(),
+                            dim=cfg.dim,
+                            title=f"Run {run_idx} N={current_n} {cfg.dataset.name}",
+                            outpath=plot_name
                         )
                         if os.path.exists(plot_name):
                             wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
