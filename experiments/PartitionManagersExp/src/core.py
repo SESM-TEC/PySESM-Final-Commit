@@ -14,9 +14,9 @@ import time
 import hydra
 import numpy as np
 import torch
-import wandb
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from src.utils import plot_multi_method_comparison
 
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
@@ -28,8 +28,8 @@ from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
-from src.utils import plot_multi_method_comparison
 
+import wandb
 # ==========================================
 # FUNCIONES DE CHECKPOINT (CSV)
 # ==========================================
@@ -221,18 +221,23 @@ def train_stream_experiment(cfg, logger, func_obj):
 
             if cfg.method.name == "kdtree":
                 strategy_conf = KDTreeStrategyConfig(
-                    maxNodeSize=cfg.method.maxNodeSize, device=device, data_wrapper=SESMData
+                    maxNodeSize = cfg.method.maxNodeSize,
+                    device = device,
+                    data_wrapper = SESMData
                 )
                 part_conf = AdaptivePartitionConfig(
-                    overlap_ratio=cfg.method.overlap_ratio, partition_strategy=KDTreeStrategy,
-                    strategy_config=strategy_conf
+                    overlap_ratio = cfg.method.overlap_ratio,
+                    partition_strategy = KDTreeStrategy,
+                    strategy_config = strategy_conf
                 )
             else: # Uniform
                 lim_min, lim_max = cfg.dataset.limits
                 bounds_tensor = torch.tensor([
                     [float(lim_min)] * cfg.dim,
                     [float(lim_max)] * cfg.dim
-                ], dtype=torch.float32, device=device)
+                ],
+                dtype=torch.float32,
+                device=device)
 
                 part_conf = UniformPartitionConfig(
                     T=cfg.method.T,
@@ -243,10 +248,12 @@ def train_stream_experiment(cfg, logger, func_obj):
                 )
 
             bsesm_conf = BSESMConfig(
-                n_features=cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
-                partition_config=part_conf, dict_config=dict_conf,
-                sparse_coding_config=copy.deepcopy(sc_conf),
-                log_interval=1000, device=device
+                n_features = cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
+                partition_config = part_conf,
+                dict_config=dict_conf,
+                sparse_coding_config = copy.deepcopy(sc_conf),
+                log_interval=1000,
+                device = device
             )
 
             model = BSESM(config=bsesm_conf, logger=logger)
@@ -321,7 +328,7 @@ def train_stream_experiment(cfg, logger, func_obj):
 
                     # --- LÓGICA DE PLOTEO (Igual que antes) ---
                     plot_image = None
-                    is_last_method = (method_idx == len(cfg.methods_to_test) - 1)
+                    is_last_method = method_idx == len(cfg.methods_to_test) - 1
 
                     if cfg.dim == 2 and is_last_method:
                         # Verificamos si tenemos datos para comparar
@@ -334,11 +341,11 @@ def train_stream_experiment(cfg, logger, func_obj):
                                 y_train_acc = y_full_train[:current_n].cpu()
 
                                 plot_multi_method_comparison(
-                                    X_test=x_test.cpu(),
+                                    x_test==x_test.cpu(),
                                     y_test=y_true_cpu,
-                                    predictions_dict=preds_for_step,
-                                    X_train=x_train_acc,
+                                    x_train=x_train_acc,
                                     y_train=y_train_acc,
+                                    predictions_dict=preds_for_step,
                                     dim=cfg.dim,
                                     title=f"Run {run_idx} | N={current_n} | {cfg.dataset.name}",
                                     outpath=plot_name
