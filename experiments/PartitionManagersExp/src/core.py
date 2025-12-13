@@ -307,7 +307,7 @@ def train_stream_experiment(cfg, logger, func_obj):
 
                 previous_n = current_n
 
-            # Plots
+
             if cfg.dim == 2 and current_n in predictions_cache:
                 is_last_method = (method_name == cfg.methods_to_test[-1])
                 if is_last_method and len(predictions_cache[current_n]) > 0:
