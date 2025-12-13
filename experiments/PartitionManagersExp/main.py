@@ -11,11 +11,14 @@ import numpy as np
 import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import wandb
 
 # Local imports
 import fun
 from src.core import train_stream_experiment
+
+import wandb
+
+
 
 
 FUNCTIONS = {

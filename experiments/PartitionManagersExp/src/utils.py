@@ -30,6 +30,9 @@ def to_numpy(data):
         return np.array(data)
     return data
 
+"""
+dataset (dict): x_test, y_test, x_train, ytrain
+"""
 def plot_multi_method_comparison(
     x_test,
     y_test,
