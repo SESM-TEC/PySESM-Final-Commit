@@ -9,9 +9,10 @@ import time
 import hydra
 import numpy as np
 import torch
-
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+import wandb
 
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
@@ -24,10 +25,7 @@ from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
 
-import wandb
-
 from src.utils import plot_multi_method_comparison
-
 # ==========================================
 # HELPERS GLOBALES
 # ==========================================
@@ -63,7 +61,7 @@ def load_existing_results(filepath):
                     int(row['n_samples'])
                 )
                 completed.add(key)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"[Checkpoint] Advertencia leyendo CSV: {e}")
     return completed
 
@@ -84,7 +82,7 @@ def save_result_row(filepath, data_dict):
             row = data_dict.copy()
             row['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
             writer.writerow(row)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"[Checkpoint] Error escribiendo en CSV: {e}")
 
 # ==========================================
@@ -122,7 +120,7 @@ def train_stream_experiment(cfg, logger, func_obj):
             try:
                 os.remove(csv_path)
                 logger.info(" -> Archivo %s eliminado exitosamente.", csv_path)
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-exception-caught
                 logger.warning(" -> No se pudo eliminar el archivo %s: %s", csv_path, e)
                 # Si no se puede borrar (ej: bloqueado), los datos se mezclarán,
                 # pero es lo mejor que podemos hacer sin detener el proceso.
@@ -289,10 +287,15 @@ def train_stream_experiment(cfg, logger, func_obj):
 
                     # CSV (save_result_row creará el archivo con headers si lo borramos antes)
                     save_result_row(csv_path, {
-                        'run_id': run_idx, 'dim': cfg.dim, 'dataset': cfg.dataset.name,
-                        'method': method_name, 'n_samples': current_n,
-                        'mse': mse, 'mae': mae,
-                        'train_time': t_train, 'test_time': t_test
+                        'run_id': run_idx,
+                        'dim': cfg.dim,
+                        'dataset': cfg.dataset.name,
+                        'method': method_name,
+                        'n_samples': current_n,
+                        'mse': mse,
+                        'mae': mae,
+                        'train_time': t_train,
+                        'test_time': t_test
                     })
 
                     wandb.log({
@@ -329,10 +332,12 @@ def train_stream_experiment(cfg, logger, func_obj):
                             "x_train": x_full_train[:current_n].cpu(),
                             "y_train": y_full_train[:current_n].cpu(),
                         }
+
                         plot_name = (
-                            "./outputs/run%s_step%s_%s_COMPARISON.png"
-                            % (run_idx, current_n, cfg.dataset.name)
+                            f"./outputs/run{run_idx}_step{current_n}_"
+                            f"{cfg.dataset.name}_COMPARISON.png"
                         )
+
                         plot_multi_method_comparison(
                             dataset=dataset,
                             predictions_dict=predictions_cache[current_n],
@@ -340,10 +345,10 @@ def train_stream_experiment(cfg, logger, func_obj):
                             title=f"Run {run_idx} N={current_n} {cfg.dataset.name}",
                             outpath=plot_name
                         )
-                        
+
                         if os.path.exists(plot_name):
                             wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
-                    except Exception: pass
+                    except Exception: pass # pylint: disable=broad-exception-caught
 
             del model
             torch.cuda.empty_cache()
