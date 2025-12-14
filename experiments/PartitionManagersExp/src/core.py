@@ -12,7 +12,6 @@ import torch
 
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from src.utils import plot_multi_method_comparison
 
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
 from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
@@ -26,6 +25,8 @@ from pysesm.utils_dataset.generate_dataset import (
 )
 
 import wandb
+
+from src.utils import plot_multi_method_comparison
 
 # ==========================================
 # HELPERS GLOBALES
@@ -50,7 +51,7 @@ def load_existing_results(filepath):
     if not os.path.exists(filepath):
         return completed
     try:
-        with open(filepath, 'r', newline='') as f:
+        with open(filepath, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Llave única: (run, dim, dataset, method, n_samples)
@@ -70,13 +71,13 @@ def save_result_row(filepath, data_dict):
     """Guarda una fila de resultados en el CSV."""
     # Verificamos existencia para saber si escribir header
     file_exists = os.path.exists(filepath)
-    
+
     fieldnames = [
-        'run_id', 'dim', 'dataset', 'method', 'n_samples', 
+        'run_id', 'dim', 'dataset', 'method', 'n_samples',
         'mse', 'mae', 'train_time', 'test_time', 'timestamp'
     ]
     try:
-        with open(filepath, 'a', newline='') as f:
+        with open(filepath, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             if not file_exists:
                 writer.writeheader()
@@ -102,26 +103,28 @@ def train_stream_experiment(cfg, logger, func_obj):
     # LÓGICA DE RECUPERACIÓN (RECOVERY MODE)
     # ========================================================
     csv_path = get_checkpoint_path("experiment_results.csv")
-    
+
     # Default True si no está en config
     recovery_enabled = cfg.get("recovery_mode", True)
 
     if recovery_enabled:
-        logger.info(f"Recovery Mode: ACTIVADO. Buscando progreso en {csv_path}")
+        logger.info("Recovery Mode: ACTIVADO. Buscando progreso en %s", csv_path)
         completed_keys = load_existing_results(csv_path)
-        logger.info(f" -> Se encontraron {len(completed_keys)} registros completados.")
+        logger.info(" -> Se encontraron %d registros completados.", len(completed_keys))
     else:
-        logger.info("Recovery Mode: DESACTIVADO. Eliminando historial previo (Sobreescritura total).")
+        logger.info(
+            "Recovery Mode: DESACTIVADO. Eliminando historial previo (Sobreescritura total)."
+        )
         completed_keys = set()
-        
+
         # --- MODIFICACIÓN: Eliminar archivo físico para reiniciar desde 0 ---
         if os.path.exists(csv_path):
             try:
                 os.remove(csv_path)
-                logger.info(f" -> Archivo {csv_path} eliminado exitosamente.")
+                logger.info(" -> Archivo %s eliminado exitosamente.", csv_path)
             except Exception as e:
-                logger.warning(f" -> No se pudo eliminar el archivo {csv_path}: {e}")
-                # Si no se puede borrar (ej: bloqueado), los datos se mezclarán, 
+                logger.warning(" -> No se pudo eliminar el archivo %s: %s", csv_path, e)
+                # Si no se puede borrar (ej: bloqueado), los datos se mezclarán,
                 # pero es lo mejor que podemos hacer sin detener el proceso.
 
     # Obtener ruta base para configs locales
@@ -134,8 +137,8 @@ def train_stream_experiment(cfg, logger, func_obj):
     # BUCLE 1: RUNS
     # ==========================================
     for run_idx in range(cfg.n_runs):
-        predictions_cache = {} 
-        
+        predictions_cache = {}
+
         current_seed = cfg.seed + run_idx
         torch.manual_seed(current_seed)
         np.random.seed(current_seed)
@@ -161,20 +164,23 @@ def train_stream_experiment(cfg, logger, func_obj):
         # BUCLE 2: MÉTODOS
         # ==========================================
         for method_name in cfg.methods_to_test:
-            
+
             # Verificar si todo el método ya está hecho (Solo si recovery=True)
             method_all_done = False
             if recovery_enabled and steps:
                 method_all_done = all(
-                    (run_idx, cfg.dim, cfg.dataset.name, method_name, s) in completed_keys 
+                    (run_idx, cfg.dim, cfg.dataset.name, method_name, s) in completed_keys
                     for s in steps
                 )
-            
+
             if method_all_done:
-                logger.info(f"   >>> Método {method_name.upper()} COMPLETADO previamente. Saltando...")
+                logger.info(
+                    "   >>> Método %s COMPLETADO previamente. Saltando...",
+                    method_name.upper()
+                )
                 continue
 
-            logger.info(f"   >>> Iniciando Método: {method_name.upper()}")
+            logger.info("   >>> Iniciando Método: %s", method_name.upper())
 
             # Cargar Config Método
             try:
@@ -187,17 +193,17 @@ def train_stream_experiment(cfg, logger, func_obj):
 
             # Config BSESM
             n_atoms_original = cfg.bsesm_params.atoms_per_dim * cfg.dim
-            
+
             dict_conf = GaussianDictConfig(
                 epochs=cfg.bsesm_params.dict_epochs,
                 alpha=1e-3, criterion=torch.nn.MSELoss(),
-                optimizer_factory=adamw_factory, 
+                optimizer_factory=adamw_factory,
                 mu_epochs=10, rho_epochs=10, split_mu_rho=False,
                 eig_range=[0.05, 0.2], mu_range=[0.0, 1.0],
                 regularization_func=GaussianDictLayer.electrostatic_regularization,
                 regularization_gamma=1e-5, device=device
             )
-            
+
             sc_conf = ISTAConfig(
                 epochs=cfg.bsesm_params.sc_epochs,
                 alpha=0.1, lambd=0.005, step_size_method=StepSizeMethod.FROBENIUS,
@@ -207,14 +213,14 @@ def train_stream_experiment(cfg, logger, func_obj):
 
             if cfg.method.name == "kdtree":
                 strategy_conf = KDTreeStrategyConfig(
-                    maxNodeSize = cfg.method.maxNodeSize,
-                    device = device,
-                    data_wrapper = SESMData
+                    maxNodeSize=cfg.method.maxNodeSize,
+                    device=device,
+                    data_wrapper=SESMData
                 )
                 part_conf = AdaptivePartitionConfig(
-                    overlap_ratio = cfg.method.overlap_ratio,
-                    partition_strategy = KDTreeStrategy,
-                    strategy_config = strategy_conf
+                    overlap_ratio=cfg.method.overlap_ratio,
+                    partition_strategy=KDTreeStrategy,
+                    strategy_config=strategy_conf
                 )
             else:  # Uniform
                 lim_min, lim_max = cfg.dataset.limits
@@ -234,17 +240,17 @@ def train_stream_experiment(cfg, logger, func_obj):
                 )
 
             bsesm_conf = BSESMConfig(
-                n_features = cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
-                partition_config = part_conf,
+                n_features=cfg.dim, model_epochs=cfg.bsesm_params.global_epochs,
+                partition_config=part_conf,
                 dict_config=dict_conf,
-                sparse_coding_config = copy.deepcopy(sc_conf),
+                sparse_coding_config=copy.deepcopy(sc_conf),
                 log_interval=1000,
-                device = device
+                device=device
             )
 
             model = BSESM(config=bsesm_conf, logger=logger)
             previous_n = 0
-            
+
             # ==========================================
             # BUCLE 3: STREAMING STEPS
             # ==========================================
@@ -268,7 +274,7 @@ def train_stream_experiment(cfg, logger, func_obj):
                     # Métricas
                     y_true_cpu = y_test.detach().cpu()
                     y_pred_cpu = y_pred.detach().cpu()
-                    
+
                     if current_n not in predictions_cache:
                         predictions_cache[current_n] = {}
                     predictions_cache[current_n][method_name] = y_pred_cpu
@@ -276,7 +282,10 @@ def train_stream_experiment(cfg, logger, func_obj):
                     mse = mean_squared_error(y_true_cpu, y_pred_cpu)
                     mae = mean_absolute_error(y_true_cpu, y_pred_cpu)
 
-                    logger.info(f"      Step {current_n} | MSE: {mse:.5f} | Train: {t_train:.2f}s")
+                    logger.info(
+                        "      Step %d | MSE: %.5f | Train: %.2fs",
+                        current_n, mse, t_train
+                    )
 
                     # CSV (save_result_row creará el archivo con headers si lo borramos antes)
                     save_result_row(csv_path, {
@@ -285,7 +294,7 @@ def train_stream_experiment(cfg, logger, func_obj):
                         'mse': mse, 'mae': mae,
                         'train_time': t_train, 'test_time': t_test
                     })
-                    
+
                     wandb.log({
                         "run_id": run_idx,
                         "n_samples": current_n,
@@ -297,32 +306,41 @@ def train_stream_experiment(cfg, logger, func_obj):
                         "Train_Time_Step": t_train,
                         "Test_Time_Step": t_test
                     })
-                    
+
                     completed_keys.add(step_key)
 
                 else:
                     # CASO B: Recuperar estado (No se escribe en CSV)
-                    logger.info(f"      Step {current_n} | {method_name} | Recuperando estado (Encontrado en CSV)")
+                    logger.info(
+                        "      Step %d | %s | Recuperando estado (Encontrado en CSV)",
+                        current_n, method_name
+                    )
                     model.partial_fit(x_batch, y_batch)
 
                 previous_n = current_n
 
-
             if cfg.dim == 2 and current_n in predictions_cache:
-                is_last_method = (method_name == cfg.methods_to_test[-1])
+                is_last_method = method_name == cfg.methods_to_test[-1]
                 if is_last_method and len(predictions_cache[current_n]) > 0:
                     try:
-                        plot_name = f"./outputs/run{run_idx}_step{current_n}_{cfg.dataset.name}_COMPARISON.png"
+                        dataset  = {
+                            "x_test": x_test.cpu(),
+                            "y_test": y_test.cpu(),
+                            "x_train": x_full_train[:current_n].cpu(),
+                            "y_train": y_full_train[:current_n].cpu(),
+                        }
+                        plot_name = (
+                            "./outputs/run%s_step%s_%s_COMPARISON.png"
+                            % (run_idx, current_n, cfg.dataset.name)
+                        )
                         plot_multi_method_comparison(
-                            x_test=x_test.cpu(),
-                            y_test=y_test.cpu(),
+                            dataset=dataset,
                             predictions_dict=predictions_cache[current_n],
-                            x_train=x_full_train[:current_n].cpu(),
-                            y_train=y_full_train[:current_n].cpu(),
                             dim=cfg.dim,
                             title=f"Run {run_idx} N={current_n} {cfg.dataset.name}",
                             outpath=plot_name
                         )
+                        
                         if os.path.exists(plot_name):
                             wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
                     except Exception: pass
