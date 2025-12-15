@@ -37,6 +37,14 @@ def adamw_factory(params, lr):
 # FUNCIONES DE MANEJO DE ARCHIVOS (CSV)
 # ==========================================
 def get_checkpoint_path(filename="experiment_results.csv"):
+    """Retorna la ruta absoluta al archivo CSV de resultados.
+    
+    Args:
+        filename (str): Nombre del archivo CSV. Default: 'experiment_results.csv'
+    
+    Returns:
+        str: Ruta absoluta al archivo en el directorio base del proyecto.
+    """
     try:
         base_path = hydra.utils.get_original_cwd()
     except (ValueError, AttributeError):
@@ -88,7 +96,17 @@ def save_result_row(filepath, data_dict):
 # ==========================================
 # LÓGICA PRINCIPAL DEL EXPERIMENTO
 # ==========================================
-def train_stream_experiment(cfg, logger, func_obj):
+def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-nested-blocks
+    """Ejecuta experimento de streaming comparando múltiples métodos de particionamiento.
+    
+    Args:
+        cfg (DictConfig): Configuración Hydra con parámetros del experimento.
+        logger (logging.Logger): Logger para mensajes informativos y errores.
+        func_obj (Callable): Función objetivo para generación del dataset.
+    
+    Returns:
+        str: 'Done' cuando todos los runs/métodos/pasos se completan.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     base_steps = cfg.stream_steps
@@ -348,7 +366,8 @@ def train_stream_experiment(cfg, logger, func_obj):
 
                         if os.path.exists(plot_name):
                             wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
-                    except Exception: pass # pylint: disable=broad-exception-caught
+                    except Exception: # pylint: disable=broad-exception-caught
+                        pass
 
             del model
             torch.cuda.empty_cache()
