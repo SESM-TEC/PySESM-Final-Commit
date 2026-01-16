@@ -110,7 +110,14 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     base_steps = cfg.stream_steps
-    steps = [int(n**cfg.dim) for n in base_steps]
+    MAX_DATASET_SIZE = 55_000
+
+    steps_raw = [int(n**cfg.dim) for n in base_steps]
+    steps = [min(s, MAX_DATASET_SIZE) for s in steps_raw]
+
+    # eliminar duplicados y ordenar
+    steps = sorted(set(steps))
+
     max_samples = max(steps)
 
     logger.info(f"Stream Steps para Dim {cfg.dim}: {steps}")
