@@ -3,12 +3,12 @@ defaults:
   - method: uniform
   - _self_
 
-recovery_mode: true
+recovery_mode: false
 
 dim: 2
 seed: 45
-n_runs: 25
-stream_steps: [2, 4, 8, 16, 32]
+n_runs: 1
+stream_steps: [4]
 
 # Lista de métodos a ejecutar secuencialmente sobre los mismos datos
 methods_to_test: [uniform, kdtree] 
@@ -21,8 +21,8 @@ bsesm_params:
 
 wandb:
   project: "PySESM_Streaming"
-  entity: "hvaldivia"
-  mode: "online"
+  entity: "aaronsalasalvarado"
+  mode: "offline"
 
 # =======================================================
 # DEFINICIÓN DEL BARRIDO
