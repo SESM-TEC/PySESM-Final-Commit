@@ -18,7 +18,7 @@ import time
 
 import torch
 
-from src.utils import GPUStepSampler
+from utils import GPUStepSampler
 
 
 def _build_logger() -> logging.Logger:
