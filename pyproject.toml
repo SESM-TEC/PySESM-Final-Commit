@@ -35,7 +35,8 @@ viz = [
     "plotly",
     "pandas",
     "wandb",
-    "imageio" # Required for examples/visualization.py
+    "imageio", # Required for examples/visualization.py
+    "pynvml"
 ]
 
 # Development environment: Includes visualization tools + testing framework
