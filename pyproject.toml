@@ -36,7 +36,8 @@ viz = [
     "pandas",
     "wandb",
     "imageio", # Required for examples/visualization.py
-    "pynvml"
+    "pynvml",
+    "psutil"
 ]
 
 # Development environment: Includes visualization tools + testing framework

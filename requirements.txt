@@ -29,3 +29,4 @@ pynvml            # NVIDIA Management Library bindings for GPU telemetry (utiliz
 # --- Utilities ---
 imageio           # Required by the VisualizerHook to compile saved frames into a video.
 joblib            # Used in the experiment scripts for saving/loading metrics and baseline models.
+psutil            # Used for host RAM telemetry in experiment samplers.
