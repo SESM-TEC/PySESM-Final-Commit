@@ -1,0 +1,3 @@
+- dim=2
+- stream_steps=[4]
+- methods_to_test=[uniform]
