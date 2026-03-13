@@ -27,7 +27,7 @@ from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
 
-from src.utils import GPUStepSampler, plot_multi_method_comparison
+from src.utils import GPURAMStepSampler, plot_multi_method_comparison
 
 try:
     from memory_profiler import profile
@@ -95,8 +95,9 @@ def save_result_row(filepath, data_dict):
         "gpu_samples",
         "gpu_mem_used_mb_mean",
         "gpu_mem_used_mb_var",
-        "gpu_mem_util_mean",
-        "gpu_mem_util_var",
+        "ram_samples",
+        "ram_used_mb_mean",
+        "ram_used_mb_var",
         "timestamp",
     ]
     try:
@@ -120,7 +121,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     default_device_index = torch.cuda.current_device() if torch.cuda.is_available() else 0
-    gpu_sampler = GPUStepSampler(
+    gpu_sampler = GPURAMStepSampler(
         enabled=True,
         sample_interval_sec=0.5,
         logger=logger,
@@ -347,8 +348,9 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                                 "GPU_Samples": gpu_stats["gpu_samples"],
                                 "GPU_Mem_Used_MB_Mean": gpu_stats["gpu_mem_used_mb_mean"],
                                 "GPU_Mem_Used_MB_Var": gpu_stats["gpu_mem_used_mb_var"],
-                                "GPU_Mem_Util_Mean": gpu_stats["gpu_mem_util_mean"],
-                                "GPU_Mem_Util_Var": gpu_stats["gpu_mem_util_var"],
+                                "RAM_Samples": gpu_stats["ram_samples"],
+                                "RAM_Used_MB_Mean": gpu_stats["ram_used_mb_mean"],
+                                "RAM_Used_MB_Var": gpu_stats["ram_used_mb_var"],
                             }
                         )
 
