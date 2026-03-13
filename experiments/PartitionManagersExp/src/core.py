@@ -176,6 +176,8 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     # ==========================================
     # BUCLE 1: RUNS
     # ==========================================
+    # BUCLE 1: RUNS
+    # ==========================================
     for run_idx in range(cfg.n_runs):
         predictions_cache = {}
 
@@ -405,9 +407,9 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                     except Exception: # pylint: disable=broad-exception-caught
                         pass
 
-            del model
-            torch.cuda.empty_cache()
+        del model
+        torch.cuda.empty_cache()
 
-            gpu_sampler.close()
+        gpu_sampler.close()
 
     return "Done"
