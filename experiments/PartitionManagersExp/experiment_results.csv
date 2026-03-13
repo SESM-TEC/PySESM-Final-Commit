@@ -1,0 +1,3 @@
+run_id,dim,dataset,method,n_samples,mse,mae,train_time,test_time,gpu_samples,gpu_mem_used_mb_mean,gpu_mem_used_mb_var,gpu_mem_util_mean,gpu_mem_util_var,timestamp
+0,2,function_zhou,uniform,16,3.010602678952354,1.0873428112802324,57.52523875236511,0.05097079277038574,0,0.0,0.0,0.0,0.0,2026-03-13 01:03:00
+0,2,function_zhou,kdtree,16,3.3262798542997043,1.1173529790120358,50.25119376182556,0.07081222534179688,0,0.0,0.0,0.0,0.0,2026-03-13 01:03:50

@@ -9,6 +9,148 @@ predicted values.
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import threading
+
+try:
+    from pynvml import (
+        nvmlDeviceGetHandleByIndex,
+        nvmlDeviceGetMemoryInfo,
+        nvmlInit,
+        nvmlShutdown,
+    )
+
+    NVML_AVAILABLE = True
+except ImportError:
+    NVML_AVAILABLE = False
+
+
+class GPUStepSampler:
+    """Sample GPU memory telemetry periodically and provide per-step aggregates."""
+
+    def __init__(self, enabled, sample_interval_sec, logger, device_index=0):
+        self.enabled = bool(enabled)
+        self.sample_interval_sec = max(float(sample_interval_sec), 0.01)
+        self.logger = logger
+        self.device_index = int(device_index)
+
+        self._handle = None
+        self._is_ready = False
+        self._thread = None
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+
+        self._memory_used_mb = []
+        self._memory_utilization = []
+
+        if not self.enabled:
+            return
+
+        if not torch.cuda.is_available():
+            self.logger.info("GPU monitor disabled: CUDA is not available.")
+            self.enabled = False
+            return
+
+        if not NVML_AVAILABLE:
+            self.logger.warning(
+                "GPU monitor enabled but `pynvml` is not installed. "
+                "Install it with: pip install pynvml"
+            )
+            self.enabled = False
+            return
+
+        try:
+            nvmlInit()
+            self._handle = nvmlDeviceGetHandleByIndex(self.device_index)
+            self._is_ready = True
+            self.logger.info(
+                "GPU monitor enabled on device %d (sample every %.3fs).",
+                self.device_index,
+                self.sample_interval_sec,
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self.logger.warning("Could not initialize NVML. GPU monitor disabled: %s", exc)
+            self.enabled = False
+
+    def _reset_buffers(self):
+        self._memory_used_mb.clear()
+        self._memory_utilization.clear()
+
+    @staticmethod
+    def _mean(values):
+        return float(np.mean(values)) if values else 0.0
+
+    @staticmethod
+    def _var(values):
+        return float(np.var(values)) if values else 0.0
+
+    def _sample_once(self):
+        mem_info = nvmlDeviceGetMemoryInfo(self._handle)
+
+        mem_used_mb = mem_info.used / (1024.0**2)
+        mem_util_pct = (mem_info.used / mem_info.total * 100.0) if mem_info.total > 0 else 0.0
+
+        with self._lock:
+            self._memory_used_mb.append(float(mem_used_mb))
+            self._memory_utilization.append(float(mem_util_pct))
+
+    def _sampling_loop(self):
+        while not self._stop_event.is_set():
+            try:
+                self._sample_once()
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+            self._stop_event.wait(self.sample_interval_sec)
+
+    def start(self):
+        if not (self.enabled and self._is_ready):
+            return
+
+        self.stop()
+        with self._lock:
+            self._reset_buffers()
+
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._sampling_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        if self._thread is None:
+            return
+
+        self._stop_event.set()
+        self._thread.join(timeout=max(1.0, self.sample_interval_sec * 4))
+        self._thread = None
+
+    def summary(self):
+        if not (self.enabled and self._is_ready):
+            return {
+                "gpu_samples": 0,
+                "gpu_mem_used_mb_mean": 0.0,
+                "gpu_mem_used_mb_var": 0.0,
+                "gpu_mem_util_mean": 0.0,
+                "gpu_mem_util_var": 0.0,
+            }
+
+        with self._lock:
+            mem_mb_copy = list(self._memory_used_mb)
+            mem_util_copy = list(self._memory_utilization)
+
+        return {
+            "gpu_samples": len(mem_mb_copy),
+            "gpu_mem_used_mb_mean": self._mean(mem_mb_copy),
+            "gpu_mem_used_mb_var": self._var(mem_mb_copy),
+            "gpu_mem_util_mean": self._mean(mem_util_copy),
+            "gpu_mem_util_var": self._var(mem_util_copy),
+        }
+
+    def close(self):
+        self.stop()
+        if self._is_ready:
+            try:
+                nvmlShutdown()
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+            self._is_ready = False
 
 def to_numpy(data):
     """Convertir ``data`` a un ndarray de NumPy.

@@ -27,7 +27,7 @@ from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
 
-from src.utils import plot_multi_method_comparison
+from src.utils import GPUStepSampler, plot_multi_method_comparison
 
 try:
     from memory_profiler import profile
@@ -35,7 +35,6 @@ except ImportError:
     # Keep script executable even when memory_profiler is not installed.
     def profile(func):
         return func
-
 
 # ==========================================
 # GLOBAL HELPERS
@@ -93,6 +92,11 @@ def save_result_row(filepath, data_dict):
         "mae",
         "train_time",
         "test_time",
+        "gpu_samples",
+        "gpu_mem_used_mb_mean",
+        "gpu_mem_used_mb_var",
+        "gpu_mem_util_mean",
+        "gpu_mem_util_var",
         "timestamp",
     ]
     try:
@@ -114,6 +118,14 @@ def save_result_row(filepath, data_dict):
 def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-nested-blocks
     """Run streaming experiment comparing multiple partitioning methods."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    default_device_index = torch.cuda.current_device() if torch.cuda.is_available() else 0
+    gpu_sampler = GPUStepSampler(
+        enabled=True,
+        sample_interval_sec=0.5,
+        logger=logger,
+        device_index=default_device_index,
+    )
 
     base_steps = cfg.stream_steps
     max_dataset_size = 55_000
@@ -178,7 +190,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
         y_full_train = train_data["Z"].to(device)
         x_test = test_data["X"].to(device)
         y_test = test_data["Z"].to(device)
-
+        
         for method_name in cfg.methods_to_test:
             method_all_done = False
             if recovery_enabled and steps:
@@ -280,8 +292,13 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
                 if not is_done:
                     t0_train = time.time()
-                    model.partial_fit(x_batch, y_batch)
+                    gpu_sampler.start()
+                    try:
+                        model.partial_fit(x_batch, y_batch)
+                    finally:
+                        gpu_sampler.stop()
                     t_train = time.time() - t0_train
+                    gpu_stats = gpu_sampler.summary()
 
                     t0_test = time.time()
                     y_pred, _, _ = model.performance_stats(x_test, y_test)
@@ -311,6 +328,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                             "mae": mae,
                             "train_time": t_train,
                             "test_time": t_test,
+                            **gpu_stats,
                         },
                     )
 
@@ -325,6 +343,11 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                             "MAE": mae,
                             "Train_Time_Step": t_train,
                             "Test_Time_Step": t_test,
+                            "GPU_Samples": gpu_stats["gpu_samples"],
+                            "GPU_Mem_Used_MB_Mean": gpu_stats["gpu_mem_used_mb_mean"],
+                            "GPU_Mem_Used_MB_Var": gpu_stats["gpu_mem_used_mb_var"],
+                            "GPU_Mem_Util_Mean": gpu_stats["gpu_mem_util_mean"],
+                            "GPU_Mem_Util_Var": gpu_stats["gpu_mem_util_var"],
                         }
                     )
 
@@ -340,27 +363,28 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
                 previous_n = current_n
 
-            if cfg.dim == 2 and current_n in predictions_cache:
+            last_step = steps[-1] if steps else None
+            if cfg.dim == 2 and last_step in predictions_cache:
                 is_last_method = method_name == cfg.methods_to_test[-1]
-                if is_last_method and len(predictions_cache[current_n]) > 0:
+                if is_last_method and len(predictions_cache[last_step]) > 0:
                     try:
                         dataset = {
                             "x_test": x_test.cpu(),
                             "y_test": y_test.cpu(),
-                            "x_train": x_full_train[:current_n].cpu(),
-                            "y_train": y_full_train[:current_n].cpu(),
+                            "x_train": x_full_train[:last_step].cpu(),
+                            "y_train": y_full_train[:last_step].cpu(),
                         }
 
                         plot_name = (
-                            f"./outputs/run{run_idx}_step{current_n}_"
+                            f"./outputs/run{run_idx}_step{last_step}_"
                             f"{cfg.dataset.name}_COMPARISON.png"
                         )
 
                         plot_multi_method_comparison(
                             dataset=dataset,
-                            predictions_dict=predictions_cache[current_n],
+                            predictions_dict=predictions_cache[last_step],
                             dim=cfg.dim,
-                            title=f"Run {run_idx} N={current_n} {cfg.dataset.name}",
+                            title=f"Run {run_idx} N={last_step} {cfg.dataset.name}",
                             outpath=plot_name,
                         )
 
@@ -371,5 +395,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
             del model
             torch.cuda.empty_cache()
+
+            gpu_sampler.close()
 
     return "Done"
