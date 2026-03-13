@@ -12,8 +12,11 @@ import torch
 import threading
 
 try:
+    # nvidia-ml-py exposes the same API under the `pynvml` module name.
+    # Prefer it over the deprecated standalone `pynvml` package.
     from pynvml import (
         nvmlDeviceGetHandleByIndex,
+        nvmlDeviceGetName,
         nvmlDeviceGetMemoryInfo,
         nvmlInit,
         nvmlShutdown,
@@ -53,7 +56,7 @@ class GPUStepSampler:
         if not NVML_AVAILABLE:
             self.logger.warning(
                 "GPU monitor enabled but `pynvml` is not installed. "
-                "Install it with: pip install pynvml"
+                "Install it with: pip install nvidia-ml-py"
             )
             self.enabled = False
             return
@@ -62,9 +65,18 @@ class GPUStepSampler:
             nvmlInit()
             self._handle = nvmlDeviceGetHandleByIndex(self.device_index)
             self._is_ready = True
+
+            device_name = nvmlDeviceGetName(self._handle)
+            if isinstance(device_name, bytes):
+                device_name = device_name.decode("utf-8", errors="replace")
+            mem_info = nvmlDeviceGetMemoryInfo(self._handle)
+            total_mem_gb = mem_info.total / (1024.0**3)
+
             self.logger.info(
-                "GPU monitor enabled on device %d (sample every %.3fs).",
+                "GPU monitor enabled | device=%d | name=%s | total_memory=%.2f GiB | sample_every=%.3fs",
                 self.device_index,
+                device_name,
+                total_mem_gb,
                 self.sample_interval_sec,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -110,6 +122,14 @@ class GPUStepSampler:
             self._reset_buffers()
 
         self._stop_event.clear()
+
+        # Take one immediate sample to avoid zero-sample summaries when
+        # short/blocked sections prevent the background thread from running.
+        try:
+            self._sample_once()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
         self._thread = threading.Thread(target=self._sampling_loop, daemon=True)
         self._thread.start()
 
@@ -134,6 +154,15 @@ class GPUStepSampler:
         with self._lock:
             mem_mb_copy = list(self._memory_used_mb)
             mem_util_copy = list(self._memory_utilization)
+
+        if not mem_mb_copy:
+            try:
+                self._sample_once()
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+            with self._lock:
+                mem_mb_copy = list(self._memory_used_mb)
+                mem_util_copy = list(self._memory_utilization)
 
         return {
             "gpu_samples": len(mem_mb_copy),
