@@ -24,6 +24,7 @@ pandas            # Used for data manipulation, particularly in some utility and
 matplotlib        # Primary library for generating static plots and the visualization hook frames.
 wandb             # Used for hyperparameter sweeps and experiment tracking.
 plotly            # Used for creating interactive plots in some utility functions.
+pynvml            # NVIDIA Management Library bindings for GPU telemetry (utilization/memory/power).
 
 # --- Utilities ---
 imageio           # Required by the VisualizerHook to compile saved frames into a video.
