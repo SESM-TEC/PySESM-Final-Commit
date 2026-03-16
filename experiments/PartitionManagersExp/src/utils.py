@@ -6,10 +6,11 @@ NumPy arrays and to save a simple scatter plot comparing ground-truth vs
 predicted values.
 """
 
+import threading
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import threading
 
 try:
     import psutil
@@ -34,10 +35,10 @@ except ImportError:
     NVML_AVAILABLE = False
 
 
-class GPURAMStepSampler:
+class GPURAMStepSampler:  # pylint: disable=too-many-instance-attributes
     """Sample GPU and host RAM telemetry periodically and provide per-step aggregates."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-positional-arguments
         self,
         enabled,
         sample_interval_sec,
@@ -46,6 +47,16 @@ class GPURAMStepSampler:
         enable_gpu=True,
         enable_ram=True,
     ):
+        """Initialize the telemetry sampler.
+
+        Args:
+            enabled: Whether sampling is enabled.
+            sample_interval_sec: Sampling period in seconds.
+            logger: Logger instance used for status messages.
+            device_index: CUDA device index used by NVML.
+            enable_gpu: Whether to collect GPU memory samples.
+            enable_ram: Whether to collect host RAM samples.
+        """
         self.enabled = bool(enabled)
         self.sample_interval_sec = max(float(sample_interval_sec), 0.01)
         self.logger = logger
@@ -78,6 +89,7 @@ class GPURAMStepSampler:
             self.enabled = False
 
     def _initialize_gpu_monitor(self):
+        """Initialize NVML-based GPU monitoring if available and enabled."""
         if not self.enable_gpu:
             return
 
@@ -110,10 +122,11 @@ class GPURAMStepSampler:
                 total_mem_gb,
                 self.sample_interval_sec,
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             self.logger.warning("Could not initialize NVML. GPU monitor disabled: %s", exc)
 
     def _initialize_ram_monitor(self):
+        """Initialize psutil-based RAM monitoring if available and enabled."""
         if not self.enable_ram:
             return
 
@@ -133,10 +146,11 @@ class GPURAMStepSampler:
                 total_ram_gb,
                 self.sample_interval_sec,
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             self.logger.warning("Could not initialize RAM monitor. RAM monitor disabled: %s", exc)
 
     def _reset_buffers(self):
+        """Reset per-step sample counters and accumulators."""
         self._sample_count = 0
         self._memory_used_mb_sum = 0.0
         self._memory_used_mb_sq_sum = 0.0
@@ -145,10 +159,12 @@ class GPURAMStepSampler:
 
     @staticmethod
     def _mean(total, count):
+        """Return the arithmetic mean for ``total`` and ``count``."""
         return float(total / count) if count > 0 else 0.0
 
     @staticmethod
     def _var(total, sq_total, count):
+        """Return population variance from running sum and squared-sum."""
         if count <= 0:
             return 0.0
         mean = total / count
@@ -156,6 +172,7 @@ class GPURAMStepSampler:
         return float(max(variance, 0.0))
 
     def _sample_once(self):
+        """Take one telemetry sample and update shared accumulators."""
         with self._lock:
             self._sample_count += 1
             if self._gpu_ready:
@@ -171,14 +188,16 @@ class GPURAMStepSampler:
                 self._ram_used_mb_sq_sum += float(ram_used_mb * ram_used_mb)
 
     def _sampling_loop(self):
+        """Run the periodic sampling loop until a stop signal is received."""
         while not self._stop_event.is_set():
             try:
                 self._sample_once()
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:
                 pass
             self._stop_event.wait(self.sample_interval_sec)
 
     def start(self):
+        """Start background sampling and reset current buffers."""
         if not (self.enabled and self._is_ready):
             return
 
@@ -192,13 +211,14 @@ class GPURAMStepSampler:
         # short/blocked sections prevent the background thread from running.
         try:
             self._sample_once()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             pass
 
         self._thread = threading.Thread(target=self._sampling_loop, daemon=True)
         self._thread.start()
 
     def stop(self):
+        """Stop the sampling thread and wait briefly for its termination."""
         if self._thread is None:
             return
 
@@ -207,6 +227,12 @@ class GPURAMStepSampler:
         self._thread = None
 
     def summary(self):
+        """Return aggregated telemetry statistics for the current step.
+
+        Returns:
+            dict[str, float | int]: Dictionary with sample count, mean, and
+            variance for GPU and RAM memory usage.
+        """
         if not (self.enabled and self._is_ready):
             return {
                 "gpu_samples": 0,
@@ -227,7 +253,7 @@ class GPURAMStepSampler:
         if sample_count == 0:
             try:
                 self._sample_once()
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:
                 pass
             with self._lock:
                 sample_count = self._sample_count
@@ -246,18 +272,18 @@ class GPURAMStepSampler:
         }
 
     def close(self):
+        """Release monitor resources and disable future sampling."""
         self.stop()
         if self._gpu_ready:
             try:
                 nvmlShutdown()
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:
                 pass
             self._gpu_ready = False
         self._ram_ready = False
         self._is_ready = False
 
 
-GPUStepSampler = GPURAMStepSampler
 
 def to_numpy(data):
     """Convertir ``data`` a un ndarray de NumPy.
@@ -360,6 +386,8 @@ def plot_multi_method_comparison(
     )
 
     # Puntos de entrenamiento (Rojos)
+
+
     ax1.scatter(
         xtr[:, 0],
         xtr[:, 1],
