@@ -68,91 +68,55 @@ machine learning tasks.
 
 1.  **Space Partitioning:** The input data space is divided into smaller, manageable regions called "blocks." This allows the model to focus on learning local features of a function, making it highly scalable and effective for complex, non-stationary functions.
 
-
-<div align="center">
-  <svg width="400" height="400" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <marker id="arrow" markerWidth="10" markerHeight="10" 
-              refX="0" refY="3" orient="auto">
-        <polygon points="0 0, 6 3, 0 6" fill="black"/>
-      </marker>
-    </defs>
-    <rect x="20" y="60" width="80" height="80" fill="none" stroke="black"/>
-    <line x1="20" y1="80" x2="100" y2="80" stroke="black"/>
-    <line x1="20" y1="100" x2="100" y2="100" stroke="black"/>
-    <line x1="20" y1="120" x2="100" y2="120" stroke="black"/>
-    <line x1="40" y1="60" x2="40" y2="140" stroke="black"/>
-    <line x1="60" y1="60" x2="60" y2="140" stroke="black"/>
-    <line x1="80" y1="60" x2="80" y2="140" stroke="black"/>
-    <polygon points="100,60 150,40 150,120 100,140" fill="none" stroke="black"/>
-    <line x1="125" y1="50" x2="125" y2="130" stroke="black"/>
-    <line x1="137.5" y1="45" x2="137.5" y2="125" stroke="black"/>
-    <line x1="112.5" y1="55" x2="112.5" y2="135" stroke="black"/>
-    <line x1="100" y1="80" x2="150" y2="60" stroke="black"/>
-    <line x1="100" y1="100" x2="150" y2="80" stroke="black"/>
-    <line x1="100" y1="120" x2="150" y2="100" stroke="black"/>
-    <polygon points="20,60 100,60 150,40 70,40" fill="none" stroke="black"/>
-    <line x1="40" y1="60" x2="90" y2="40" stroke="black"/>
-    <line x1="60" y1="60" x2="110" y2="40" stroke="black"/>
-    <line x1="80" y1="60" x2="130" y2="40" stroke="black"/>
-    <line x1="112.5" y1="55" x2="32.5" y2="55" stroke="black"/>
-    <line x1="125" y1="50" x2="45" y2="50" stroke="black"/>
-    <line x1="137.5" y1="45" x2="57.5" y2="45" stroke="black"/>
-    <line x1="150" y1="120" x2="180" y2="120"
-          stroke="black" marker-end="url(#arrow)"/>
-    <line x1="70" y1="40" x2="70" y2="10"
-          stroke="black" marker-end="url(#arrow)"/>
-    <line x1="20" y1="140" x2="3" y2="150"
-          stroke="black" marker-end="url(#arrow)"/>
-    <text x="75" y="20" font-size="15" fill="black">x₁</text>
-    <text x="175" y="113" font-size="15" fill="black">x₂</text>
-    <text x="15" y="155" font-size="15" fill="black">x₃</text>
-  </svg>
-</div>
-
-
+<p align="center">
+  <img src="figs/partition.svg" alt="Figura de la partición uniforme">
+</p>
 
 
 2.  **Dictionary Learning:** The model learns a global dictionary of basis functions (e.g., Gaussian functions). These functions, or "dictionary words," serve as the fundamental building blocks for approximating the target function. The dictionary is shared across all blocks.
-$$D(\underline{x}) = \left( \underline{\phi_1} (\underline{x}), \underline{\phi_2} (\underline{x}), \underline{\phi_2} (\underline{x}), ... ,  \underline{\phi_n} (\underline{x})  \right)$$
 
-
+$$
+D(\underline{x}) = \left( \underline{\phi_1} (\underline{x}), \underline{\phi_2} (\underline{x}), \underline{\phi_2} (\underline{x}), ... ,  \underline{\phi_n} (\underline{x})  \right)
+$$
 
 
 3.  **Sparse Coding:** For each block, the model finds a sparse vector `h` that represents the optimal linear combination of dictionary words to approximate the function within that block's local region. The goal is to use as few dictionary words as possible, hence "sparse."
 
 
-The core idea is to approximate the ground truth signal $ \mathbf{y} $ as the product $ \mathbf{D}\mathbf{h} $ where $ \mathbf{D} $ is the learned **dictionary** and $ \mathbf{h} $ is the corresponding **sparse code**. In this formulation, $ \mathbf{y} \in \mathbb{R}^{(m,1)} $ represents an $ m $-dimensional target vector, $ \mathbf{D} \in \mathbb{R}^{(m,n)} $ is a matrix containing $ n $ basis functions (or atoms) as its columns, and $ \mathbf{h} \in \mathbb{R}^{(n,1)} $ is a sparse activation vector indicating how much each atom contributes to reconstructing $ \mathbf{y} $.
-
-$$\underline{y} = D \underline{h}$$
+The core idea is to approximate the ground truth signal $\boldsymbol{y}$ as the product $\boldsymbol{D}\boldsymbol{h}$ where $\boldsymbol{D}$ is the learned **dictionary** and $\boldsymbol{h}$ is the corresponding **sparse code**. In this formulation, $\boldsymbol{y} \in \boldsymbol{R}^{(m,1)}$ represents an $m$-dimensional target vector, $\boldsymbol{D} \in \mathbb{R}^{(m,n)}$ is a matrix containing $n$ basis functions (or atoms) as its columns, and $\boldsymbol{h} \in \mathbb{R}^{(n,1)}$ is a sparse activation vector indicating how much each atom contributes to reconstructing $\boldsymbol{y}$.
 
 $$
-\underbrace{
-\begin{bmatrix}
-y_1 \\[3pt]
-y_2 \\[3pt]
-\vdots \\[3pt]
-y_{\text{m}}
-\end{bmatrix}
-}_{\mathbf{y} \in \mathbb{R}^{(\text{m},\,1)}}
-=
-\underbrace{
-\begin{bmatrix}
-| & | & & | \\
-\mathbf{\underline{\phi}}_1 & \mathbf{\underline{\phi}}_2 & \cdots & \mathbf{\underline{\phi}}_{\text{n}} \\
-| & | & & |
-\end{bmatrix}
-}_{\mathbf{D} \in \mathbb{R}^{(\text{m},\,\text{n})}}
-\;
-\underbrace{
-\begin{bmatrix}
-h_1 \\[3pt]
-h_2 \\[3pt]
-\vdots \\[3pt]
-h_{\text{n}}
-\end{bmatrix}
-}_{\mathbf{h} \in \mathbb{R}^{(\text{n},\,1)}}
+\underline{y} = D \underline{h}
 $$
+
+$$
+\underbrace{\begin{bmatrix}
+y_1 \\
+y_2 \\
+\vdots\\
+y_{m}
+\end{bmatrix}}_{\mathbf{y} \in \mathbb{R}^{(m,\,1)}}=
+\underbrace{
+\begin{bmatrix}
+\mid & \mid &        & \mid \\
+\phi_1 & \phi_2 & \cdots & \phi_n \\
+\mid & \mid &        & \mid
+\end{bmatrix}
+}_{\mathbf{D} \in \mathbb{R}^{(m,n)}}
+\underbrace{
+\begin{bmatrix}
+h_1 \\
+h_2 \\
+\vdots \\
+h_{n}
+\end{bmatrix}
+}_{\mathbf{h} \in \mathbb{R}^{(n,1)}}
+$$
+
+
+
+
+
 
 ## 4. Library Architecture
 
@@ -339,7 +303,7 @@ The one-block configuration treats the whole input space as a single partition. 
 In this example, you can see real-time training using the `VisualizerHook` class. This hook captures snapshots of the dictionary at each logging interval and compiles them into a video.
 
 <p align="center">
-<video src="figs/one_block_evolution.mp4" controls width="600">
+  <img src="figs/one_block_evolution.gif" controls width="500"/>
 </p>
 
 
@@ -382,7 +346,7 @@ The rest of the training pipeline remains the same.
 
 *   `pysesm.models.SSESMConfig`: Main configuration dataclass.
 *   `pysesm.blocks.UniformPartitionConfig`: Configuration for grid-based partitioning.
-*   `pysesm.blocks.AdaptativePartitionConfig`: Configuration for data-driven partitioning.
+*   `pysesm.blocks.AdaptivePartitionConfig`: Configuration for data-driven partitioning.
 *   `pysesm.dictionaries.GaussianDictConfig`: Configuration for the Gaussian dictionary.
 *   `pysesm.sparse_coding.ISTAConfig`: Configuration for the ISTA solver.
 *   `pysesm.sparse_coding.FISTAConfig`: Configuration for the FISTA solver.
