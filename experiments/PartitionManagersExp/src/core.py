@@ -87,12 +87,16 @@ def save_result_row(filepath, data_dict):
         'theta_shape',
         'theta_mb',
         'dict_eval_mb',
+        'dict_eval_mb_max',
         'd_mega_shape',
         'd_mega_mb',
+        'd_mega_mb_max',
         'y_mega_shape',
         'gpu_samples',
         'gpu_mem_used_mb_mean',
         'gpu_mem_used_mb_var',
+        'torch_peak_alloc_mb',
+        'torch_peak_reserved_mb',
         'ram_samples',
         'ram_used_mb_mean',
         'ram_used_mb_var',
@@ -187,6 +191,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     # ==========================================
     for run_idx in range(cfg.n_runs):
         predictions_cache = {}
+        model = None
 
         current_seed = cfg.seed + run_idx
         torch.manual_seed(current_seed)
@@ -312,14 +317,29 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
                 if not is_done:
                     # CASO A: Entrenar y Evaluar
+                    if torch.cuda.is_available():
+                        torch.cuda.reset_peak_memory_stats(device)
+                        torch.cuda.synchronize(device)
+
                     t0_train = time.time()
                     gpu_sampler.start()
                     try:
                         model.partial_fit(x_batch, y_batch)
                     finally:
                         gpu_sampler.stop()
+
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize(device)
+                        torch_peak_alloc_mb = torch.cuda.max_memory_allocated(device) / (1024 ** 2)
+                        torch_peak_reserved_mb = torch.cuda.max_memory_reserved(device) / (1024 ** 2)
+                    else:
+                        torch_peak_alloc_mb = 0.0
+                        torch_peak_reserved_mb = 0.0
+
                     t_train = time.time() - t0_train
                     gpu_stats = gpu_sampler.summary()
+                    gpu_stats["torch_peak_alloc_mb"] = torch_peak_alloc_mb
+                    gpu_stats["torch_peak_reserved_mb"] = torch_peak_reserved_mb
 
                     t0_test = time.time()
                     y_pred, _, _ = model.performance_stats(x_test, y_test)
@@ -337,11 +357,29 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                     mae = mean_absolute_error(y_true_cpu, y_pred_cpu)
 
                     logger.info(
-                        "      Step %d | MSE: %.5f | Train: %.2fs",
-                        current_n, mse, t_train
+                        "      Step %d | MSE: %.5f | Train: %.2fs | TorchPeakAlloc: %.2fMB",
+                        current_n, mse, t_train, torch_peak_alloc_mb
                     )
 
                     bsesm_structure_metrics = model.structure_metrics.copy()
+                    dict_eval_mb_max = bsesm_structure_metrics.get(
+                        "dict_eval_mb_max",
+                        bsesm_structure_metrics.get("dict_eval_mb")
+                    )
+                    d_mega_mb_max = bsesm_structure_metrics.get(
+                        "d_mega_mb_max",
+                        bsesm_structure_metrics.get("d_mega_mb")
+                    )
+                    structure_metrics_for_log = {
+                        "theta_shape": bsesm_structure_metrics.get("theta_shape"),
+                        "theta_mb": bsesm_structure_metrics.get("theta_mb"),
+                        "dict_eval_mb": dict_eval_mb_max,
+                        "dict_eval_mb_max": dict_eval_mb_max,
+                        "d_mega_shape": bsesm_structure_metrics.get("d_mega_shape"),
+                        "d_mega_mb": d_mega_mb_max,
+                        "d_mega_mb_max": d_mega_mb_max,
+                        "y_mega_shape": bsesm_structure_metrics.get("y_mega_shape"),
+                    }
 
                     # CSV (save_result_row creará el archivo con headers si lo borramos antes)
                     save_result_row(csv_path, {
@@ -354,7 +392,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                         'mae': mae,
                         'train_time': t_train,
                         'test_time': t_test,
-                        **bsesm_structure_metrics,
+                        **structure_metrics_for_log,
                         **gpu_stats
                     })
 
@@ -369,19 +407,20 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                         "Train_Time_Step": t_train,
                         "Test_Time_Step": t_test,
 
-                        
-                        "theta_shape": bsesm_structure_metrics["theta_shape"],
-                        "theta_mb": bsesm_structure_metrics["theta_mb"],
-                        "dict_eval_mb": bsesm_structure_metrics["dict_eval_mb"],
-                        "d_mega_shape": bsesm_structure_metrics["d_mega_shape"],
-                        "d_mega_mb": bsesm_structure_metrics["d_mega_mb"],
-                        "y_mega_shape": bsesm_structure_metrics["y_mega_shape"],
+                        "theta_shape": structure_metrics_for_log["theta_shape"],
+                        "theta_mb": structure_metrics_for_log["theta_mb"],
+                        "dict_eval_mb": structure_metrics_for_log["dict_eval_mb"],
+                        "dict_eval_mb_max": structure_metrics_for_log["dict_eval_mb_max"],
+                        "d_mega_shape": structure_metrics_for_log["d_mega_shape"],
+                        "d_mega_mb": structure_metrics_for_log["d_mega_mb"],
+                        "d_mega_mb_max": structure_metrics_for_log["d_mega_mb_max"],
+                        "y_mega_shape": structure_metrics_for_log["y_mega_shape"],
 
-
-                        
                         "GPU_Samples": gpu_stats["gpu_samples"],
                         "GPU_Mem_Used_MB_Mean": gpu_stats["gpu_mem_used_mb_mean"],
                         "GPU_Mem_Used_MB_Var": gpu_stats["gpu_mem_used_mb_var"],
+                        "Torch_Peak_Alloc_MB": gpu_stats["torch_peak_alloc_mb"],
+                        "Torch_Peak_Reserved_MB": gpu_stats["torch_peak_reserved_mb"],
                         "RAM_Samples": gpu_stats["ram_samples"],
                         "RAM_Used_MB_Mean": gpu_stats["ram_used_mb_mean"],
                         "RAM_Used_MB_Var": gpu_stats["ram_used_mb_var"]
@@ -429,8 +468,10 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                     except Exception: # pylint: disable=broad-exception-caught
                         pass
 
-        del model
-        torch.cuda.empty_cache()
+        if model is not None:
+            del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         gpu_sampler.close()
 
