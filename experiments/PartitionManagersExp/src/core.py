@@ -84,14 +84,16 @@ def save_result_row(filepath, data_dict):
     fieldnames = [
         'run_id', 'dim', 'dataset', 'method', 'n_samples',
         'mse', 'mae', 'train_time', 'test_time',
+
+
         'theta_shape',
         'theta_mb',
-        'dict_eval_mb',
         'dict_eval_mb_max',
         'd_mega_shape',
-        'd_mega_mb',
         'd_mega_mb_max',
         'y_mega_shape',
+
+        
         'gpu_samples',
         'gpu_mem_used_mb_mean',
         'gpu_mem_used_mb_var',
@@ -362,22 +364,13 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                     )
 
                     bsesm_structure_metrics = model.structure_metrics.copy()
-                    dict_eval_mb_max = bsesm_structure_metrics.get(
-                        "dict_eval_mb_max",
-                        bsesm_structure_metrics.get("dict_eval_mb")
-                    )
-                    d_mega_mb_max = bsesm_structure_metrics.get(
-                        "d_mega_mb_max",
-                        bsesm_structure_metrics.get("d_mega_mb")
-                    )
+
                     structure_metrics_for_log = {
                         "theta_shape": bsesm_structure_metrics.get("theta_shape"),
                         "theta_mb": bsesm_structure_metrics.get("theta_mb"),
-                        "dict_eval_mb": dict_eval_mb_max,
-                        "dict_eval_mb_max": dict_eval_mb_max,
+                        "dict_eval_mb_max": bsesm_structure_metrics.get("dict_eval_mb_max"),
                         "d_mega_shape": bsesm_structure_metrics.get("d_mega_shape"),
-                        "d_mega_mb": d_mega_mb_max,
-                        "d_mega_mb_max": d_mega_mb_max,
+                        "d_mega_mb_max": bsesm_structure_metrics.get("d_mega_mb_max"),
                         "y_mega_shape": bsesm_structure_metrics.get("y_mega_shape"),
                     }
 
@@ -409,10 +402,8 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
                         "theta_shape": structure_metrics_for_log["theta_shape"],
                         "theta_mb": structure_metrics_for_log["theta_mb"],
-                        "dict_eval_mb": structure_metrics_for_log["dict_eval_mb"],
                         "dict_eval_mb_max": structure_metrics_for_log["dict_eval_mb_max"],
                         "d_mega_shape": structure_metrics_for_log["d_mega_shape"],
-                        "d_mega_mb": structure_metrics_for_log["d_mega_mb"],
                         "d_mega_mb_max": structure_metrics_for_log["d_mega_mb_max"],
                         "y_mega_shape": structure_metrics_for_log["y_mega_shape"],
 

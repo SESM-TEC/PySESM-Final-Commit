@@ -102,9 +102,7 @@ class BSESM(SESM):
         self.structure_metrics: dict[str, str | None] = {
             'theta_shape': None,
             'theta_mb': None,
-            'dict_eval_mb': None,
             'd_mega_shape': None,
-            'd_mega_mb': None,
             'y_mega_shape': None,
         }
         self._max_dict_eval_mb = 0.0
