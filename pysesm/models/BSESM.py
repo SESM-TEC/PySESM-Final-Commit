@@ -271,7 +271,7 @@ class BSESM(SESM):
         self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
 
         theta_params = self.dictionary_layer.theta_params
-        self._capture_structure_metrics_once(
+        self._capture_structure_metrics(
             theta_params=theta_params,
             dict_eval_mb=dict_eval_mb,
             D_mega=D_mega,

@@ -14,7 +14,7 @@ stream_steps: [2, 4, 8, 16, 32]
 methods_to_test: [uniform, kdtree] 
 
 bsesm_params:
-  global_epochs: 150
+  global_epochs: 5
   dict_epochs: 50
   sc_epochs: 15
   atoms_per_dim: 10
