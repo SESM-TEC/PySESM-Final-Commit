@@ -50,6 +50,14 @@ class BSESM(SESM):
 
     CONFIG_CLASS = BSESMConfig
 
+    @staticmethod
+    def _tensor_mb(tensor: torch.Tensor) -> float:
+        return (tensor.numel() * tensor.element_size()) / (1024 ** 2)
+
+    @staticmethod
+    def _shape_tuple(tensor: torch.Tensor) -> tuple[int, ...]:
+        return tuple(int(dim) for dim in tensor.shape)
+
     def __init__(
         self,
         config: BSESMConfig,
@@ -89,6 +97,33 @@ class BSESM(SESM):
             parameter_hook=self.sparse_coding_layer_hook
         )
         self.logger.info(f"Global Sparse Coding Layer: {type(self.global_sparse_coding_layer).__name__}")
+
+        # Structure metrics captured once during training
+        self.structure_metrics: dict[str, str | None] = {
+            'theta_shape': None,
+            'theta_mb': None,
+            'dict_eval_mb': None,
+            'd_mega_shape': None,
+            'd_mega_mb': None,
+            'y_mega_shape': None,
+        }
+
+    def _capture_structure_metrics(
+        self,
+        theta_params: torch.Tensor,
+        dict_eval_mb: float,
+        D_mega: torch.Tensor,
+        Y_mega: torch.Tensor,
+    ) -> None:
+        if self.structure_metrics['theta_shape'] is not None:
+            return
+
+        self.structure_metrics['theta_shape'] = str(self._shape_tuple(theta_params))
+        self.structure_metrics['theta_mb'] = f"{self._tensor_mb(theta_params):.6f}"
+        self.structure_metrics['dict_eval_mb'] = f"{dict_eval_mb:.6f}"
+        self.structure_metrics['d_mega_shape'] = str(self._shape_tuple(D_mega))
+        self.structure_metrics['d_mega_mb'] = f"{self._tensor_mb(D_mega):.6f}"
+        self.structure_metrics['y_mega_shape'] = str(self._shape_tuple(Y_mega))
 
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """
@@ -220,6 +255,7 @@ class BSESM(SESM):
         else:
             dict_list_sc = [d.to(sc_device) for d in dict_nested_detached.unbind()]
         D_mega = torch.block_diag(*dict_list_sc)
+        dict_eval_mb = sum(self._tensor_mb(d) for d in dict_list_sc)
 
         # Transfer y_nested and get its contiguous values on the target device
         Y_mega = y_nested_proxy.get_for_device(sc_device).values()
@@ -233,6 +269,14 @@ class BSESM(SESM):
                                                     reset_state=(epoch==0))
 
         self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
+
+        theta_params = self.dictionary_layer.theta_params
+        self._capture_structure_metrics_once(
+            theta_params=theta_params,
+            dict_eval_mb=dict_eval_mb,
+            D_mega=D_mega,
+            Y_mega=Y_mega,
+        )
 
         # Update h_nested directly with optimized values - zero extra allocations
         # Both have identical memory layout: (total_functions, 1)
@@ -319,13 +363,8 @@ class BSESM(SESM):
                    epoch == 0 or
                    epoch == self.model_epochs - 1 ) ):
 
-                # Retrieve last losses for logging
-                dict_loss = self.dictionary_layer.losses[-1] if self.dictionary_layer.losses else float('nan')
-                sc_loss = self._sparse_coding_losses[-1] if self._sparse_coding_losses else float('nan')
-
                 self.logger.info(
-                    f"BSESM Epoch {epoch + 1}/{self.model_epochs}: "
-                    f"Dict Loss: {dict_loss:.6f}, SC Loss: {sc_loss:.6f}"
+                    f"BSESM Epoch {epoch + 1}/{self.model_epochs}: training step completed"
                 )
 
             # Call SESM hook if provided for monitoring after each SESM model epoch
