@@ -3,7 +3,7 @@ defaults:
   - method: uniform
   - _self_
 
-recovery_mode: false
+recovery_mode: true
 
 dim: 2
 seed: 45
@@ -30,5 +30,5 @@ wandb:
 hydra:
   sweeper:
     params:
-      dim: 1, 2, 3, 4
-      dataset: zhou, zakharov, styblinski
+      dim: 1, 2, 3, 4, 5
+      dataset: zhou
