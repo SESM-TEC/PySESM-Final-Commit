@@ -450,3 +450,10 @@ def plot_multi_method_comparison(
     plt.tight_layout()
     plt.savefig(outpath, dpi=100)
     plt.close()
+
+def quadratic_steps(dim, max_points=1000, n_steps=5, max_dim=10):
+    steps = []
+    for i in range(1, n_steps + 1):
+        val = max_points * (i / n_steps) ** 2 * (dim / max_dim)
+        steps.append(int(val))
+    return steps

@@ -25,7 +25,7 @@ from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
 )
 
-from src.utils import GPURAMStepSampler, plot_multi_method_comparison
+from src.utils import GPURAMStepSampler, quadratic_steps, plot_multi_method_comparison
 # ==========================================
 # HELPERS GLOBALES
 # ==========================================
@@ -136,10 +136,8 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
         device_index=default_device_index,
     )
     base_steps = cfg.stream_steps
-    MAX_DATASET_SIZE = 55000
 
-    steps_raw = [int(n**cfg.dim) for n in base_steps]
-    steps = [min(s, MAX_DATASET_SIZE) for s in steps_raw]
+    steps = quadratic_steps(cfg.dim, n_steps=cfg.stream_steps)
 
     # eliminar duplicados y ordenar
     steps = sorted(set(steps))
@@ -149,33 +147,21 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     logger.info(f"Stream Steps para Dim {cfg.dim}: {steps}")
 
     # ========================================================
-    # LÓGICA DE RECUPERACIÓN (RECOVERY MODE)
+    # LÓGICA DE RECUPERACIÓN (RECOVERY MODE) - CORREGIDA
     # ========================================================
     csv_path = get_checkpoint_path("experiment_results.csv")
-
-    # Default True si no está en config
     recovery_enabled = cfg.get("recovery_mode", True)
+    completed_keys = set()
 
     if recovery_enabled:
         logger.info("Recovery Mode: ACTIVADO. Buscando progreso en %s", csv_path)
         completed_keys = load_existing_results(csv_path)
         logger.info(" -> Se encontraron %d registros completados.", len(completed_keys))
     else:
-        logger.info(
-            "Recovery Mode: DESACTIVADO. Eliminando historial previo (Sobreescritura total)."
-        )
-        completed_keys = set()
-
-        # --- MODIFICACIÓN: Eliminar archivo físico para reiniciar desde 0 ---
-        if os.path.exists(csv_path):
-            try:
-                os.remove(csv_path)
-                logger.info(" -> Archivo %s eliminado exitosamente.", csv_path)
-            except Exception as e: # pylint: disable=broad-exception-caught
-                logger.warning(" -> No se pudo eliminar el archivo %s: %s", csv_path, e)
-                # Si no se puede borrar (ej: bloqueado), los datos se mezclarán,
-                # pero es lo mejor que podemos hacer sin detener el proceso.
-
+        # BAJO NINGUNA CIRCUNSTANCIA borramos el archivo físico.
+        # Simplemente no cargamos las 'completed_keys' para que el experimento vuelva a correr,
+        # pero los nuevos resultados se añadirán (append) al final del CSV existente.
+        logger.info("Recovery Mode: DESACTIVADO. Se escribirán nuevos resultados sin borrar los anteriores.")
     # Obtener ruta base para configs locales
     try:
         base_path = hydra.utils.get_original_cwd()
