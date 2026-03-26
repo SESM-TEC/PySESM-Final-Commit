@@ -26,15 +26,12 @@ from pysesm.utils_dataset.generate_dataset import (
 )
 
 from src.utils import GPURAMStepSampler, plot_multi_method_comparison
-
-
 # ==========================================
 # HELPERS GLOBALES
 # ==========================================
 def adamw_factory(params, lr):
     """Fábrica de optimizador."""
     return torch.optim.AdamW(params, lr=lr)
-
 
 # ==========================================
 # FUNCIONES DE MANEJO DE ARCHIVOS (CSV)
@@ -138,9 +135,8 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
         logger=logger,
         device_index=default_device_index,
     )
-
     base_steps = cfg.stream_steps
-    MAX_DATASET_SIZE = 55_000
+    MAX_DATASET_SIZE = 55000
 
     steps_raw = [int(n**cfg.dim) for n in base_steps]
     steps = [min(s, MAX_DATASET_SIZE) for s in steps_raw]
@@ -189,12 +185,9 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
     # ==========================================
     # BUCLE 1: RUNS
     # ==========================================
-    # BUCLE 1: RUNS
-    # ==========================================
     for run_idx in range(cfg.n_runs):
         predictions_cache = {}
-        model = None
-
+        model = None        
         current_seed = cfg.seed + run_idx
         torch.manual_seed(current_seed)
         np.random.seed(current_seed)
@@ -269,7 +262,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
             if cfg.method.name == "kdtree":
                 strategy_conf = KDTreeStrategyConfig(
-                    maxNodeSize=cfg.method.maxNodeSize,
+                    maxNodeSize=cfg.dim*cfg.method.maxNodeSize,
                     device=device,
                     data_wrapper=SESMData
                 )
@@ -314,8 +307,8 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                 step_key = (run_idx, cfg.dim, cfg.dataset.name, method_name, current_n)
                 is_done = step_key in completed_keys
 
-                x_batch = x_full_train[previous_n:current_n]
-                y_batch = y_full_train[previous_n:current_n]
+                x_batch = x_full_train[previous_n:current_n].to(device)
+                y_batch = y_full_train[previous_n:current_n].to(device)
 
                 if not is_done:
                     # CASO A: Entrenar y Evaluar
@@ -429,36 +422,40 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
 
                 previous_n = current_n
 
-            last_step = steps[-1] if steps else None
-            if cfg.dim == 2 and last_step in predictions_cache:
-                is_last_method = method_name == cfg.methods_to_test[-1]
-                if is_last_method and len(predictions_cache[last_step]) > 0:
-                    try:
-                        dataset  = {
-                            "x_test": x_test.cpu(),
-                            "y_test": y_test.cpu(),
-                            "x_train": x_full_train[:last_step].cpu(),
-                            "y_train": y_full_train[:last_step].cpu(),
-                        }
+                if cfg.dim <= 2 and current_n in predictions_cache:
+                    is_last_method = method_name == cfg.methods_to_test[-1]
+                    if is_last_method and len(predictions_cache[current_n]) > 1:
+                        try:
+                            dataset  = {
+                                "x_test": x_test.cpu(),
+                                "y_test": y_test.cpu(),
+                                "x_train": x_full_train[:current_n].cpu(),
+                                "y_train": y_full_train[:current_n].cpu(),
+                            }
 
-                        plot_name = (
-                            f"./outputs/run{run_idx}_step{last_step}_"
-                            f"{cfg.dataset.name}_COMPARISON.png"
-                        )
+                            plot_name = (
+                                f"./outputs/run{run_idx}_step{current_n}_"
+                                f"{cfg.dataset.name}_COMPARISON.png"
+                            )
 
-                        plot_multi_method_comparison(
-                            dataset=dataset,
-                            predictions_dict=predictions_cache[last_step],
-                            dim=cfg.dim,
-                            title=f"Run {run_idx} N={last_step} {cfg.dataset.name}",
-                            outpath=plot_name
-                        )
+                            plot_multi_method_comparison(
+                                dataset=dataset,
+                                predictions_dict=predictions_cache[current_n],
+                                dim=cfg.dim,
+                                title=f"Run {run_idx} N={current_n} {cfg.dataset.name}",
+                                outpath=plot_name
+                            )
 
-                        if os.path.exists(plot_name):
-                            wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
-                    except Exception: # pylint: disable=broad-exception-caught
-                        pass
+                            if os.path.exists(plot_name):
+                                wandb.log({"Comparison_Plot": wandb.Image(plot_name)})
+                        except Exception as e: # pylint: disable=broad-exception-caught
+                            logger.info(e)
 
+            del model
+            del x_batch
+            del y_batch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         if model is not None:
             del model
         if torch.cuda.is_available():
