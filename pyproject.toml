@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pysesm"
-version = "0.1.0"
+version = "0.1.1"
 description = "SESM (sparse encoded surrogate model) library"
 requires-python = ">=3.12"
 authors = [
@@ -46,3 +46,6 @@ dev = [
 
 [tool.setuptools]
 packages = ["pysesm"]  # Replace with your actual package names
+
+[tool.pytest.ini_options]
+testpaths = ["unit_tests"]
