@@ -11,7 +11,7 @@ This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
-Version: 0.1.2
+Version: 0.1.3
 """
 
 import logging
@@ -94,8 +94,8 @@ def _common_evaluation_func():
                             f"D={type(dictionary)}, h={type(h)}")
     return _eval_func_impl
 
-@pytest.fixture
-def _bsesm_config_fixture(_device_fixture):
+@pytest.fixture(params=[BSESMSolverStrategy.SEQUENTIAL, BSESMSolverStrategy.MEGA_MATRIX])
+def _bsesm_config_fixture(request, _device_fixture):
     # Common configuration for BSESM tests
     n_features = 2
     n_functions = 5
@@ -121,7 +121,7 @@ def _bsesm_config_fixture(_device_fixture):
         partition_config=partition_config,
         seed=42,
         log_interval=1,
-        solver_strategy=BSESMSolverStrategy.SEQUENTIAL,
+        solver_strategy=request.param,
         device=_device_fixture
     )
 
@@ -289,9 +289,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
             assert 'h_per_block' in hook_info
 
 
-@pytest.mark.parametrize("strategy",[BSESMSolverStrategy.SEQUENTIAL, BSESMSolverStrategy.MEGA_MATRIX])
-def test_bsesm_global_train_step_orchestration_both_strategies(
-    strategy,
+def test_bsesm_global_train_step_orchestration(
     _sample_bsesm_model,
     _nested_tensor_data_generator, 
     _common_evaluation_func # Pass common_evaluation_func
@@ -301,12 +299,7 @@ def test_bsesm_global_train_step_orchestration_both_strategies(
     training, including data aggregation, mega-matrix construction, and h distribution.
     """
     model = _sample_bsesm_model
-    model.config.solver_strategy = strategy
-    
-    # Need to recreate global_sparse_coding_layer if MEGA_MATRIX
-    from pysesm.factories.SparseCodingFactory import SparseCodingFactory
-    if strategy == BSESMSolverStrategy.MEGA_MATRIX:
-        model.global_sparse_coding_layer = SparseCodingFactory.create(config=model.sparse_coding_config, evaluation_func=model.evaluation_func, logger=model.logger)
+    strategy = model.config.solver_strategy
     
     n_functions = model.n_functions
     device = model.config.device
@@ -523,8 +516,8 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
 # Conditional execution marker for CUDA
 CUDA_AVAILABLE = torch.cuda.is_available()
 
-@pytest.fixture
-def _bsesm_multi_device_config_fixture():
+@pytest.fixture(params=[BSESMSolverStrategy.SEQUENTIAL, BSESMSolverStrategy.MEGA_MATRIX])
+def _bsesm_multi_device_config_fixture(request): 
     """Provides a BSESMConfig specifically for multi-device testing."""
     n_features = 2
     n_functions = 5
@@ -549,7 +542,8 @@ def _bsesm_multi_device_config_fixture():
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
-        seed=42
+        seed=42,
+        solver_strategy=request.param
         # Global device is not set, letting components use their specific configs
     )
 
