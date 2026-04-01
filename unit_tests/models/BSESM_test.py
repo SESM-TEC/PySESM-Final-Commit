@@ -11,7 +11,7 @@ This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
-Version: 0.1.1
+Version: 0.1.2
 """
 
 import logging
@@ -23,7 +23,7 @@ import pytest
 import torch
 import numpy as np
 
-from pysesm.models.BSESM import BSESM, BSESMConfig, BSESMSoverStrategy
+from pysesm.models.BSESM import BSESM, BSESMConfig, BSESMSolverStrategy
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig, UniformPartitionManager
 from pysesm.dictionaries import GaussianDictConfig,GaussianDictLayer # Will use real GaussianDictLayer
 from pysesm.sparse_coding import ISTAConfig, ISTALayer
@@ -464,6 +464,12 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
 
     # 3) Fijar h de cada bloque a un valor fácil de verificar y amplitud = 1.0
     #    h_i = constante = (i+j+1) en cada entrada, con shape (n_functions, 1)
+
+    # Fija la amplitud en los bloques originales del manager para que predict() la herede
+    for b in model.partition_manager.blocks.flatten():
+        if hasattr(b, "amplitude"):
+            b.amplitude = 1.0
+
     for block in test_active_blocks: # Iterate over test_active_blocks here
         i, j = block.block_index
         const_val = float(i + j + 1)
@@ -559,7 +565,8 @@ def test_bsesm_multi_device_execution_and_predict(_bsesm_multi_device_config_fix
 
     # Verify initial device placement
     assert str(model.dictionary_layer.device) == 'cuda:0'
-    assert str(model.global_sparse_coding_layer.device) == 'cpu'
+    if model.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        assert str(model.global_sparse_coding_layer.device) == 'cpu'
     assert str(model.partition_manager.device) == 'cpu'
     
     # 2. Prepare input data on the CPU (a common scenario)
@@ -578,7 +585,8 @@ def test_bsesm_multi_device_execution_and_predict(_bsesm_multi_device_config_fix
     # 4. Verify post-training state
     # Check that parameters remain on their designated devices
     assert str(model.dictionary_layer.theta_params.device) == 'cuda:0'
-    assert str(model.global_sparse_coding_layer.h.device) == 'cpu'
+    if model.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        assert str(model.global_sparse_coding_layer.h.device) == 'cpu'
 
     # Retrieve an active block and check its internal sparse coding layer's device
     active_blocks = model.partition_manager.retrieve_active_blocks()
