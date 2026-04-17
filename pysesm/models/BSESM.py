@@ -20,6 +20,7 @@ from enum import Enum, auto
 
 from collections.abc import Callable
 
+import copy
 from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
@@ -96,8 +97,9 @@ class BSESM(SESM):
         # so it uses standard matrix multiplication.
         self.global_sparse_coding_layer = None
         if self.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+            global_sc_config = copy.deepcopy(self.sparse_coding_config)
             self.global_sparse_coding_layer = SparseCodingFactory.create(
-                config=self.sparse_coding_config,
+                config=global_sc_config,
                 evaluation_func=self.evaluation_func,
                 logger=self.logger,
                 parameter_hook=self.sparse_coding_layer_hook
