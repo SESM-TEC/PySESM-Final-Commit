@@ -19,7 +19,7 @@ from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
 from pysesm.blocks.SESMData import SESMData
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
-from pysesm.models.BSESM import BSESM, BSESMConfig
+from pysesm.models.BSESM import BSESM, BSESMConfig, BSESMSolverStrategy
 from pysesm.sparse_coding import ISTAConfig, StepSizeMethod
 from pysesm.utils_dataset.generate_dataset import (
     generate_custom_nd_function_dataset,
@@ -280,6 +280,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                 dict_config=dict_conf,
                 sparse_coding_config=copy.deepcopy(sc_conf),
                 log_interval=1000,
+                solver_strategy=BSESMSolverStrategy.MEGA_MATRIX,
                 device=device
             )
 
