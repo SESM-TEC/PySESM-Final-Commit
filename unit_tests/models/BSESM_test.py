@@ -11,6 +11,7 @@ This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
+Version: 0.1.3
 """
 
 import logging
@@ -22,7 +23,7 @@ import pytest
 import torch
 import numpy as np
 
-from pysesm.models.BSESM import BSESM, BSESMConfig
+from pysesm.models.BSESM import BSESM, BSESMConfig, BSESMSolverStrategy
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig, UniformPartitionManager
 from pysesm.dictionaries import GaussianDictConfig,GaussianDictLayer # Will use real GaussianDictLayer
 from pysesm.sparse_coding import ISTAConfig, ISTALayer
@@ -93,8 +94,8 @@ def _common_evaluation_func():
                             f"D={type(dictionary)}, h={type(h)}")
     return _eval_func_impl
 
-@pytest.fixture
-def _bsesm_config_fixture(_device_fixture):
+@pytest.fixture(params=[BSESMSolverStrategy.SEQUENTIAL, BSESMSolverStrategy.MEGA_MATRIX])
+def _bsesm_config_fixture(request, _device_fixture):
     # Common configuration for BSESM tests
     n_features = 2
     n_functions = 5
@@ -120,6 +121,7 @@ def _bsesm_config_fixture(_device_fixture):
         partition_config=partition_config,
         seed=42,
         log_interval=1,
+        solver_strategy=request.param,
         device=_device_fixture
     )
 
@@ -193,8 +195,9 @@ def test_bsesm_initialization(_sample_bsesm_model, _common_evaluation_func):
     """Verify core components are initialized correctly."""
     model = _sample_bsesm_model
     assert isinstance(model, BSESM)
-    assert hasattr(model, 'global_sparse_coding_layer')
-    assert isinstance(model.global_sparse_coding_layer, ISTALayer)
+    if model.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        assert hasattr(model, 'global_sparse_coding_layer')
+        assert isinstance(model.global_sparse_coding_layer, ISTALayer)
     assert model.dictionary_layer is not None
     assert model.partition_manager is not None
     assert model.n_features == model.config.n_features
@@ -258,7 +261,7 @@ def test_bsesm_partial_fit_model_epochs_loop(
     # Verify _global_train_step is called correct number of times with correct arguments
     assert mock_global_train_step.call_count == model_epochs
     for i in range(model_epochs):
-        mock_global_train_step.assert_any_call(mock.ANY, mock.ANY, mock.ANY, i)
+        mock_global_train_step.assert_any_call(mock.ANY, mock.ANY, mock.ANY, i, active_blocks)
     
     # Verify training and partial_fit_count are updated
     assert model.training_time > initial_training_time
@@ -296,6 +299,8 @@ def test_bsesm_global_train_step_orchestration(
     training, including data aggregation, mega-matrix construction, and h distribution.
     """
     model = _sample_bsesm_model
+    strategy = model.config.solver_strategy
+    
     n_functions = model.n_functions
     device = model.config.device
 
@@ -303,12 +308,13 @@ def test_bsesm_global_train_step_orchestration(
     num_blocks = 2
     X_nested, y_nested, h_nested_initial, active_blocks = _nested_tensor_data_generator(num_blocks=num_blocks, min_samples_per_block=5, max_samples_per_block=10)
 
-    # Initialize model.global_sparse_coding_layer.h for the test before the call
-    total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
-    model.global_sparse_coding_layer.config.n_functions = total_h_elements
-    model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device))
-    initial_h_mega = model.global_sparse_coding_layer.h.data.clone()
-
+    if strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        # Initialize model.global_sparse_coding_layer.h for the test before the call
+        total_h_elements = sum(block.sparse_coding_layer.h.shape[0] for block in active_blocks)
+        model.global_sparse_coding_layer.config.n_functions = total_h_elements
+        model.global_sparse_coding_layer.setup(torch.randn(total_h_elements, 1, device=device))
+        initial_h_mega = model.global_sparse_coding_layer.h.data.clone()
+    
     X_nested_proxy = TensorProxy(X_nested)
     y_nested_proxy = TensorProxy(y_nested)
 
@@ -316,7 +322,8 @@ def test_bsesm_global_train_step_orchestration(
     returned_h_nested = model._global_train_step(X_nested_proxy=X_nested_proxy,
                                                  y_nested_proxy=y_nested_proxy,
                                                  h_nested=h_nested_initial,
-                                                 epoch=0)
+                                                 epoch=0,
+                                                 active_blocks=active_blocks)
     
     # --- Assertions for sparse coding (mega-matrix) part ---
     # The dictionary layer was real, so let's get its actual output to build our expected D_mega
@@ -328,14 +335,21 @@ def test_bsesm_global_train_step_orchestration(
     expected_Y_mega = torch.cat(y_nested.unbind()) # y_nested is already a NestedTensor
     expected_D_mega = torch.block_diag(*dict_list_from_real_layer)
     
-    # Verify that the real ISTALayer ran and produced results
-    assert len(model.global_sparse_coding_layer.losses) > 0, "Real ISTA layer should have populated its losses"
-    assert not torch.allclose(model.global_sparse_coding_layer.h.data, initial_h_mega), "h should have been updated by the real ISTA layer"
-
-    # Verify that the returned h_nested is correctly updated with the h from the real layer
-    assert returned_h_nested.is_nested
-    assert torch.allclose(returned_h_nested.values(), model.global_sparse_coding_layer.h.data)
+    if strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        # Verify that the real ISTALayer ran and produced results
+        assert len(model.global_sparse_coding_layer.losses) > 0, "Real ISTA layer should have populated its losses"
+        assert not torch.allclose(model.global_sparse_coding_layer.h.data, initial_h_mega), "h should have been updated by the real ISTA layer"
     
+        # Verify that the returned h_nested is correctly updated with the h from the real layer
+        assert returned_h_nested.is_nested
+        assert torch.allclose(returned_h_nested.values(), model.global_sparse_coding_layer.h.data)
+    else:
+        # Sequential checking
+        assert len(model._sparse_coding_losses) > 0
+        for i, block in enumerate(active_blocks):
+            assert len(block.sparse_coding_layer.losses) > 0
+            # Should be synchronized back to h_nested
+            assert torch.allclose(returned_h_nested.unbind()[i], block.sparse_coding_layer.h.data)    
 
 def test_bsesm_aggregate_block_data_behavior(_sample_bsesm_model, _nested_tensor_data_generator):
     """
@@ -443,6 +457,12 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
 
     # 3) Fijar h de cada bloque a un valor fácil de verificar y amplitud = 1.0
     #    h_i = constante = (i+j+1) en cada entrada, con shape (n_functions, 1)
+
+    # Fija la amplitud en los bloques originales del manager para que predict() la herede
+    for b in model.partition_manager.blocks.flatten():
+        if hasattr(b, "amplitude"):
+            b.amplitude = 1.0
+
     for block in test_active_blocks: # Iterate over test_active_blocks here
         i, j = block.block_index
         const_val = float(i + j + 1)
@@ -496,8 +516,8 @@ def test_bsesm_predict_workflow(_sample_bsesm_model, _common_evaluation_func):
 # Conditional execution marker for CUDA
 CUDA_AVAILABLE = torch.cuda.is_available()
 
-@pytest.fixture
-def _bsesm_multi_device_config_fixture():
+@pytest.fixture(params=[BSESMSolverStrategy.SEQUENTIAL, BSESMSolverStrategy.MEGA_MATRIX])
+def _bsesm_multi_device_config_fixture(request): 
     """Provides a BSESMConfig specifically for multi-device testing."""
     n_features = 2
     n_functions = 5
@@ -522,7 +542,8 @@ def _bsesm_multi_device_config_fixture():
         sparse_coding_config=sparse_coding_config,
         dict_config=dict_config,
         partition_config=partition_config,
-        seed=42
+        seed=42,
+        solver_strategy=request.param
         # Global device is not set, letting components use their specific configs
     )
 
@@ -538,7 +559,8 @@ def test_bsesm_multi_device_execution_and_predict(_bsesm_multi_device_config_fix
 
     # Verify initial device placement
     assert str(model.dictionary_layer.device) == 'cuda:0'
-    assert str(model.global_sparse_coding_layer.device) == 'cpu'
+    if model.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        assert str(model.global_sparse_coding_layer.device) == 'cpu'
     assert str(model.partition_manager.device) == 'cpu'
     
     # 2. Prepare input data on the CPU (a common scenario)
@@ -557,7 +579,8 @@ def test_bsesm_multi_device_execution_and_predict(_bsesm_multi_device_config_fix
     # 4. Verify post-training state
     # Check that parameters remain on their designated devices
     assert str(model.dictionary_layer.theta_params.device) == 'cuda:0'
-    assert str(model.global_sparse_coding_layer.h.device) == 'cpu'
+    if model.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+        assert str(model.global_sparse_coding_layer.h.device) == 'cpu'
 
     # Retrieve an active block and check its internal sparse coding layer's device
     active_blocks = model.partition_manager.retrieve_active_blocks()

@@ -12,10 +12,12 @@ This source code is licensed under the BSD 3-Clause License found in the
 LICENSE file in the root directory of this source tree.
 
 SPDX-License-Identifier: BSD-3-Clause
+Version: 0.1.1
 """
 import logging
 import time
-import copy
+from enum import Enum, auto
+
 from collections.abc import Callable
 
 from dataclasses import dataclass
@@ -27,13 +29,16 @@ from pysesm.models.SESM import SESM, SESMConfig
 from pysesm.factories.SparseCodingFactory import SparseCodingFactory
 from pysesm.base_types import TensorBatch, TensorProxy 
 
+class BSESMSolverStrategy(Enum):
+    MEGA_MATRIX = auto()
+    SEQUENTIAL = auto()
 
 @dataclass
 class BSESMConfig(SESMConfig):
     """
     Configuration for BSESM model, extending base SESMConfig.
     """
-
+    solver_strategy: BSESMSolverStrategy = BSESMSolverStrategy.SEQUENTIAL
 
 class BSESM(SESM):
     """
@@ -88,68 +93,18 @@ class BSESM(SESM):
         )
 
         # The global sparse coding layer will operate on the large block-diagonal matrix,
-        # so it uses standard matrix multiplication.c
-        global_sc_config = copy.deepcopy(self.sparse_coding_config)
-        self.global_sparse_coding_layer = SparseCodingFactory.create(
-            config=global_sc_config,
-            evaluation_func=self.evaluation_func,
-            logger=self.logger,
-            parameter_hook=self.sparse_coding_layer_hook
-        )
-        self.logger.info(f"Global Sparse Coding Layer: {type(self.global_sparse_coding_layer).__name__}")
-
-        # Structure metrics captured during training
-        self.structure_metrics: dict[str, str | None] = {
-            'theta_shape': None,
-            'theta_mb': None,
-            'd_mega_shape': None,
-            'y_mega_shape': None,
-        }
-        self._max_dict_eval_mb = 0.0
-        self._max_d_mega_mb = 0.0
-
-    def _capture_structure_metrics(
-        self,
-        theta_params: torch.Tensor,
-        dict_eval_mb: float,
-        D_mega: torch.Tensor,
-        Y_mega: torch.Tensor,
-    ) -> None:
-        """Captura métricas estructurales y conserva los máximos observados.
-
-        Este método se invoca en cada época del entrenamiento global.
-        Actualiza siempre los metadatos actuales de `theta` y mantiene los
-        picos de memoria para `dict_eval_mb` y `D_mega`.
-
-        Args:
-            theta_params (torch.Tensor): Parámetros actuales del diccionario.
-            dict_eval_mb (float): Memoria total (MB) de diccionarios evaluados en la época.
-            D_mega (torch.Tensor): Matriz bloque-diagonal usada en sparse coding global.
-            Y_mega (torch.Tensor): Vector/objetivo concatenado correspondiente a `D_mega`.
-        """
-        # Tamaños actuales en esta época.
-        current_theta_mb = self._tensor_mb(theta_params)
-        current_d_mega_mb = self._tensor_mb(D_mega)
-
-        # Estado actual de theta (no pico).
-        self.structure_metrics['theta_shape'] = str(self._shape_tuple(theta_params))
-        self.structure_metrics['theta_mb'] = f"{current_theta_mb:.6f}"
-
-        # Pico acumulado de evaluación de diccionario.
-        if dict_eval_mb >= self._max_dict_eval_mb:
-            self._max_dict_eval_mb = dict_eval_mb
-            self.structure_metrics['dict_eval_mb_max'] = f"{dict_eval_mb:.6f}"
-
-        # Pico acumulado de la mega-matriz y su shape asociado.
-        if current_d_mega_mb >= self._max_d_mega_mb:
-            self._max_d_mega_mb = current_d_mega_mb
-            self.structure_metrics['d_mega_shape'] = str(self._shape_tuple(D_mega))
-            self.structure_metrics['d_mega_mb_max'] = f"{current_d_mega_mb:.6f}"
-            self.structure_metrics['y_mega_shape'] = str(self._shape_tuple(Y_mega))
-
-
-
-
+        # so it uses standard matrix multiplication.
+        self.global_sparse_coding_layer = None
+        if self.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+            self.global_sparse_coding_layer = SparseCodingFactory.create(
+                config=self.sparse_coding_config,
+                evaluation_func=self.evaluation_func,
+                logger=self.logger,
+                parameter_hook=self.sparse_coding_layer_hook
+            )
+            self.logger.info(f"Global Sparse Coding Layer: {type(self.global_sparse_coding_layer).__name__}")
+        else:
+            self.logger.info("Using Sequential Sparse Coding Solver Strategy. No global layer allocated.")
 
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """
@@ -242,7 +197,8 @@ class BSESM(SESM):
                            X_nested_proxy: TensorProxy,
                            y_nested_proxy: TensorProxy,
                            h_nested: TensorBatch,
-                           epoch: int):
+                           epoch: int,
+                           active_blocks: list[PartitionBlock]):
         """
         Performs a single global training step for the BSESM model.
         This includes training the dictionary on all active blocks' data
@@ -253,13 +209,14 @@ class BSESM(SESM):
             y_nested_proxy (TensorProxy): Proxy to the aggregated target values.
             h_nested (TensorBatch): The current state of aggregated sparse vectors.
             epoch (int): The current SESM model epoch.
+            active_blocks (list[PartitionBlock]): List of active blocks to access their sparse coders.
 
         Returns:
             TensorBatch: Updated h_nested after sparse coding optimization.
         """
         
         dict_device = self.dictionary_layer.device
-        sc_device = self.global_sparse_coding_layer.device
+        sc_device = self.global_sparse_coding_layer.device if self.global_sparse_coding_layer else active_blocks[0].sparse_coding_layer.device
 
         # Step 1: Optimize dictionary with fixed h
         self.dictionary_layer.partial_fit(
@@ -275,39 +232,44 @@ class BSESM(SESM):
         # Use the already calculated dictionary (like SSESM)
         dict_nested_detached = self.dictionary_layer.dictionary.detach()
 
-        # Unbind the dictionary's nested tensor, moving components only if necessary.
-        if sc_device == dict_nested_detached.device:
-            dict_list_sc = dict_nested_detached.unbind()
-        else:
-            dict_list_sc = [d.to(sc_device) for d in dict_nested_detached.unbind()]
-        D_mega = torch.block_diag(*dict_list_sc)
-        dict_eval_mb = sum(self._tensor_mb(d) for d in dict_list_sc)
+        if self.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+            # Unbind the dictionary's nested tensor, moving components only if necessary.
+            if sc_device == dict_nested_detached.device:
+                dict_list_sc = dict_nested_detached.unbind()
+            else:
+                dict_list_sc =[d.to(sc_device) for d in dict_nested_detached.unbind()]
+            D_mega = torch.block_diag(*dict_list_sc)
 
-        # Transfer y_nested and get its contiguous values on the target device
-        Y_mega = y_nested_proxy.get_for_device(sc_device).values()
-        
-        # Update the number of functions for the global SC layer dynamically
-        # self.global_sparse_coding_layer.config.n_functions = D_mega.shape[1]
+            # Transfer y_nested and get its contiguous values on the target device
+            Y_mega = y_nested_proxy.get_for_device(sc_device).values()
+            
+            # Solve the single, large sparse coding problem
+            self.global_sparse_coding_layer.partial_fit(y=Y_mega,
+                                                        dictionary=D_mega,
+                                                        reset_state=(epoch==0))
 
-        # Solve the single, large sparse coding problem
-        self.global_sparse_coding_layer.partial_fit(y=Y_mega,
-                                                    dictionary=D_mega,
-                                                    reset_state=(epoch==0))
+            self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
 
-        self._sparse_coding_losses.append(self.global_sparse_coding_layer.losses[-1])
-
-        theta_params = self.dictionary_layer.theta_params
-        self._capture_structure_metrics(
-            theta_params=theta_params,
-            dict_eval_mb=dict_eval_mb,
-            D_mega=D_mega,
-            Y_mega=Y_mega,
-        )
-
-        # Update h_nested directly with optimized values - zero extra allocations
-        # Both have identical memory layout: (total_functions, 1)
-        h_nested.values().data.copy_(self.global_sparse_coding_layer.h.detach().to(h_nested.device))
-
+            # Update h_nested directly with optimized values - zero extra allocations
+            # Both have identical memory layout: (total_functions, 1)
+            h_nested.values().data.copy_(self.global_sparse_coding_layer.h.detach().to(h_nested.device))
+        elif self.config.solver_strategy == BSESMSolverStrategy.SEQUENTIAL:
+            dict_list_sc =[d.to(sc_device) for d in dict_nested_detached.unbind()]
+            y_list_sc =[y.to(sc_device) for y in y_nested_proxy.get_for_device(sc_device).unbind()]
+            h_list_sc = h_nested.unbind()
+            
+            weighted_loss_sum = 0.0
+            total_samples = 0
+            for i, block in enumerate(active_blocks):
+                sc_layer = block.sparse_coding_layer
+                sc_layer.h.data.copy_(h_list_sc[i].to(sc_layer.device))
+                sc_layer.partial_fit(y=y_list_sc[i], dictionary=dict_list_sc[i], reset_state=(epoch==0))
+                h_list_sc[i].data.copy_(sc_layer.h.detach().to(h_nested.device))
+                n_i = y_list_sc[i].shape[0]
+                weighted_loss_sum += sc_layer.losses[-1] * n_i
+                total_samples += n_i
+            
+            self._sparse_coding_losses.append(weighted_loss_sum / total_samples if total_samples > 0 else 0.0)
         return h_nested
 
 
@@ -351,7 +313,7 @@ class BSESM(SESM):
 
         # --- Step 1: Aggregate data ONCE and create proxies for static data ---
         dict_device = self.dictionary_layer.device
-        sc_device = self.global_sparse_coding_layer.device
+        sc_device = self.global_sparse_coding_layer.device if self.global_sparse_coding_layer else active_blocks[0].sparse_coding_layer.device 
 
         # Aggregate all data onto the dictionary's device initially. This is the single, expensive operation.
         X_nested, y_nested, h_nested = self._aggregate_block_data(active_blocks, device=dict_device)
@@ -363,23 +325,24 @@ class BSESM(SESM):
         # Transfer the contiguous block of h data efficiently to the sparse coding device.
         H_mega_initial = h_nested.values().to(sc_device)
 
-        self.global_sparse_coding_layer.config.n_functions = H_mega_initial.shape[0]
+        if self.config.solver_strategy == BSESMSolverStrategy.MEGA_MATRIX:
+            self.global_sparse_coding_layer.config.n_functions = H_mega_initial.shape[0]
 
-        # Decide if we need to force a full setup for global SC layer (recreating h Parameter)
-        if self.global_sparse_coding_layer.h.shape[0] != H_mega_initial.shape[0]:
-            self.logger.debug(f"Global sparse coding layer's h dimension changed from "
-                              f"{self.global_sparse_coding_layer.h.shape[0]} to "
-                              f"{H_mega_initial.shape[0]}. Forcing setup.")
-            self.global_sparse_coding_layer.setup(H_mega_initial)
-        else:
-            self.global_sparse_coding_layer.h.data.copy_(H_mega_initial)
+            # Decide if we need to force a full setup for global SC layer (recreating h Parameter)
+            if self.global_sparse_coding_layer.h.shape[0] != H_mega_initial.shape[0]:
+                self.logger.debug(f"Global sparse coding layer's h dimension changed from "
+                                  f"{self.global_sparse_coding_layer.h.shape[0]} to "
+                                  f"{H_mega_initial.shape[0]}. Forcing setup.")
+                self.global_sparse_coding_layer.setup(H_mega_initial)
+            else:
+                self.global_sparse_coding_layer.h.data.copy_(H_mega_initial)
 
         # Main training loop for BSESM model_epochs
         for epoch in range(self.model_epochs):
             epoch_start_time = time.time()
 
             # Perform a single global training step and get updated h_nested
-            h_nested = self._global_train_step(X_nested_proxy, y_nested_proxy, h_nested, epoch)
+            h_nested = self._global_train_step(X_nested_proxy, y_nested_proxy, h_nested, epoch, active_blocks)
 
             self.training_time += time.time() - epoch_start_time
 
@@ -397,12 +360,13 @@ class BSESM(SESM):
             if self.sesm_hook is not None:
                 # Extract current h values from h_nested for monitoring
                 h_list_current = h_nested.unbind()
+                h_mega = self.global_sparse_coding_layer.h.detach().clone() if self.global_sparse_coding_layer else h_nested.values().detach().clone()
                 hook_info = {
                     'partial_fit_call_count': self.partial_fit_count,
                     'model_epoch': epoch,
                     'dictionary_losses': self.dictionary_layer.losses,
                     'sparse_coding_losses': self._sparse_coding_losses,
-                    'h_mega': self.global_sparse_coding_layer.h.detach().clone(),
+                    'h_mega': h_mega,
                     'dictionary_params': self.dictionary_layer.theta_params.detach().clone(),
                     'h_per_block': [h.detach().clone() for h in h_list_current],
                 }
