@@ -442,8 +442,6 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
             del y_batch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        if model is not None:
-            del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
