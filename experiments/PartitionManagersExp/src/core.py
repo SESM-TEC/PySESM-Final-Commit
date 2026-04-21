@@ -81,15 +81,6 @@ def save_result_row(filepath, data_dict):
     fieldnames = [
         'run_id', 'dim', 'dataset', 'method', 'n_samples',
         'mse', 'mae', 'train_time', 'test_time',
-
-
-        'theta_shape',
-        'theta_mb',
-        'dict_eval_mb_max',
-        'd_mega_shape',
-        'd_mega_mb_max',
-        'y_mega_shape',
-
         
         'gpu_samples',
         'gpu_mem_used_mb_mean',
@@ -343,17 +334,6 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                         current_n, mse, t_train, torch_peak_alloc_mb
                     )
 
-                    bsesm_structure_metrics = model.structure_metrics.copy()
-
-                    structure_metrics_for_log = {
-                        "theta_shape": bsesm_structure_metrics.get("theta_shape"),
-                        "theta_mb": bsesm_structure_metrics.get("theta_mb"),
-                        "dict_eval_mb_max": bsesm_structure_metrics.get("dict_eval_mb_max"),
-                        "d_mega_shape": bsesm_structure_metrics.get("d_mega_shape"),
-                        "d_mega_mb_max": bsesm_structure_metrics.get("d_mega_mb_max"),
-                        "y_mega_shape": bsesm_structure_metrics.get("y_mega_shape"),
-                    }
-
                     # CSV (save_result_row creará el archivo con headers si lo borramos antes)
                     save_result_row(csv_path, {
                         'run_id': run_idx,
@@ -365,7 +345,6 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                         'mae': mae,
                         'train_time': t_train,
                         'test_time': t_test,
-                        **structure_metrics_for_log,
                         **gpu_stats
                     })
 
@@ -379,14 +358,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                         "MAE": mae,
                         "Train_Time_Step": t_train,
                         "Test_Time_Step": t_test,
-
-                        "theta_shape": structure_metrics_for_log["theta_shape"],
-                        "theta_mb": structure_metrics_for_log["theta_mb"],
-                        "dict_eval_mb_max": structure_metrics_for_log["dict_eval_mb_max"],
-                        "d_mega_shape": structure_metrics_for_log["d_mega_shape"],
-                        "d_mega_mb_max": structure_metrics_for_log["d_mega_mb_max"],
-                        "y_mega_shape": structure_metrics_for_log["y_mega_shape"],
-
+                        
                         "GPU_Samples": gpu_stats["gpu_samples"],
                         "GPU_Mem_Used_MB_Mean": gpu_stats["gpu_mem_used_mb_mean"],
                         "GPU_Mem_Used_MB_Var": gpu_stats["gpu_mem_used_mb_var"],
