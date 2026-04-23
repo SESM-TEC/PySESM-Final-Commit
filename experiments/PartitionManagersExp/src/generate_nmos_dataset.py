@@ -10,6 +10,7 @@ Circuit topology (resistive load):
 """
 
 import sys
+import time
 import logging
 import numpy as np
 import pandas as pd
@@ -62,7 +63,8 @@ def generate_nmos_dataset(n_samples=100, csv_path="nmos_dataset.csv"):
     """Generate a new CSV dataset with random parameters and simulated Id."""
     np.random.seed(42)
     data = []
- 
+    t_start = time.perf_counter()
+
     for i in range(n_samples):
         W   = np.random.uniform(1e-4,  10e-4)
         L   = np.random.uniform(1e-6,   2e-6)
@@ -76,7 +78,9 @@ def generate_nmos_dataset(n_samples=100, csv_path="nmos_dataset.csv"):
 
     df = pd.DataFrame(data, columns=["W", "L", "Vgs", "Vds", "Vdd", "Rd", "Id"])
     df.to_csv(csv_path, index=False)
+    elapsed = time.perf_counter() - t_start
     print(f"\nDataset guardado en {csv_path}")
+    print(f"Tiempo total de generación: {elapsed:.2f} s  ({elapsed/n_samples:.3f} s/muestra)")
 
 
 if __name__ == "__main__":
