@@ -280,7 +280,7 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                 dict_config=dict_conf,
                 sparse_coding_config=copy.deepcopy(sc_conf),
                 log_interval=1000,
-                solver_strategy=BSESMSolverStrategy.MEGA_MATRIX,
+                solver_strategy=BSESMSolverStrategy.SEQUENTIAL,
                 device=device
             )
 
