@@ -56,13 +56,6 @@ class BSESM(SESM):
 
     CONFIG_CLASS = BSESMConfig
 
-    @staticmethod
-    def _tensor_mb(tensor: torch.Tensor) -> float:
-        return (tensor.numel() * tensor.element_size()) / (1024 ** 2)
-
-    @staticmethod
-    def _shape_tuple(tensor: torch.Tensor) -> tuple[int, ...]:
-        return tuple(int(dim) for dim in tensor.shape)
 
     def __init__(
         self,
@@ -108,55 +101,8 @@ class BSESM(SESM):
         else:
             self.logger.info("Using Sequential Sparse Coding Solver Strategy. No global layer allocated.")
 
-        # Structure metrics captured during training
-        self.structure_metrics: dict[str, str | None] = {
-            'theta_shape': None,
-            'theta_mb': None,
-            'd_mega_shape': None,
-            'y_mega_shape': None,
-        }
-        self._max_dict_eval_mb = 0.0
-        self._max_d_mega_mb = 0.0
 
-    def _capture_structure_metrics(
-        self,
-        theta_params: torch.Tensor,
-        dict_eval_mb: float,
-        D_mega: torch.Tensor,
-        Y_mega: torch.Tensor,
-    ) -> None:
-        """Captura métricas estructurales y conserva los máximos observados.
 
-        Este método se invoca en cada época del entrenamiento global.
-        Actualiza siempre los metadatos actuales de `theta` y mantiene los
-        picos de memoria para `dict_eval_mb` y `D_mega`.
-
-        Args:
-            theta_params (torch.Tensor): Parámetros actuales del diccionario.
-            dict_eval_mb (float): Memoria total (MB) de diccionarios evaluados en la época.
-            D_mega (torch.Tensor): Matriz bloque-diagonal usada en sparse coding global.
-            Y_mega (torch.Tensor): Vector/objetivo concatenado correspondiente a `D_mega`.
-        """
-        # Tamaños actuales en esta época.
-        current_theta_mb = self._tensor_mb(theta_params)
-        current_d_mega_mb = self._tensor_mb(D_mega)
-
-        # Estado actual de theta (no pico).
-        self.structure_metrics['theta_shape'] = str(self._shape_tuple(theta_params))
-        self.structure_metrics['theta_mb'] = f"{current_theta_mb:.6f}"
-
-        # Pico acumulado de evaluación de diccionario.
-        if dict_eval_mb >= self._max_dict_eval_mb:
-            self._max_dict_eval_mb = dict_eval_mb
-            self.structure_metrics['dict_eval_mb_max'] = f"{dict_eval_mb:.6f}"
-
-        # Pico acumulado de la mega-matriz y su shape asociado.
-        if current_d_mega_mb >= self._max_d_mega_mb:
-            self._max_d_mega_mb = current_d_mega_mb
-            self.structure_metrics['d_mega_shape'] = str(self._shape_tuple(D_mega))
-            self.structure_metrics['d_mega_mb_max'] = f"{current_d_mega_mb:.6f}"
-            self.structure_metrics['y_mega_shape'] = str(self._shape_tuple(Y_mega))
-            
     def evaluation_func(self, dictionary: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """
         Concrete implementation of the evaluation function. 
