@@ -251,39 +251,6 @@ def train_stream_experiment(cfg, logger, func_obj):  # pylint: disable=too-many-
                     )
 
                     # CSV (save_result_row creará el archivo con headers si lo borramos antes)
-                    save_result_row(csv_path, {
-                        'run_id': run_idx,
-                        'dim': cfg.dim,
-                        'dataset': cfg.dataset.name,
-                        'method': method_name,
-                        'n_samples': current_n,
-                        'mse': mse,
-                        'mae': mae,
-                        'train_time': t_train,
-                        'test_time': t_test,
-                        **gpu_stats
-                    })
-
-                    wandb.log({
-                        "run_id": run_idx,
-                        "n_samples": current_n,
-                        "dim": cfg.dim,
-                        "dataset": cfg.dataset.name,
-                        "method": method_name,
-                        "MSE": mse,
-                        "MAE": mae,
-                        "Train_Time_Step": t_train,
-                        "Test_Time_Step": t_test,
-                        
-                        "GPU_Samples": gpu_stats["gpu_samples"],
-                        "GPU_Mem_Used_MB_Mean": gpu_stats["gpu_mem_used_mb_mean"],
-                        "GPU_Mem_Used_MB_Var": gpu_stats["gpu_mem_used_mb_var"],
-                        "Torch_Peak_Alloc_MB": gpu_stats["torch_peak_alloc_mb"],
-                        "Torch_Peak_Reserved_MB": gpu_stats["torch_peak_reserved_mb"],
-                        "RAM_Samples": gpu_stats["ram_samples"],
-                        "RAM_Used_MB_Mean": gpu_stats["ram_used_mb_mean"],
-                        "RAM_Used_MB_Var": gpu_stats["ram_used_mb_var"]
-                    })
 
                     completed_keys.add(step_key)
 
@@ -342,7 +309,7 @@ cfg = {
     # ===== Core experiment =====
     "n_runs": 25,
     "seed": 42,
-    "dim": 4,  # High dimension → strong memory pressure
+    "dim": 5,  # High dimension → strong memory pressure
     "stream_steps": 5, 
     # ===== Dataset =====
     "dataset": {
