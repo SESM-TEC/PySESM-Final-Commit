@@ -27,12 +27,15 @@ PMOS_MODEL  = 'PMOS_L1'
 NMOS_PARAMS = dict(LEVEL=1, KP=120e-6, VTO=0.5,  LAMBDA=0.01)
 PMOS_PARAMS = dict(LEVEL=1, KP=60e-6,  VTO=-0.5, LAMBDA=0.01)
 
-N_STAGES = 3
+N_STAGES = 101  # must be odd; larger → longer critical path
+
+if N_STAGES % 2 == 0 or N_STAGES < 3:
+    raise ValueError(f"N_STAGES must be an odd integer >= 3 (got {N_STAGES})")
 
 
 def simulate_ring_osc(W_n, W_p, L, Vdd, C_load):
     """
-    Transient simulation of a 3-stage CMOS ring oscillator.
+    Transient simulation of an N-stage CMOS ring oscillator.
 
     Parameters (SI units):
         W_n    : NMOS channel width [m]
@@ -53,8 +56,8 @@ def simulate_ring_osc(W_n, W_p, L, Vdd, C_load):
 
         circuit.V('DD', 'vdd', circuit.gnd, Vdd)
 
-        # Stage nodes: n1, n2, n3 — n3 feeds back to input of stage 1
-        stage_nodes = ['n1', 'n2', 'n3']
+        # Stage nodes: n1..nN — last stage feeds back to input of stage 1
+        stage_nodes = [f'n{i+1}' for i in range(N_STAGES)]
 
         for i in range(N_STAGES):
             in_node  = stage_nodes[(i - 1) % N_STAGES]
@@ -65,16 +68,21 @@ def simulate_ring_osc(W_n, W_p, L, Vdd, C_load):
                            model=NMOS_MODEL, w=W_n, l=L)
             circuit.C(f'{i+1}', out_node, circuit.gnd, C_load)
 
-        # Break symmetry: n1=Vdd, n2=0, n3=Vdd
-        circuit.raw_spice = f'.IC V(n1)={Vdd:.6g} V(n2)=0 V(n3)={Vdd:.6g}'
+        # Break symmetry: alternate Vdd / 0 across all stage nodes
+        ic_terms = ' '.join(
+            f'V({node})={(Vdd if i % 2 == 0 else 0):.6g}'
+            for i, node in enumerate(stage_nodes)
+        )
+        circuit.raw_spice = f'.IC {ic_terms}'
 
         # Estimate propagation delay per stage: tau ~ C*Vdd / I_drive
         I_drive     = 120e-6 * (W_n / L) * max((Vdd - 0.5) ** 2, 1e-6) / 2
         tau_est     = C_load * Vdd / max(I_drive, 1e-12)
         t_period_est = 2 * N_STAGES * tau_est
 
-        t_step = max(t_period_est / 200, 1e-13)          # no finer than 0.1 ps
-        t_end  = min(max(30 * t_period_est, 5e-9), 200e-9)  # 5 ns – 200 ns
+        t_step  = max(t_period_est / 200, 1e-13)            # no finer than 0.1 ps
+        t_end_cap = max(200e-9, 50e-9 * N_STAGES)            # scale cap with N_STAGES
+        t_end   = min(max(30 * t_period_est, 5e-9), t_end_cap)
 
         sim      = CircuitSimulator.factory(circuit, temperature=25, nominal_temperature=25)
         analysis = sim.transient(step_time=t_step, end_time=t_end,
@@ -125,18 +133,24 @@ def simulate_ring_osc(W_n, W_p, L, Vdd, C_load):
         return np.nan, np.nan, np.nan
 
 
-def generate_ring_osc_dataset(n_samples=100, csv_path='ring_osc_dataset.csv'):
-    """Generate a CSV dataset with random parameters and simulated ring oscillator metrics."""
-    np.random.seed(42)
+def generate_ring_osc_dataset(n_samples=100, csv_path='ring_osc_dataset.csv', seed=42):
+    """Generate a CSV dataset with random parameters and simulated ring oscillator metrics.
+
+    Parameters:
+        n_samples (int): number of samples to generate
+        csv_path  (str): output CSV path
+        seed      (int|None): RNG seed for reproducibility; pass None for non-deterministic runs
+    """
+    rng = np.random.default_rng(seed)
     data = []
     t_start = time.perf_counter()
 
     for i in range(n_samples):
-        W_n    = np.random.uniform(0.5e-6,  5e-6)
-        W_p    = np.random.uniform(1e-6,   10e-6)
-        L      = np.random.uniform(0.5e-6,  2e-6)
-        Vdd    = np.random.uniform(1.0,     3.3)
-        C_load = np.random.uniform(10e-15, 500e-15)
+        W_n    = rng.uniform(0.5e-6,  5e-6)
+        W_p    = rng.uniform(1e-6,   10e-6)
+        L      = rng.uniform(0.5e-6,  2e-6)
+        Vdd    = rng.uniform(1.0,     3.3)
+        C_load = rng.uniform(10e-15, 500e-15)
 
         f_osc, P_avg, t_rise = simulate_ring_osc(W_n, W_p, L, Vdd, C_load)
         data.append([W_n, W_p, L, Vdd, C_load, f_osc, P_avg, t_rise])
@@ -153,4 +167,5 @@ def generate_ring_osc_dataset(n_samples=100, csv_path='ring_osc_dataset.csv'):
 if __name__ == '__main__':
     n_samples = 100
     csv_path  = 'ring_osc_dataset.csv'
-    generate_ring_osc_dataset(n_samples=n_samples, csv_path=csv_path)
+    seed      = 42
+    generate_ring_osc_dataset(n_samples=n_samples, csv_path=csv_path, seed=seed)
