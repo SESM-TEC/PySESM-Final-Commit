@@ -213,7 +213,7 @@ def generate_ring_osc_dataset(n_samples=100, csv_path='ring_osc_dataset.csv', se
 
 
 if __name__ == '__main__':
-    n_samples  = 50
+    n_samples  = 500
     csv_path   = 'ring_osc_dataset.csv'
     seed       = 42
     plot_every = 10       # 0 = sin plots; p.ej. 10 = guarda un plot cada 10 simulaciones
