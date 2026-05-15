@@ -74,6 +74,7 @@ def train_stream_experiment(cfg, logger, func_obj):
             "n_dimensions": cfg.dim,
             "function": func_obj,
             "limits": cfg.dataset.limits,
+            "test_random_samples": max_samples*4
         }
 
         train_data, _, _, test_data, _, _ = (
