@@ -98,17 +98,35 @@ def section_1_dataset_health(df, out_dir):
 
 
 def section_2_design_coverage(df, out_dir):
-    """5x5 factor pair plot to inspect coverage / gaps / clusters."""
+    """5x5 factor pair plot to inspect coverage / gaps / clusters.
+
+    NaN samples (any response NaN) are overlaid in red so the failure
+    pattern in factor space is visible alongside coverage.
+    """
     n = len(FACTORS)
+    nan_mask = df[RESPONSES].isna().any(axis=1)
+    valid    = df[~nan_mask]
+    failed   = df[nan_mask]
+
     fig, axes = plt.subplots(n, n, figsize=(13, 13))
     for i in range(n):
         for j in range(n):
             ax = axes[i, j]
             if i == j:
-                ax.hist(df[FACTORS[i]], bins=12, color='C0',
-                        edgecolor='black', alpha=0.85)
+                vals = df[FACTORS[i]]
+                bins = np.linspace(vals.min(), vals.max(), 13)
+                ax.hist(valid[FACTORS[i]], bins=bins, color='C0',
+                        edgecolor='black', alpha=0.75, label='valid')
+                if len(failed) > 0:
+                    ax.hist(failed[FACTORS[i]], bins=bins, color='red',
+                            edgecolor='black', alpha=0.6, label='NaN')
             else:
-                ax.scatter(df[FACTORS[j]], df[FACTORS[i]], s=6, alpha=0.5)
+                ax.scatter(valid[FACTORS[j]], valid[FACTORS[i]], s=6,
+                           alpha=0.5, color='C0', label='valid')
+                if len(failed) > 0:
+                    ax.scatter(failed[FACTORS[j]], failed[FACTORS[i]], s=28,
+                               color='red', marker='x', linewidths=1.3,
+                               label='NaN')
             if i == n - 1:
                 ax.set_xlabel(FACTORS[j], fontsize=9)
             else:
@@ -118,8 +136,18 @@ def section_2_design_coverage(df, out_dir):
             else:
                 ax.set_yticklabels([])
             ax.tick_params(labelsize=7)
-    fig.suptitle('2 - Factor pair plot (design space coverage)', y=0.995, fontsize=12)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+    handles, labels = axes[0, 1].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc='upper right',
+                   bbox_to_anchor=(0.995, 0.995), fontsize=10,
+                   frameon=True)
+    fig.suptitle(
+        f'2 - Factor pair plot (design space coverage; '
+        f'{len(failed)}/{len(df)} NaN highlighted)',
+        y=0.995, fontsize=12,
+    )
+    fig.tight_layout(rect=[0, 0, 0.93, 0.97])
     fig.savefig(out_dir / '03_factor_pairplot.png', dpi=120, bbox_inches='tight')
     plt.close(fig)
     print("  -> 03_factor_pairplot.png")
