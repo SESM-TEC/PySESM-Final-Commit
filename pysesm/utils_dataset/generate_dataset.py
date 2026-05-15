@@ -20,13 +20,33 @@ import torch
 from pysesm.utils_dataset.design_matrices import create_design_matrix_train, create_design_matrix_test
 from pysesm.utils_dataset.mesh_generation import generate_mu, generate_mesh_samples, generate_random_samples
 
+def _discretize_to_grid(
+    data: torch.Tensor,
+    low_lim: float,
+    high_lim: float,
+    divisions: int
+) -> torch.Tensor:
+    """Snap each value to the nearest point on a regular grid."""
+    grid = torch.linspace(low_lim, high_lim, divisions)
+    indices = torch.bucketize(data.contiguous(), grid).clamp(0, divisions - 1)
+    # bucketize returns the right-side index; pick the closer neighbor
+    left = indices.clamp(min=1) - 1
+    right = indices.clamp(max=divisions - 1)
+    dist_left = (data - grid[left]).abs()
+    dist_right = (grid[right] - data).abs()
+    closest = torch.where(dist_left <= dist_right, left, right)
+    return grid[closest]
+
+
+
 def generate_gaussian_dataset(
     n_samples: int,
     means: list[tuple[float, float]] | None = None,
     variances: list | None = None,
     weights: list[float] | None = None,
     limits: tuple[float, float] | None = None,
-    mesh_divisions: int = 50
+    mesh_divisions: int = 50,
+    test_random_samples: int | None = None
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
     """
     Create a dataset from a weighted mixture of gaussians with customizable parameters.
@@ -46,6 +66,8 @@ def generate_gaussian_dataset(
         weights (List[float]): List of weights for each gaussian component
         limits (Tuple[float, float]): Lower and upper limits for the data range
         mesh_divisions (int): Number of divisions per dimension for the test mesh
+        test_random_samples (int | None): If set, generate this many random test
+            samples instead of a mesh grid. Defaults to None (mesh behavior).
 
     Returns:
         tuple: A tuple containing:
@@ -90,9 +112,16 @@ def generate_gaussian_dataset(
     
     low_lim, high_lim = limits
     
-    # Regular 2D cartesian grid for prediction
-    xx, yy, zz = generate_mesh_samples(mesh_divisions, low_lim, high_lim, sigma_list, mu_list, weights)
-    
+    # Test data: mesh grid or random samples
+    if test_random_samples is not None:
+        xx, yy, zz = generate_random_samples(
+            test_random_samples, low_lim, high_lim, sigma_list, mu_list, weights
+        )
+    else:
+        xx, yy, zz = generate_mesh_samples(
+            mesh_divisions, low_lim, high_lim, sigma_list, mu_list, weights
+        )
+
     # Random samples for training
     xx_r, yy_r, zz_r = generate_random_samples(
         n_samples, low_lim, high_lim, sigma_list, mu_list, weights
@@ -113,7 +142,8 @@ def generate_custom_function_dataset(
     function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     function_params: dict = None,
     limits: tuple[float, float] = (-2, 2),
-    mesh_divisions: int = 50
+    mesh_divisions: int = 50,
+    test_random_samples: int | None = None
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Generate a dataset using a parametrizable 2D function.
@@ -124,6 +154,8 @@ def generate_custom_function_dataset(
         function_params (Dict): Parameters to pass to the function.
         limits (Tuple[float, float]): Domain limits.
         mesh_divisions (int): Mesh resolution.
+        test_random_samples (int | None): If set, generate this many random test
+            samples instead of a mesh grid. Defaults to None (mesh behavior).        
 
     Returns:
         tuple: Train and test datasets (dicts and tensors).
@@ -134,11 +166,16 @@ def generate_custom_function_dataset(
 
     low_lim, high_lim = limits
 
-    # Generate mesh grid
-    x_lin = torch.linspace(low_lim, high_lim, mesh_divisions)
-    y_lin = torch.linspace(low_lim, high_lim, mesh_divisions)
-    xx, yy = torch.meshgrid(x_lin, y_lin, indexing="ij")
-    zz = function(xx, yy, **function_params)
+    # Test data: mesh grid or random samples
+    if test_random_samples is not None:
+        xx = low_lim + (high_lim - low_lim) * torch.rand(test_random_samples)
+        yy = low_lim + (high_lim - low_lim) * torch.rand(test_random_samples)
+        zz = function(xx, yy, **function_params)
+    else:
+        x_lin = torch.linspace(low_lim, high_lim, mesh_divisions)
+        y_lin = torch.linspace(low_lim, high_lim, mesh_divisions)
+        xx, yy = torch.meshgrid(x_lin, y_lin, indexing="ij")
+        zz = function(xx, yy, **function_params)
 
     # Generate random samples
     xx_r = low_lim + (high_lim - low_lim) * torch.rand(n_samples)
@@ -151,7 +188,7 @@ def generate_custom_function_dataset(
     
     # Create design matrices
     X_train, y_train = create_design_matrix_train(xx_r, yy_r, zz_r, n_samples)
-    X_test, y_test = create_design_matrix_test(xx, yy, zz)
+    X_test, y_test = create_design_matrix_test(xx, yy, zz)    
 
     return trainDataset, X_train, y_train, testDataset, X_test, y_test
 
@@ -161,7 +198,8 @@ def generate_custom_nd_function_dataset(
     function: Callable[[torch.Tensor], torch.Tensor],
     function_params: dict = None,
     limits: tuple[float, float] = (-2.0, 2.0),
-    mesh_divisions: int = 50
+    mesh_divisions: int = 50,
+    test_random_samples: int | None = None
 ) -> tuple[dict, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor]:
     """
     Generate a dataset using a parametrizable N-D function.
@@ -172,8 +210,14 @@ def generate_custom_nd_function_dataset(
         function (Callable): Function f(X, **params) -> z where X is (batch, N).
         function_params (Dict): Parameters to pass to the function.
         limits (Tuple[float, float]): Domain limits (same for all dims).
-        mesh_divisions (int): Mesh resolution per dimension.
-
+        mesh_divisions (int | None): If set, discretize random samples to a
+            regular grid with this many divisions.  Also used as the mesh
+            resolution when generating a mesh-based test set (only when
+            test_random_samples is None).  Defaults to None.
+        test_random_samples (int | None): If set, generate this many random
+            test samples instead of an N-D mesh grid.  Recommended for
+            n_dimensions > 3 to avoid exponential memory usage.
+ 
     Returns:
         tuple: Train and test datasets (dicts and tensors).
     """
@@ -181,26 +225,50 @@ def generate_custom_nd_function_dataset(
     if function_params is None:
         function_params = {}
 
+    if mesh_divisions is None and test_random_samples is None:
+        raise ValueError(
+            "Either mesh_divisions or test_random_samples must be specified "
+            "to generate test data.  For n_dimensions > 3, use "
+            "test_random_samples to avoid exponential memory usage."
+        )
+
     low_lim, high_lim = limits
 
-    # Generate mesh grid for test data
-    linspaces = [torch.linspace(low_lim, high_lim, mesh_divisions) for _ in range(n_dimensions)]
-    mesh = torch.meshgrid(*linspaces, indexing="ij")
-    mesh_flat = torch.stack([m.reshape(-1) for m in mesh], dim=-1)  # Shape: (mesh_size^N, N)
-
-    zz = function(mesh_flat, **function_params)  # Output: (mesh_size^N,)
-
-    # Generate random training samples
+    
+    # --- Training data (always random) ---
     rand_samples = low_lim + (high_lim - low_lim) * torch.rand(n_samples, n_dimensions)
+    
+    if mesh_divisions is not None:
+        rand_samples = _discretize_to_grid(rand_samples, low_lim, high_lim, mesh_divisions)
+ 
     zz_r = function(rand_samples, **function_params)
 
-    # Train and test datasets
-    trainDataset = {"X": rand_samples, "Z": zz_r}
-    testDataset = {"X": mesh_flat, "Z": zz}
+    # --- Test data ---
+    if test_random_samples is not None:
+        test_samples = low_lim + (high_lim - low_lim) * torch.rand(
+            test_random_samples, n_dimensions
+        )
+        if mesh_divisions is not None:
+            test_samples = _discretize_to_grid(
+                test_samples, low_lim, high_lim, mesh_divisions
+            )
+        zz_test = function(test_samples, **function_params)
+    else:
+        # Mesh-based test set (caller explicitly requested via mesh_divisions)
+        linspaces = [
+            torch.linspace(low_lim, high_lim, mesh_divisions)
+            for _ in range(n_dimensions)
+        ]
+        mesh = torch.meshgrid(*linspaces, indexing="ij")
+        test_samples = torch.stack([m.reshape(-1) for m in mesh], dim=-1)
+        zz_test = function(test_samples, **function_params)
 
-    # Design matrices
+    # --- Datasets ---
+    trainDataset = {"X": rand_samples, "Z": zz_r}
+    testDataset = {"X": test_samples, "Z": zz_test}
+
     X_train, y_train = rand_samples, zz_r
-    X_test, y_test = mesh_flat, zz
+    X_test, y_test = test_samples, zz_test
 
     return trainDataset, X_train, y_train, testDataset, X_test, y_test
 
