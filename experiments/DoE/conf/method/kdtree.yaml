@@ -1,0 +1,3 @@
+name: kdtree
+maxNodeSize: 10
+overlap_ratio: 0.5
