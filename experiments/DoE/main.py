@@ -3,8 +3,9 @@
 Flujo:
     1. Verifica que el CSV de validación (cfg.validation.csv_path) exista.
        Si no, sugiere correr `generate_validation_dataset.py`.
-    2. Genera (o resume) el pool de entrenamiento (cfg.training_pool) vía PySpice.
-    3. Lanza el barrido n_runs × training_sizes × methods con BSESM.
+    2. Lanza el barrido n_runs × training_sizes × methods con BSESM.
+       Cada run genera/usa SU PROPIO CSV de entrenamiento (seed distinto),
+       garantizando independencia estadística entre runs.
 
 Uso (desde experiments/DoE):
     python main.py
@@ -21,7 +22,6 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 
-from generate_ring_osc_dataset import generate_ring_osc_dataset
 from src.core import train_ring_osc_experiment
 
 
@@ -33,33 +33,6 @@ def _resolve(p: str) -> str:
     except (ValueError, AttributeError):
         base = os.getcwd()
     return os.path.join(base, p)
-
-
-def _ensure_training_pool(cfg: DictConfig, logger: logging.Logger) -> None:
-    """Genera (o resume) el pool de entrenamiento si no está completo."""
-    pool = cfg.training_pool
-    osc = cfg.oscillator
-    csv_path = _resolve(pool.csv_path)
-
-    needed = max(int(pool.n_samples), max(int(s) for s in cfg.training_sizes))
-
-    logger.info("Preparando pool de entrenamiento: %s (target=%d filas)",
-                csv_path, needed)
-
-    generate_ring_osc_dataset(
-        n_samples=needed,
-        csv_path=csv_path,
-        seed=int(pool.seed),
-        plot_every=int(pool.get("plot_every", 0)),
-        plot_dir=pool.get("plot_dir", "plots_train"),
-        n_stages=int(osc.n_stages),
-        nmos_params=OmegaConf.to_container(osc.nmos, resolve=True),
-        pmos_params=OmegaConf.to_container(osc.pmos, resolve=True),
-        ranges=OmegaConf.to_container(osc.ranges, resolve=True),
-        resume=True,
-        flush_every=10,
-        progress_log=False,
-    )
 
 
 def _check_validation_csv(cfg: DictConfig, logger: logging.Logger) -> None:
@@ -84,7 +57,6 @@ def main(cfg: DictConfig) -> None:
     np.random.seed(cfg.seed)
 
     _check_validation_csv(cfg, logger)
-    _ensure_training_pool(cfg, logger)
 
     run_name = f"RingOsc_{cfg.target}_nRuns{cfg.n_runs}"
     wandb.init(

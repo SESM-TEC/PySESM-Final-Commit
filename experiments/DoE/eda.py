@@ -9,7 +9,7 @@ Outputs (written under plots/eda/):
   04_marginal_effects.png       — 5 factors x 3 responses, log y, Spearman rho
   05_response_relationships.png — f_osc vs t_rise, P_avg vs f*C*V^2, P_avg vs f_osc
 
-Reads `ring_osc_dataset.csv` from the same directory as this script.
+Reads `ring_osc_validation.csv` from the same directory as this script.
 """
 
 import matplotlib
@@ -20,7 +20,7 @@ import pandas as pd
 from pathlib import Path
 
 HERE     = Path(__file__).resolve().parent
-CSV_PATH = HERE / 'ring_osc_dataset.csv'
+CSV_PATH = HERE / 'ring_osc_validation.csv'
 PLOT_DIR = HERE / 'plots' / 'eda'
 
 FACTORS   = ['W_n', 'W_p', 'L', 'Vdd', 'C_load']
