@@ -154,7 +154,7 @@ def simulate_ring_osc(
                     break
 
     except Exception:
-        pass
+        import traceback; traceback.print_exc()  # noqa: E702  DEBUG — remove after fix
 
     if plot_path is not None and time_arr is not None:
         _plot_waveform(
