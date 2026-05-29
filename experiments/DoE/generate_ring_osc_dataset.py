@@ -237,6 +237,7 @@ def generate_ring_osc_dataset(
     resume=True,
     flush_every=1,
     progress_log=True,
+    row_callback=None,
 ):
     """Generate (or resume) a CSV with random parameters + simulated metrics.
 
@@ -253,6 +254,10 @@ def generate_ring_osc_dataset(
         resume      : if True and csv_path exists, continue from last row count
         flush_every : write to disk every N completed rows
         progress_log: print per-sample line if True
+        row_callback: optional callable(index, row_dict) invoked after each
+                      simulated row. Keeps this module free of any monitoring
+                      dependency (e.g. W&B) — the caller decides what to do.
+                      Exceptions raised here never interrupt generation.
     """
     ranges = _ranges_to_dict(ranges)
     nmos_params = dict(nmos_params) if nmos_params is not None else dict(DEFAULT_NMOS_PARAMS)
@@ -306,6 +311,16 @@ def generate_ring_osc_dataset(
             )
 
             pending.append([W_n, W_p, L, Vdd, C_load, f_osc, P_avg, t_rise])
+
+            if row_callback is not None:
+                try:
+                    row_callback(i, {
+                        'W_n': W_n, 'W_p': W_p, 'L': L, 'Vdd': Vdd,
+                        'C_load': C_load, 'f_osc': f_osc, 'P_avg': P_avg,
+                        't_rise': t_rise,
+                    })
+                except Exception:
+                    pass  # monitoring must never interrupt a long generation
 
             if progress_log:
                 print(f"[{i+1:6d}/{n_samples}]  f={f_osc:.3e} Hz  "

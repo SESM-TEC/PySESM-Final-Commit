@@ -62,6 +62,7 @@ validation:
   seed:      2026
   plot_every: 0
   plot_dir:   plots_val
+  wandb_table_every: 50   # refresca la tabla incremental en W&B cada N filas
 
 # Entrenamiento: UN CSV POR (run, size) con seed distinto.
 # Cada combinación (run_idx, n_samples) genera exactamente n_samples simulaciones
