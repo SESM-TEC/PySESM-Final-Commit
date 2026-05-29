@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from PySpice.Spice.Netlist import Circuit
+from PySpice.Spice.Simulation import CircuitSimulator
 
 logging.getLogger('PySpice').setLevel(logging.CRITICAL)
 sys.unraisablehook = lambda _: None
@@ -112,11 +113,7 @@ def simulate_ring_osc(
         t_end_cap = max(200e-9, 50e-9 * n_stages)
         t_end     = min(max(30 * t_period_est, 5e-9), t_end_cap)
 
-        # NgSpiceShared (in-process) has a module-level FFI object that fails with
-        # "duplicate declaration of struct ngcomplex" on repeated calls. Subprocess
-        # mode avoids this entirely and works correctly on Linux/A100.
-        sim      = circuit.simulator(temperature=25, nominal_temperature=25,
-                                     simulator='ngspice-subprocess')
+        sim      = CircuitSimulator.factory(circuit, temperature=25, nominal_temperature=25)
         analysis = sim.transient(step_time=t_step, end_time=t_end,
                                  use_initial_condition=True)
 
