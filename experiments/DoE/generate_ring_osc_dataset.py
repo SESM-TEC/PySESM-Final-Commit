@@ -150,8 +150,8 @@ def simulate_ring_osc(
                     t_rise = time_arr[i_10 + above90[0]] - time_arr[i_10]
                     break
 
-    except Exception:
-        pass
+    except Exception as _e:
+        import traceback; traceback.print_exc()  # noqa: E702  DEBUG — remove after fix
 
     if plot_path is not None and time_arr is not None:
         _plot_waveform(
