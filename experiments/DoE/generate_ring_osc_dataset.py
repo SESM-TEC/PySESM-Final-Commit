@@ -150,8 +150,13 @@ def simulate_ring_osc(
                     t_rise = time_arr[i_10 + above90[0]] - time_arr[i_10]
                     break
 
-    except Exception:
-        import traceback; traceback.print_exc()  # noqa: E702  DEBUG — remove after fix
+    except Exception as exc:
+        # Individual SPICE non-convergence for extreme parameter points is
+        # expected; log compactly and return NaN (dropped downstream).
+        logging.getLogger('RingOscDataset').debug(
+            "simulation failed (W_n=%.3g W_p=%.3g L=%.3g Vdd=%.3g C=%.3g): %s",
+            W_n, W_p, L, Vdd, C_load, exc,
+        )
 
     if plot_path is not None and time_arr is not None:
         _plot_waveform(
