@@ -89,12 +89,14 @@ def _build_wandb_logger(cfg, n_samples, logger):
         )
 
     def _cell(x):
-        """Clean scalar for a W&B table cell; NaN/inf → None (empty cell)."""
+        """Float for a W&B table cell. NaN is kept as a float (not None) so the
+        column always has a numeric type and is never dropped — W&B hides table
+        columns whose values are all None (e.g. when every sim in a batch fails).
+        """
         try:
-            x = float(x)
+            return float(x)
         except (TypeError, ValueError):
-            return None
-        return x if math.isfinite(x) else None
+            return float("nan")
 
     def row_callback(i, row):
         # One table with inputs AND outputs; no scalar metrics / charts.
