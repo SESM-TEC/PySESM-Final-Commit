@@ -19,7 +19,6 @@ desactivar W&B: `wandb.mode=disabled`.
 """
 
 import logging
-import math
 import os
 
 import hydra
