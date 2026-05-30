@@ -11,10 +11,11 @@ Sobrescribir por línea de comando, p. ej. para una corrida rápida:
 El generador es resumible: si el CSV ya existe, continúa donde quedó usando
 exactamente los mismos parámetros (mismo seed → mismas filas).
 
-Seguimiento en W&B: cada fila simulada se loguea como métrica escalar (para
-gráficas en vivo) y se acumula en una tabla incremental `validation_samples`,
-de modo que el avance se puede monitorear desde otros dispositivos. Para
-desactivarlo: `wandb.mode=disabled`.
+Seguimiento en W&B: cada fila simulada (entradas y salidas) se acumula en una
+tabla incremental `validation_samples`, de modo que el avance se puede
+monitorear desde otros dispositivos. No se generan métricas escalares ni
+gráficas — el dataset se analiza luego con las funciones de EDA. Para
+desactivar W&B: `wandb.mode=disabled`.
 """
 
 import logging
@@ -48,10 +49,10 @@ def _resolve_csv_path(csv_path: str) -> str:
 def _build_wandb_logger(cfg, n_samples, logger):
     """Init W&B and return (row_callback, finish_fn).
 
-    Returns (None, noop) when W&B is disabled. The callback logs per-row scalar
-    metrics (live charts) and appends to an incremental table that can be
-    watched from any device. It must never raise — the generator wraps it in a
-    try/except, but we also guard internally so a single bad row is harmless.
+    Returns (None, noop) when W&B is disabled. The callback appends each row
+    (inputs AND outputs) to a single incremental table `validation_samples`
+    that can be watched from any device. It logs NO scalar metrics/charts —
+    the dataset is meant for downstream EDA, not for W&B plotting.
     """
     def _noop():
         pass
@@ -76,50 +77,39 @@ def _build_wandb_logger(cfg, n_samples, logger):
     )
 
     # Incremental tables (wandb >= 0.18) only ship new rows on each re-log, so
-    # we can refresh live. On older wandb we fall back to a single log at the end.
+    # the table can be refreshed live without resending everything. On older
+    # wandb we re-log the full table each flush (heavier — raise wandb_table_every).
     try:
         table = wandb.Table(columns=_TABLE_COLUMNS, log_mode="INCREMENTAL")
-        incremental = True
     except TypeError:
         table = wandb.Table(columns=_TABLE_COLUMNS)
-        incremental = False
         logger.warning(
-            "wandb sin tablas incrementales: la tabla se subirá solo al final. "
-            "Actualiza wandb (>=0.18) para verla crecer en vivo."
+            "wandb sin tablas incrementales: se re-sube la tabla completa en cada "
+            "flush. Sube validation.wandb_table_every o actualiza wandb (>=0.18)."
         )
 
-    state = {"done": 0, "failed": 0}
+    def _cell(x):
+        """Clean scalar for a W&B table cell; NaN/inf → None (empty cell)."""
+        try:
+            x = float(x)
+        except (TypeError, ValueError):
+            return None
+        return x if math.isfinite(x) else None
 
     def row_callback(i, row):
-        state["done"] += 1
-        if any(math.isnan(row[k]) for k in ("f_osc", "P_avg", "t_rise")):
-            state["failed"] += 1
-
+        # One table with inputs AND outputs; no scalar metrics / charts.
         table.add_data(
-            i + 1, row["W_n"], row["W_p"], row["L"], row["Vdd"], row["C_load"],
-            row["f_osc"], row["P_avg"], row["t_rise"],
+            i + 1,
+            _cell(row["W_n"]), _cell(row["W_p"]), _cell(row["L"]),
+            _cell(row["Vdd"]), _cell(row["C_load"]),
+            _cell(row["f_osc"]), _cell(row["P_avg"]), _cell(row["t_rise"]),
         )
-
-        log_dict = {
-            "progress/index": i + 1,
-            "progress/done": state["done"],
-            "progress/failed": state["failed"],
-            "sample/W_n": row["W_n"],
-            "sample/W_p": row["W_p"],
-            "sample/L": row["L"],
-            "sample/Vdd": row["Vdd"],
-            "sample/C_load": row["C_load"],
-            "sample/f_osc": row["f_osc"],
-            "sample/P_avg": row["P_avg"],
-            "sample/t_rise": row["t_rise"],
-        }
-        if incremental and (i + 1) % table_every == 0:
-            log_dict[_TABLE_KEY] = table
-        wandb.log(log_dict)
+        if (i + 1) % table_every == 0:
+            wandb.log({_TABLE_KEY: table})
 
     def finish_fn():
         try:
-            wandb.log({_TABLE_KEY: table})  # final flush (incl. non-incremental)
+            wandb.log({_TABLE_KEY: table})  # final flush of any remaining rows
         finally:
             wandb.finish()
 
