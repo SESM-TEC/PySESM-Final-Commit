@@ -10,7 +10,7 @@ defaults:
 
 recovery_mode: false
 seed: 42
-n_runs: 2
+n_runs: 20
 
 # Vector de tamaños de dataset de entrenamiento (streaming cumulativo)
 training_sizes: [100, 500, 1000]
