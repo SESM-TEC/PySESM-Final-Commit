@@ -8,12 +8,12 @@ defaults:
 #   - Compara métodos de particionamiento (uniform, kdtree)
 # =========================================================
 
-recovery_mode: false
+recovery_mode: true
 seed: 42
 n_runs: 20
 
 # Vector de tamaños de dataset de entrenamiento (streaming cumulativo)
-training_sizes: [100, 500, 1000]
+training_sizes: [5000, 10000]
 
 # Métodos a comparar (cada uno carga su yaml en conf/method/<name>.yaml)
 methods_to_test: [uniform, kdtree]
