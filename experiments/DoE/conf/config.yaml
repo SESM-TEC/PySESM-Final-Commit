@@ -47,11 +47,11 @@ oscillator:
     LAMBDA: 0.01
   # Rangos de muestreo uniformes [min, max] por feature (unidades SI)
   ranges:
-    W_n:    [5.0e-7,  5.0e-6]
-    W_p:    [1.0e-6,  1.0e-5]
-    L:      [5.0e-7,  2.0e-6]
-    Vdd:    [2.85,    3.75]
-    C_load: [1.0e-14, 5.0e-13]
+    W_n:    [2.0e-7,  5.0e-6]
+    W_p:    [4.0e-6,  1.0e-5]
+    L:      [5.0e-7,  1.5e-6]
+    Vdd:    [2.9,    3.6]
+    C_load: [1e-14, 3e-13]
 
 # =========================================================
 # DATASETS — los CSV se generan UNA sola vez y se reutilizan
