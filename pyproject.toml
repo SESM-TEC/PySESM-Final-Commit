@@ -43,6 +43,7 @@ viz = [
 # Development environment: Includes visualization tools + testing framework
 dev = [
     "pysesm[viz]", # Installs everything above automatically
+    "memory-profiler",
     "pytest"
 ]
 

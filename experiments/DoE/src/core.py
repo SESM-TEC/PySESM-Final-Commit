@@ -19,6 +19,7 @@ import hydra
 import numpy as np
 import pandas as pd
 import torch
+from memory_profiler import profile
 from omegaconf import OmegaConf
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
@@ -211,7 +212,7 @@ def _build_bsesm(cfg, method_name, method_cfg, dim, n_atoms, device, logger):
     )
     return BSESM(config=bsesm_conf, logger=logger)
 
-
+@profile
 def train_ring_osc_experiment(cfg, logger: logging.Logger):
     """Barrido n_runs × training_sizes × methods con BSESM (trainings independientes).
 
