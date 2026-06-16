@@ -44,6 +44,9 @@ from pysesm.sparse_coding import ADMMConfig
 from pysesm.dictionaries import GaussianDictConfig, GaussianDictLayer
 from pysesm.blocks.UniformPartitionManager import UniformPartitionConfig
 from pysesm.blocks.AdaptivePartitionManager import AdaptivePartitionConfig
+from pysesm.blocks.KDTreeStrategy import KDTreeStrategy, KDTreeStrategyConfig
+from pysesm.blocks.SESMData import SESMData
+
 from pysesm.utils.loggers import setup_logger
 from pysesm.utils_dataset.generate_dataset import generate_gaussian_dataset
 from pysesm.utils_dataset.gaussian_covariance_density import generate_nondiag_covariance_matrices
@@ -94,20 +97,25 @@ n_functions = 80
 n_features = 2
 
 # --- Partition Manager Configurations (choose one) ---
-partition_config = UniformPartitionConfig(
-    T=3,
-    initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
-    activity_threshold=0,
-    overlap_ratio=0.25,
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-)
-# partition_config = AdaptativePartitionConfig(
-#     maxNodeSize=251,
-#     maxSplitsBeforeRestart=5,
-#     overlap_ratio=0.1,
+# partition_config = UniformPartitionConfig(
+#     T=3,
+#     initial_bounds=torch.tensor([[-2, -2], [2, 2]], dtype=torch.float32),
+#     activity_threshold=0,
+#     overlap_ratio=0.25,
 #     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # )
 
+strategy_conf = KDTreeStrategyConfig(
+    maxNodeSize=30,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    data_wrapper=SESMData
+)
+partition_config = AdaptivePartitionConfig(
+    overlap_ratio=0.1,
+    partition_strategy=KDTreeStrategy,
+    strategy_config=strategy_conf,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+)
 
 # --- Dictionary Configuration ---
 dict_config = GaussianDictConfig(
