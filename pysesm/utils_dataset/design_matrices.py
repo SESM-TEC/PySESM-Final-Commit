@@ -1,3 +1,19 @@
+"""
+Design Matrix Utilities.
+
+Provides helper functions for constructing, manipulating, and handling design
+matrices (X, y pairs) for model training and evaluation within the SESM
+framework.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
+
 import torch
 from pysesm.utils_dataset.sampling_data import generate_uniform_sampling, sample_data
 

@@ -1,18 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+ISTA Layer Implementation.
 
-ISTA Layer Class
+Implements the Iterative Shrinkage-Thresholding Algorithm (ISTA) for sparse
+coding.
 
-Provides the layer in charge of finding h, the sparse vector 
-that chooses words in a dictionary to build a surrogate 
-function.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -175,6 +174,7 @@ class ISTALayer(SparseCodingBaseLayer):
             
             # Compute gradient for MSE: 2 * D^T * (y_pred - y)
             error = y_pred - y
+
             gradient = 2 * torch.matmul(dictionary.T, error)
             
             # ISTA update: h = soft_threshold(h - alpha * gradient, alpha * lambda)

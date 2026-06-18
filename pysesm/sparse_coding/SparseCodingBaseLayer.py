@@ -1,16 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Base class for Sparse Coding Layers.
 
-Base class for all sparse coding layers
+Defines the abstract base class `SparseCodingBaseLayer` and its configuration
+`SparseCodingConfig`, which serve as the foundation for specific sparse coding
+algorithms like ISTA, FISTA, and ADMM.
 
-Provides the abstract definitions required for all sparse coding layers like ISTA, FISTA, etc.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TypeVar,Generic

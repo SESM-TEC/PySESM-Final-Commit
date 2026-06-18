@@ -1,3 +1,19 @@
+"""
+Mesh Generation Utilities.
+
+Provides helper functions to generate regular grids (meshes) and random sampling
+points for evaluating density functions and distributions within the SESM
+framework.
+
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
+
 import numpy as np
 import torch
 from pysesm.utils_dataset.gaussian_covariance_density import generate_gmm_z

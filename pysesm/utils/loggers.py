@@ -1,16 +1,19 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Logging Configuration Utilities.
 
-Helpers for setting up loggers
+Provides helper functions to set up and configure Python loggers with standard
+formatting and handlers (console, file) for the library.
 
-Authors: The SESM Team 
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-License: 
-'''
-from __future__ import annotations
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import logging
-
 
 # Variable to ensure that the configuration is made just once
 _configured_loggers = {}

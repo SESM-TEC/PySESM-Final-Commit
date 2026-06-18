@@ -1,15 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Sparse Coding Factory.
 
-Sparse Coding Factory
+Provides a factory to produce sparse coding layer instances, such as ISTA,
+FISTA, or ADMM layers, using the generic factory pattern.
 
-Provides a factory to produce sparse coding layers using the generic factory pattern.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from .GenericFactory import GenericFactory
 from ..sparse_coding.SparseCodingBaseLayer import SparseCodingBaseLayer, SparseCodingConfig
 

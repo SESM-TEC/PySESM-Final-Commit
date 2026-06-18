@@ -1,13 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Uniform Partition Manager.
 
-Abstract class for all Block Managers
+Implements a strategy to partition the input space into a uniform grid of
+blocks, managing data assignment and local model configuration for each block.
 
-Authors: The SESM Team 
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-License: 
-'''
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from dataclasses import dataclass # Ensure dataclass is imported
 from collections.abc import Callable
 import logging
@@ -205,10 +209,15 @@ class UniformPartitionManager(BlockManager):
             self.blocks = np.empty(self.T.cpu().numpy(), dtype=object) 
 
             for index in np.ndindex(self.blocks.shape):
-                self.blocks[index] = PartitionBlock(space_origin = self.initial_bounds[0],
+                # Calculate geometry here (Manager's responsibility)
+                base_edge = self.initial_bounds[0] + torch.tensor(index, device=self.device) * self.block_size
+                scope = torch.stack((base_edge, base_edge + self.block_size))
+                self.blocks[index] = PartitionBlock(
                                                     block_index = index, 
                                                     block_size = self.block_size,
-                                                    device=self.device)
+                                                    block_scope = scope,
+                                                    device=self.device,
+                                                    space_origin = self.initial_bounds[0])
         else:
             new_max_x = torch.max(X).to(self.device)
             new_min_x = torch.min(X).to(self.device)
@@ -350,10 +359,11 @@ class UniformPartitionManager(BlockManager):
         for index in np.ndindex(self.blocks.shape):
             original_block = self.blocks[index]
             new_pb = PartitionBlock(
-                space_origin=original_block.space_origin,
                 block_index=original_block.block_index,
                 block_size=original_block.block_size,
-                device=original_block.device
+                block_scope=original_block.block_scope,
+                device=original_block.device,
+                space_origin=original_block.space_origin                
             )
             # Transfer the learned sparse_coding_layer and amplitude from original training block
             new_pb.sparse_coding_layer = original_block.sparse_coding_layer

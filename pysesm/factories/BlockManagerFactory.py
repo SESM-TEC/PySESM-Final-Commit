@@ -1,16 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Block Manager Factory.
 
-Block Manager Factory
+Provides a factory to produce block manager instances, such as the Uniform
+Partition Manager or the Adaptive Partition Manager, using the generic factory pattern.
 
-Provides a factory to produce block managers, like the uniform partition or
-the adaptive partition.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from .GenericFactory import GenericFactory
 from ..blocks.BlockManager import BlockManager, BlockManagerConfig
 

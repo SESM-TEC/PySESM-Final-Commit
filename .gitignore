@@ -169,3 +169,6 @@ wandb/
 
 #Pytorch models
 *.pth
+
+# Example run outputs
+examples/results/

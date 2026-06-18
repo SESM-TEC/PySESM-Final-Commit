@@ -1,16 +1,19 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Sequential Sparse-Encoded Surrogate Model (SSESM).
 
-SSESM Base Class
+Implements the Sequential version of the SESM architecture, which processes
+partitioned data blocks sequentially, allowing for scalable function
+approximation through iterative updates of local sparse codes and a global
+dictionary.
 
-Provides the sequential version of SESM
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 
 from collections.abc import Callable

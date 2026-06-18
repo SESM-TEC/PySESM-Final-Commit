@@ -1,16 +1,19 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Sparse-Encoded Surrogate Model (SESM) Base Class.
 
-SESM Base Class
+Defines the abstract base class `SESM` and its configuration `SESMConfig`,
+serving as the foundation for specific implementations like SSESM and BSESM.
+It manages the orchestration between dictionary learning and sparse coding
+layers.
 
-Provides the basic functionality of the Sparse-Encoded Surrogate Model.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 import time
 from collections.abc import Callable

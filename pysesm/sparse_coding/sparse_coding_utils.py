@@ -1,16 +1,17 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
+"""
+Sparse Coding Utilities.
 
-Sparse Coding Utilities
+Shared utility functions for sparse coding algorithms, such as soft
+thresholding and step size calculation helpers.
 
-Shared utility functions for sparse coding algorithms like ISTA and FISTA.
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-Authors: The SESM Team 
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
 
-License: 
-'''
-from __future__ import annotations
-
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 from enum import Enum, auto
 

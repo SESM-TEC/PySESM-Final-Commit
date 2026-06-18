@@ -1,13 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
-Gaussian Dictionary Layer
-Dictionary layer implementation using Gaussian basis functions.
-Authors: The SESM Team 
-License: 
-'''
-from __future__ import annotations
+"""
+Gaussian Dictionary Layer.
 
+Implements a learnable dictionary layer using Gaussian basis functions, managing
+parameters (mu, rho) and their specialized training strategy (e.g., split
+optimization).
 
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
+
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import logging
 
 from dataclasses import dataclass

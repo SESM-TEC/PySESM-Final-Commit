@@ -1,14 +1,18 @@
-'''
-Copyright (C) 2023-2025 Tecnológico de Costa Rica
-
-SESM Base Class
-
-Provides the basic functionality of the Sparse-Encoded Surrogate Model.
-
+"""
+Partition Block Class.
+ 
+Represents a single partition block within the input space, managing local
+data points, normalization, and associated sparse coding layers.
+ 
 Authors: The SESM Team 
+Copyright (c) 2023-2025, Tecnológico de Costa Rica
+All rights reserved.
 
-License: 
-'''
+This source code is licensed under the BSD 3-Clause License found in the
+LICENSE file in the root directory of this source tree.
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 import torch
 
@@ -65,28 +69,24 @@ class PartitionBlock:
 
     def __init__(
         self,
-        space_origin: torch.Tensor,
         block_index: tuple[int, ...], # Use Tuple for clarity
         block_size: torch.Tensor,
+        block_scope: torch.Tensor,    
         device: torch.device,
+        space_origin: torch.Tensor | None = None
     ):
         self.block_index = block_index
         self.block_size = block_size.to(device)
         self.device = device
         
-        self.space_origin = space_origin.to(self.device)
-
-        # Calculate the base edge of this specific block based on its index
-        # (e.g., for block (i, j), its origin is global_origin + i*block_size_x + j*block_size_y)
-        base_edge_of_this_block = self.space_origin + torch.mul(
-            torch.tensor(block_index, device=self.device), self.block_size
-        )
-        # Define the block's specific bounding box (min_coords, max_coords)
-        self.block_scope = torch.stack((
-            base_edge_of_this_block,
-            base_edge_of_this_block + self.block_size
-        )).to(self.device)
+        self.block_scope = block_scope.to(self.device)
         
+        # Use provided origin or infer from scope (for metadata compatibility)
+        if space_origin is not None:
+            self.space_origin = space_origin.to(self.device)
+        else:
+            self.space_origin = self.block_scope[0]
+
         self.amplitude: float = 1.0
         self.X: list[torch.Tensor] = []
         self.normalized_X: TensorProxy | None = None
@@ -95,6 +95,7 @@ class PartitionBlock:
         self.positions: list[int] = []
         self.predicted_output: list = []
         self.sparse_coding_layer: SparseCodingBaseLayer | None = None
+        self.normalization_scale: torch.Tensor | None = None
 
         # Cache for device-specific data copies
         self._device_data_cache = {}
@@ -182,7 +183,8 @@ class PartitionBlock:
         sizes = self.block_size.to(self.device) 
 
         if preserve_aspect_ratio:
-            divisor = sizes.max()
+            # Expand to vector for consistent storage/usage
+            divisor = torch.full_like(sizes, sizes.max())
         else:
             divisor = sizes
 
@@ -190,6 +192,7 @@ class PartitionBlock:
         # This might indicate malformed block sizes or degenerate dimensions.
         divisor[divisor == 0] = 1.0 if isinstance(divisor, torch.Tensor) else (1.0 if divisor == 0 else divisor)
 
+        self.normalization_scale = divisor
         self.normalized_X = TensorProxy((tensor_X - min_vals) / divisor)
 
 
