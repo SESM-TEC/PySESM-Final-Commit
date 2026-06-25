@@ -359,19 +359,17 @@ from pysesm.blocks.SESMData import SESMData
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 1. Strategy: how the KD-Tree splits the data
-strategy_conf = KDTreeStrategyConfig(
-    maxNodeSize=30,        # max points per node before it splits
-    device=device,
-    data_wrapper=SESMData, # class used to wrap the data in each node
-)
-
-# 2. Partition Manager: wraps the strategy and adds overlap between blocks
-partition_config = AdaptivePartitionConfig(
-    overlap_ratio=0.1,                 # overlap between adjacent blocks
-    partition_strategy=KDTreeStrategy, # strategy constructor
-    strategy_config=strategy_conf,
-    device=device,
-)
+    strategy_conf = KDTreeStrategyConfig(
+        maxNodeSize=100,
+        device=device,
+        data_wrapper=SESMData
+    )
+    partition_config = AdaptivePartitionConfig(
+        overlap_ratio=0.25,
+        partition_strategy=KDTreeStrategy,
+        strategy_config=strategy_conf,
+        device=device
+    )
 ```
 
 **Key parameters**
